@@ -1,0 +1,70 @@
+.splash {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #1B5E20 0%, #2E7D32 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  font-family: var(--font-family);
+}
+
+.splash-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: splashIn 0.6s ease forwards;
+}
+
+.splash-car { font-size: 52px; }
+
+.splash-text {
+  text-align: center;
+  animation: fadeUp 0.5s ease 0.4s both;
+}
+
+.splash-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 8px;
+  letter-spacing: -0.5px;
+}
+
+.splash-tag {
+  font-size: 15px;
+  color: rgba(255,255,255,0.75);
+  margin: 0;
+}
+
+.splash-bar-track {
+  width: 200px;
+  height: 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 48px;
+}
+
+.splash-bar-fill {
+  height: 100%;
+  width: 0;
+  background: rgba(255,255,255,0.85);
+  border-radius: 2px;
+  transition: width 1.4s ease;
+}
+
+@keyframes splashIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}

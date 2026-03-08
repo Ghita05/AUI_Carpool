@@ -1,0 +1,34 @@
+.role-row {
+  display: flex;
+  gap: 12px;
+}
+
+.role-pill {
+  flex: 1;
+  height: 48px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-family: var(--font-family);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.role-pill:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.role-pill-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.role-pill-active:hover {
+  background: var(--color-primary-light);
+  color: #fff;
+}

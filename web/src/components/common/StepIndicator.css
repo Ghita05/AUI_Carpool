@@ -1,0 +1,35 @@
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+}
+
+.step-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-border);
+  border: 1.5px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.step-dot-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.step-line {
+  width: 48px;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.step-line-active {
+  background: var(--color-primary);
+}
