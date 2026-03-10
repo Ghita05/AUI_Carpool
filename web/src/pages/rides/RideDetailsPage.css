@@ -1,0 +1,80 @@
+.rd-layout { display: flex; height: 100vh; font-family: var(--font-family); overflow: hidden; }
+
+.rd-panel {
+  width: 420px; flex-shrink: 0; background: var(--color-background);
+  display: flex; flex-direction: column; height: 100vh; border-right: 1px solid var(--color-border);
+}
+
+.rd-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px; background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rd-back-btn {
+  display: flex; align-items: center; gap: 4px; background: none; border: none;
+  cursor: pointer; font-size: 13px; color: var(--color-text-secondary); padding: 4px 8px;
+  border-radius: 6px; font-family: var(--font-family);
+}
+.rd-back-btn:hover { background: var(--color-background); }
+
+.rd-title { flex: 1; font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 0; text-align: center; }
+.rd-icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--color-border); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
+.rd-scroll { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.rd-card { background: var(--color-surface); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-card); }
+.rd-route-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.rd-route-dots { display: flex; flex-direction: column; align-items: center; }
+.rd-dot { width: 10px; height: 10px; border-radius: 50%; }
+.rd-dot-green { background: var(--color-primary); }
+.rd-dot-red   { background: var(--color-error); }
+.rd-dashed { width: 2px; height: 26px; background: var(--color-border); margin: 3px 0; }
+.rd-route-labels { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; }
+.rd-route-stop { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.rd-divider { height: 1px; background: var(--color-border); margin: 12px 0; }
+.rd-stats-row { display: flex; justify-content: space-around; }
+.rd-stat { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--color-text-secondary); }
+.rd-stat-val { font-size: 14px; font-weight: 700; color: var(--color-text-primary); }
+.rd-stat-label { font-size: 11px; }
+
+.rd-driver-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.rd-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--color-primary-bg); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: var(--color-primary); flex-shrink: 0; }
+.rd-driver-info { display: flex; flex-direction: column; gap: 3px; }
+.rd-driver-name { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.rd-rating { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-text-secondary); }
+.rd-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.rd-tag { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.rd-tag-green { background: var(--color-primary-bg); color: var(--color-primary); }
+.rd-tag-gray  { background: var(--color-background); color: var(--color-text-secondary); }
+
+.rd-vehicle-row { display: flex; align-items: center; gap: 12px; }
+.rd-vehicle-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.rd-vehicle-main { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.rd-vehicle-sub  { font-size: 12px; color: var(--color-text-secondary); }
+.rd-plate { font-size: 11px; font-weight: 600; background: var(--color-background); border: 1px solid var(--color-border); padding: 4px 8px; border-radius: 6px; color: var(--color-text-primary); }
+
+.rd-row-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.rd-card-label { font-size: 14px; font-weight: 700; color: var(--color-text-primary); }
+.rd-seats-count { font-size: 12px; color: var(--color-text-secondary); }
+.rd-seat-icons { display: flex; gap: 8px; margin: 8px 0; color: var(--color-border); }
+.rd-seat-icon { display: flex; }
+.rd-seat-taken { color: var(--color-primary); }
+.rd-price-note { font-size: 12px; color: var(--color-text-secondary); }
+
+.rd-stops-hint { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 10px; }
+.rd-stops-list { display: flex; flex-direction: column; gap: 10px; }
+.rd-stop-item { display: flex; align-items: center; gap: 10px; }
+.rd-stop-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--color-border); background: var(--color-surface); flex-shrink: 0; }
+.rd-stop-dot-active { background: var(--color-primary); border-color: var(--color-primary); }
+.rd-stop-label { font-size: 13px; color: var(--color-text-secondary); }
+.rd-stop-label-bold { font-weight: 600; color: var(--color-text-primary); }
+
+.rd-actions { display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--color-border); background: var(--color-surface); }
+.rd-msg-btn { display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 48px; border: 1.5px solid var(--color-primary); border-radius: 10px; background: none; color: var(--color-primary); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font-family); white-space: nowrap; }
+.rd-book-btn { flex: 1; height: 48px; background: var(--color-primary); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--font-family); }
+.rd-book-btn:hover { background: var(--color-primary-light); }
+
+.rd-map { flex: 1; background: var(--color-primary); display: flex; align-items: center; justify-content: center; }
+.rd-map-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); }
+.rd-map-placeholder span { font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); }
+.rd-map-sub { font-size: 13px !important; font-weight: 400 !important; color: rgba(255,255,255,0.6) !important; }

@@ -1,0 +1,30 @@
+.as-layout { min-height:100vh; background:var(--color-background); font-family:var(--font-family); padding:32px; }
+.as-cols { display:grid; grid-template-columns:1fr 1fr; gap:24px; max-width:960px; margin:0 auto; }
+.as-col-left, .as-col-right { display:flex; flex-direction:column; gap:16px; }
+.as-avatar-section { background:var(--color-surface); border-radius:12px; padding:24px; text-align:center; box-shadow:var(--shadow-card); }
+.as-avatar-wrap { position:relative; display:inline-block; margin-bottom:10px; }
+.as-avatar { width:72px; height:72px; border-radius:50%; background:var(--color-primary-bg); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; color:var(--color-primary); border:2px solid var(--color-primary); margin:0 auto; }
+.as-camera-badge { position:absolute; bottom:0; right:0; width:24px; height:24px; border-radius:50%; background:#F59E0B; border:2px solid var(--color-surface); display:flex; align-items:center; justify-content:center; color:#fff; cursor:pointer; }
+.as-change-photo { background:none; border:none; font-size:13px; font-weight:600; color:var(--color-primary); cursor:pointer; font-family:var(--font-family); }
+.as-card { background:var(--color-surface); border-radius:12px; padding:20px; box-shadow:var(--shadow-card); }
+.as-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.as-card-title { font-size:15px; font-weight:700; color:var(--color-text-primary); margin:0; }
+.as-edit-link { background:none; border:none; font-size:13px; font-weight:600; color:var(--color-primary); cursor:pointer; font-family:var(--font-family); }
+.as-two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.as-field { margin-bottom:12px; }
+.as-label { display:block; font-size:11px; font-weight:600; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+.as-input { width:100%; height:42px; border:1px solid var(--color-border); border-radius:8px; padding:0 12px; font-size:13px; font-family:var(--font-family); color:var(--color-text-primary); background:var(--color-background); outline:none; box-sizing:border-box; }
+.as-input:focus { border-color:var(--color-primary); }
+.as-email-locked { display:flex; align-items:center; gap:8px; height:42px; background:var(--color-primary-bg); border:1px solid var(--color-primary); border-radius:8px; padding:0 12px; font-size:13px; color:var(--color-text-primary); }
+.as-verified-badge { margin-left:auto; font-size:11px; font-weight:600; color:var(--color-primary); }
+.as-pills { display:flex; flex-wrap:wrap; gap:8px; }
+.as-pill { padding:6px 16px; border-radius:999px; border:1px solid var(--color-border); background:var(--color-background); font-size:12px; font-weight:500; color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-family); transition:all .15s; }
+.as-pill.active { background:var(--color-primary-bg); border-color:var(--color-primary); color:var(--color-primary); font-weight:700; }
+.as-stepper { display:flex; align-items:center; gap:16px; }
+.as-step-btn { width:32px; height:32px; border-radius:50%; border:1px solid var(--color-border); background:var(--color-background); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); }
+.as-step-val { font-size:20px; font-weight:700; color:var(--color-text-primary); min-width:28px; text-align:center; }
+.as-security-row { display:flex; align-items:center; gap:12px; width:100%; padding:12px 0; background:none; border:none; cursor:pointer; font-size:14px; font-weight:500; color:var(--color-text-primary); font-family:var(--font-family); }
+.as-danger { color:var(--color-error); }
+.as-sec-divider { height:1px; background:var(--color-border); margin:4px 0; }
+.as-save-btn { width:100%; height:48px; background:var(--color-primary); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; font-family:var(--font-family); }
+.as-save-btn:hover { background:var(--color-primary-light); }
