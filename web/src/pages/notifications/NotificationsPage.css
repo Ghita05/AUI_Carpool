@@ -1,4 +1,4 @@
-.np-layout { min-height:100vh; background:var(--color-background); font-family:var(--font-family); padding:32px; }
+.np-layout { min-height:100%; background:var(--color-background); font-family:var(--font-family); padding:32px; }
 .np-container { max-width:680px; margin:0 auto; }
 .np-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .np-title { font-size:22px; font-weight:700; color:var(--color-text-primary); margin:0; }

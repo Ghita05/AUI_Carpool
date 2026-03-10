@@ -1,4 +1,4 @@
-.mp-layout { display:flex; height:100vh; font-family:var(--font-family); overflow:hidden; }
+.mp-layout { display:flex; height:100%; font-family:var(--font-family); overflow:hidden; }
 .mp-sidebar { width:340px; flex-shrink:0; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-surface); }
 .mp-sidebar-header { padding:20px; border-bottom:1px solid var(--color-border); }
 .mp-title { font-size:20px; font-weight:700; color:var(--color-text-primary); margin:0 0 12px; }

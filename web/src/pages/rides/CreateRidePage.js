@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, ArrowUpDown, Plus, Calendar, Clock, Car, Send } from 'lucide-react';
+import { MapPin, ArrowUpDown, Plus, Car, Send } from 'lucide-react';
 import './CreateRidePage.css';
 
 function Toggle({ label, sub, val, onToggle }) {
@@ -26,7 +26,7 @@ function Pills({ options, selected, onSelect }) {
 export default function CreateRidePage() {
   const [from,      setFrom]      = useState('AUI Main Gate');
   const [to,        setTo]        = useState('');
-  const [date,      setDate]      = useState('Feb 20, 2026');
+  const [date,      setDate]      = useState('2026-02-20');
   const [time,      setTime]      = useState('14:00');
   const [seats,     setSeats]     = useState(3);
   const [price,     setPrice]     = useState('50');
@@ -61,10 +61,10 @@ export default function CreateRidePage() {
             <div className="cr-card-title">Date & Time</div>
             <div className="cr-two-col">
               <div className="cr-field"><label className="cr-label">Date</label>
-                <div className="cr-select-field"><Calendar size={13}/><span>{date}</span></div>
+                <input className="cr-input" type="date" value={date} onChange={e=>setDate(e.target.value)}/>
               </div>
               <div className="cr-field"><label className="cr-label">Time</label>
-                <div className="cr-select-field"><Clock size={13}/><span>{time}</span></div>
+                <input className="cr-input" type="time" value={time} onChange={e=>setTime(e.target.value)}/>
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapPin, Clock, Ruler, Timer, Star, Ban, Gauge, Car, Users, ChevronLeft, Share2, MessageSquare, Map } from 'lucide-react';
+import React from 'react';
+import { Clock, Ruler, Timer, Star, Ban, Gauge, Car, Users, ChevronLeft, Share2, MessageSquare, Map } from 'lucide-react';
 import './RideDetailsPage.css';
 
 const RIDE = {

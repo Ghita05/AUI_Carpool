@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car, MapPin, Calendar, Clock, DollarSign, Users, Star, ChevronRight, Plus, Search } from 'lucide-react';
+import { Car, Calendar, Clock, DollarSign, Users, Star, Plus, Search } from 'lucide-react';
 import './MyRidesPage.css';
 
 const P_UPCOMING = [

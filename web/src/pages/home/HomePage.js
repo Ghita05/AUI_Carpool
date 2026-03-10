@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import {
-  Car, MapPin, Search, Settings, Clock, Star,
-  MessageSquare, Bell, Trophy, Map, Plus,
+  Car, MapPin, Search,
   SlidersHorizontal, Calendar, DollarSign,
-  Users, User, ChevronRight, Filter
+  Users, User, Trophy, Filter
 } from 'lucide-react';
 import './HomePage.css';
 
@@ -140,80 +139,11 @@ function FilterModal({ onClose }) {
 
 export default function HomePage() {
   const [search, setSearch] = useState('');
-  const [activeNav, setActiveNav] = useState('home');
   const [showFilter, setShowFilter] = useState(false);
-
-  const navItems = [
-    { id: 'home',      Icon: Map,           label: 'Home' },
-    { id: 'rides',     Icon: Car,           label: 'My Rides' },
-    { id: 'messages',  Icon: MessageSquare, label: 'Messages' },
-    { id: 'alerts',    Icon: Bell,          label: 'Alerts' },
-  ];
 
   return (
     <div className="home-layout">
-      {/* ── Sidebar ── */}
-      <aside className="sidebar">
-        {/* Brand */}
-        <div className="sidebar-brand">
-          <div className="sidebar-logo-circle">
-            <Car size={24} color="var(--color-primary)" strokeWidth={1.5} />
-          </div>
-          <div>
-            <p className="sidebar-brand-name">AUI Carpool</p>
-            <p className="sidebar-brand-tag">Your campus, connected.</p>
-          </div>
-        </div>
-
-        <div className="sidebar-divider" />
-
-        {/* Rides header */}
-        <div className="sidebar-rides-header">
-          <span className="sidebar-rides-title">Available Rides</span>
-          <span className="sidebar-rides-count">{MOCK_RIDES.length} found</span>
-        </div>
-
-        {/* Rides list */}
-        <div className="sidebar-rides-list">
-          {MOCK_RIDES.map(ride => <RideCard key={ride.id} ride={ride} />)}
-        </div>
-
-        {/* Bottom action buttons */}
-        <div className="sidebar-bottom">
-          <div className="sidebar-divider" />
-
-          {navItems.map(({ id, Icon, label }) => (
-            <button
-              key={id}
-              className={`sidebar-action-btn ${activeNav === id ? 'sidebar-action-active' : ''}`}
-              onClick={() => setActiveNav(id)}
-            >
-              <Icon size={17} />
-              <span>{label}</span>
-            </button>
-          ))}
-
-          <button className="sidebar-post-btn">
-            <Plus size={16} style={{ marginRight: 8 }} />
-            Post a Ride
-          </button>
-
-          <div className="sidebar-divider" />
-
-          <div className="sidebar-user">
-            <div className="sidebar-avatar">GN</div>
-            <div className="sidebar-user-info">
-              <p className="sidebar-user-name">Ghita Nafa</p>
-              <p className="sidebar-user-role">Driver</p>
-            </div>
-            <button className="sidebar-settings-btn">
-              <Settings size={16} color="var(--color-text-secondary)" />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Map area ── */}
+      {/* ── Map area (full content area) ── */}
       <main className="map-area">
         {/* Satellite map background */}
         <div className="map-bg" />
@@ -244,7 +174,7 @@ export default function HomePage() {
         </div>
 
         {/* Community badge */}
-        <button className="community-badge" onClick={() => setActiveNav('community')}>
+        <button className="community-badge">
           <Trophy size={14} color="var(--color-primary)" />
           <span>Community</span>
         </button>
