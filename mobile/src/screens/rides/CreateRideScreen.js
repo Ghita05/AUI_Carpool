@@ -188,7 +188,7 @@ export default function CreateRideScreen({ navigation }) {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.publishBtn}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
         >
           <Ionicons name="send-outline" size={16} color={Colors.textWhite} />
           <Text style={styles.publishBtnText}>Publish Ride</Text>

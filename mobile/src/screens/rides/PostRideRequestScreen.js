@@ -144,7 +144,7 @@ export default function PostRideRequestScreen({ navigation }) {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.postBtn}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
         >
           <Text style={styles.postBtnText}>Post Request</Text>
         </TouchableOpacity>

@@ -100,13 +100,13 @@ export default function BookingConfirmationScreen({ navigation, route }) {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.outlineBtn}
-          onPress={() => navigation.navigate('MyRides')}
+          onPress={() => navigation.navigate('Main', { screen: 'Rides' })}
         >
           <Text style={styles.outlineBtnText}>My Rides</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
         >
           <Text style={styles.primaryBtnText}>Back to Map</Text>
         </TouchableOpacity>

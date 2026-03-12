@@ -24,7 +24,7 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     if (!validate()) return;
     setLoading(true);
-    setTimeout(() => { setLoading(false); navigation.replace('Home'); }, 1500);
+    setTimeout(() => { setLoading(false); navigation.replace('Main'); }, 1500);
   };
 
   return (

@@ -51,7 +51,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
     // Body: { email, firstName, lastName, password, phone, cin, role }
     setTimeout(() => {
       setLoading(false);
-      navigation.replace('Home');
+      navigation.replace('Main');
     }, 1500);
   };
 
