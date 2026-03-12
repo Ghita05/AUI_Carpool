@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, X, Star, Trophy } from 'lucide-react';
 import InteractiveMap from '../../components/common/InteractiveMap';
@@ -108,7 +108,7 @@ export default function HomePage() {
             </div>
             <button
               className="box-btn"
-              onClick={() => navigate(`/rides/${selectedRide.id}`)}
+              onClick={() => navigate(/rides/)}
             >
               Book Now
             </button>
