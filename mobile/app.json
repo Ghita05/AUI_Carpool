@@ -24,6 +24,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d5e11e2c-2d9f-4526-b62e-47a3161304e7"
+      }
+    },
+    "owner": "ghita123",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d5e11e2c-2d9f-4526-b62e-47a3161304e7"
     }
   }
 }

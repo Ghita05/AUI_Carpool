@@ -13,37 +13,82 @@
 }
 
 .map-popup {
-  padding: 4px 0;
-  text-align: center;
+  padding: 12px;
+  min-width: 180px;
 }
 
-.map-popup strong {
-  display: block;
-  font-size: 13px;
-  margin-bottom: 4px;
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+
+.popup-destination {
+  font-size: 16px;
+  font-weight: 700;
   color: #1b5e20;
+  margin: 0;
 }
 
-.map-popup p {
-  margin: 0;
+.popup-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1b5e20;
+  background: #dcebdb;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.popup-details {
+  margin: 8px 0;
+}
+
+.popup-details p {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+
+.popup-btn {
+  width: 100%;
+  padding: 10px;
+  background: #1b5e20;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #1b5e20;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: 8px;
 }
 
-.map-popup small {
-  display: block;
-  font-size: 10px;
-  color: #666;
-  margin-top: 2px;
+.popup-btn:hover {
+  background: #154218;
 }
 
 /* Leaflet marker customization */
 .leaflet-marker-icon {
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  transition: transform 0.2s;
+}
+
+.leaflet-marker-icon:hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dcebdb;
+}
+
+.leaflet-popup-tip {
+  background: #fff;
+  border: 1px solid #dcebdb;
 }

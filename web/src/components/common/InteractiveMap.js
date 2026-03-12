@@ -1,32 +1,26 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './InteractiveMap.css';
 
-// Custom marker icons
-const greenIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJjMCAyLjI1IDAgNC43NSAxMCAxMGMxMCA1LjI1IDEwIDcuNzUgMTAgMTBzLTQuNDggOC04IDE4YzAtMiAwLTQuNzUtMTAtMTBDMiAxNi43NSAyIDE0LjI1IDIgMTJjMC01LjUyIDQuNDgtMTAgMTAtMTB6IiBmaWxsPSIjMWI1ZTIwIi8+PC9zdmc+',
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
-  popupAnchor: [0, -24]
+// CUSTOM LARGER MARKER ICONS
+const createIcon = (color) => new L.Icon({
+  iconUrl: `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTIiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA1MiA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMjYgMEMxMS42IDAgMCAxMS42IDAgMjZjMCAyLjYgMCA1LjIgMTMgMTMuM0MyNiAzOSAyNiA0MiAyNiA1MHMtMTEuNiAxNCAyNiAxNGMyNi01LjYgMjYtOSAyNi0xNHMwLTUuMi0xMy0xMy4zQzI2IDM5IDI2IDM2IDI2IDI2YzAtMTQuNCAyNi0yNiAyNi0yNkMzOC40IDAgMjYgMCAyNiAweiIgZmlsbD0iJHtjb2xvcn0iIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==`,
+  iconSize: [52, 64],
+  iconAnchor: [26, 64],
+  popupAnchor: [0, -64],
+  className: 'map-marker-icon'
 });
 
-const amberIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJjMCAyLjI1IDAgNC43NSAxMCAxMGMxMCA1LjI1IDEwIDcuNzUgMTAgMTBzLTQuNDggOC04IDE4YzAtMiAwLTQuNzUtMTAtMTBDMiAxNi43NSAyIDE0LjI1IDIgMTJjMC01LjUyIDQuNDgtMTAgMTAtMTB6IiBmaWxsPSIjZjU5ZTBiIi8+PC9zdmc+',
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
-  popupAnchor: [0, -24]
-});
-
-const greyIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJjMCAyLjI1IDAgNC43NSAxMCAxMGMxMCA1LjI1IDEwIDcuNzUgMTAgMTBzLTQuNDggOC04IDE4YzAtMiAwLTQuNzUtMTAtMTBDMiAxNi43NSAyIDE0LjI1IDIgMTJjMC01LjUyIDQuNDgtMTAgMTAtMTB6IiBmaWxsPSIjZDFkNWRiIi8+PC9zdmc+',
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
-  popupAnchor: [0, -24]
-});
+const greenIcon = createIcon('%231b5e20');
+const amberIcon = createIcon('%23f59e0b');
+const greyIcon = createIcon('%23d1d5db');
 
 export default function InteractiveMap({ rides, selectedRide, onMarkerClick }) {
+  const navigate = useNavigate();
+  
   // Center map on middle of Morocco
   const center = [33.5731, -5.0898];
   const zoomLevel = 7;
@@ -45,6 +39,14 @@ export default function InteractiveMap({ rides, selectedRide, onMarkerClick }) {
     return greyIcon;
   };
 
+  const handleMarkerClick = (ride) => {
+    onMarkerClick(ride);
+  };
+
+  const handleViewDetails = (ride) => {
+    navigate(`/rides/${ride.destination.toLowerCase()}`);
+  };
+
   return (
     <MapContainer center={center} zoom={zoomLevel} className="interactive-map">
       <TileLayer
@@ -59,14 +61,28 @@ export default function InteractiveMap({ rides, selectedRide, onMarkerClick }) {
             position={coords}
             icon={getMarkerIcon(idx)}
             eventHandlers={{
-              click: () => onMarkerClick(ride)
+              click: () => handleMarkerClick(ride)
             }}
           >
-            <Popup>
+            <Popup closeButton={true} autoClose={false}>
               <div className="map-popup">
-                <strong>{ride.destination}</strong>
-                <p>{ride.price} MAD</p>
-                <small>{ride.time}</small>
+                <div className="popup-header">
+                  <strong className="popup-destination">{ride.destination}</strong>
+                  <span className="popup-price">{ride.price} MAD</span>
+                </div>
+                <div className="popup-details">
+                  <p className="popup-time">📍 {ride.time}</p>
+                  <p className="popup-driver">👤 {ride.driver}</p>
+                </div>
+                <button 
+                  className="popup-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleViewDetails(ride);
+                  }}
+                >
+                  View Details
+                </button>
               </div>
             </Popup>
           </Marker>
