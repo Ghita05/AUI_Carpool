@@ -77,6 +77,17 @@ export default function LoginPage() {
         Don't have an account?{' '}
         <button className="auth-link" onClick={() => navigate('/signup')}>Sign Up</button>
       </p>
+
+      <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
+        <button 
+          type="button" 
+          className="auth-link"
+          onClick={() => navigate('/admin-passcode')}
+          style={{ fontSize: 12 }}
+        >
+          Are you an admin?
+        </button>
+      </div>
     </AuthLayout>
   );
 }

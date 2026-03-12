@@ -9,6 +9,10 @@ import LoginPage               from './pages/auth/LoginPage';
 import SignupEmailPage         from './pages/auth/SignupEmailPage';
 import SignupCheckInboxPage    from './pages/auth/SignupCheckInboxPage';
 import SignupCompleteProfilePage from './pages/auth/SignupCompleteProfilePage';
+import AdminPasscodePage       from './pages/auth/AdminPasscodePage';
+
+// Admin pages
+import AdminDashboard          from './pages/admin/AdminDashboard';
 
 // Main pages
 import HomePage            from './pages/home/HomePage';
@@ -28,9 +32,13 @@ export default function App() {
         {/* Auth — no sidebar */}
         <Route path="/splash"            element={<SplashPage />} />
         <Route path="/login"             element={<LoginPage />} />
+        <Route path="/admin-passcode"    element={<AdminPasscodePage />} />
         <Route path="/signup"            element={<SignupEmailPage />} />
         <Route path="/signup/inbox"      element={<SignupCheckInboxPage />} />
         <Route path="/signup/profile"    element={<SignupCompleteProfilePage />} />
+
+        {/* Admin section — no sidebar */}
+        <Route path="/admin/dashboard"   element={<AdminDashboard />} />
 
         {/* Main app — with AppLayout sidebar */}
         <Route element={<AppLayout />}>
