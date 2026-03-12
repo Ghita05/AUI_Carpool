@@ -15,11 +15,16 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .role-pill:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
+  background: var(--color-primary-bg);
 }
 
 .role-pill-active {
@@ -30,5 +35,6 @@
 
 .role-pill-active:hover {
   background: var(--color-primary-light);
+  border-color: var(--color-primary-light);
   color: #fff;
 }

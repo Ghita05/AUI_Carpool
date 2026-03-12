@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './theme/variables.css';
-import Layout from './components/Layout';
+import AppLayout from './AppLayout';
 
 // Auth pages
 import SplashPage              from './pages/auth/SplashPage';
@@ -19,13 +19,11 @@ import MessagesPage        from './pages/messages/MessagesPage';
 import NotificationsPage   from './pages/notifications/NotificationsPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 
-function W({ children }) { return <Layout>{children}</Layout>; }
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"                  element={<Navigate to="/splash" replace />} />
+        <Route path="/"                  element={<Navigate to="/home" replace />} />
 
         {/* Auth — no sidebar */}
         <Route path="/splash"            element={<SplashPage />} />
@@ -34,14 +32,16 @@ export default function App() {
         <Route path="/signup/inbox"      element={<SignupCheckInboxPage />} />
         <Route path="/signup/profile"    element={<SignupCompleteProfilePage />} />
 
-        {/* Main app — with sidebar */}
-        <Route path="/home"              element={<W><HomePage /></W>} />
-        <Route path="/rides"             element={<W><MyRidesPage /></W>} />
-        <Route path="/rides/create"      element={<W><CreateRidePage /></W>} />
-        <Route path="/rides/:id"         element={<W><RideDetailsPage /></W>} />
-        <Route path="/messages"          element={<W><MessagesPage /></W>} />
-        <Route path="/notifications"     element={<W><NotificationsPage /></W>} />
-        <Route path="/settings"          element={<W><AccountSettingsPage /></W>} />
+        {/* Main app — with AppLayout sidebar */}
+        <Route element={<AppLayout />}>
+          <Route path="/home"            element={<HomePage />} />
+          <Route path="/rides"           element={<MyRidesPage />} />
+          <Route path="/rides/create"    element={<CreateRidePage />} />
+          <Route path="/rides/:id"       element={<RideDetailsPage />} />
+          <Route path="/messages"        element={<MessagesPage />} />
+          <Route path="/notifications"   element={<NotificationsPage />} />
+          <Route path="/settings"        element={<AccountSettingsPage />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
