@@ -25,7 +25,7 @@ const RIDES = [
     destination: 'Rabat',
     time: '17:30',
     price: 100,
-    driver: 'Ahmed B.',
+    driver: 'Hajar M.',
     initials: 'AB',
     rating: 3.9,
     seats: 1,
