@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Home, MapPin, MessageSquare, Bell, Plus, Settings, Star, Clock, Car } from 'lucide-react';
+import { MessageSquare, Bell, Plus, Settings, Star, Clock, Car } from 'lucide-react';
 import './AppLayout.css';
 
 export default function AppLayout() {

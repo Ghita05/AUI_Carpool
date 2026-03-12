@@ -1,6 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Search, Filter, X, Star, Clock, Plus, Trophy } from 'lucide-react';
+import { Search, Filter, X, Star, Trophy } from 'lucide-react';
 import InteractiveMap from '../../components/common/InteractiveMap';
 import './HomePage.css';
 
