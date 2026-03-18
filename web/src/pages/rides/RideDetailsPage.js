@@ -83,6 +83,39 @@ function ManageModal({ ride, onClose }) {
   );
 }
 
+/* ── Manage Ride Modal (driver only) ── */
+function ManageRideModal({ ride, onClose }) {
+  const [from, setFrom] = useState(ride.departure);
+  const [to, setTo] = useState(ride.destination);
+  const [time, setTime] = useState(ride.departureTime);
+  const [price, setPrice] = useState(ride.price);
+  const [seats, setSeats] = useState(ride.totalSeats);
+  const [saved, setSaved] = useState(false);
+  const handleSave = () => { setSaved(true); setTimeout(() => { setSaved(false); onClose(); }, 1500); };
+  return (
+    <div className="rd-overlay" onClick={onClose}>
+      <div className="rd-manage-modal" onClick={e=>e.stopPropagation()}>
+        <div className="rd-share-header"><span className="rd-share-title">Manage Ride</span><button className="rd-share-close" onClick={onClose}><XIcon/></button></div>
+        {saved ? <div style={{textAlign:'center',padding:'32px 0'}}><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#1B5E20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style={{fontSize:15,fontWeight:700,color:'var(--color-text-primary)',marginTop:12}}>Ride Updated!</p></div> : <>
+          <div className="rd-mng-field"><label className="rd-mng-label">Departure</label><input className="rd-mng-input" value={from} onChange={e=>setFrom(e.target.value)}/></div>
+          <div className="rd-mng-field"><label className="rd-mng-label">Destination</label><input className="rd-mng-input" value={to} onChange={e=>setTo(e.target.value)}/></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div className="rd-mng-field"><label className="rd-mng-label">Departure Time</label><input className="rd-mng-input" type="time" value={time} onChange={e=>setTime(e.target.value)}/></div>
+            <div className="rd-mng-field"><label className="rd-mng-label">Price (MAD)</label><input className="rd-mng-input" type="number" value={price} onChange={e=>setPrice(e.target.value)}/></div>
+          </div>
+          <div className="rd-mng-field"><label className="rd-mng-label">Total Seats</label>
+            <div style={{display:'flex',alignItems:'center',gap:12}}><button className="rd-mng-step" onClick={()=>seats>1&&setSeats(s=>s-1)}>−</button><span style={{fontSize:18,fontWeight:700,minWidth:24,textAlign:'center'}}>{seats}</span><button className="rd-mng-step" onClick={()=>setSeats(s=>s+1)}>+</button></div>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:16}}>
+            <button style={{flex:1,padding:12,border:'1.5px solid var(--color-error)',borderRadius:8,background:'none',color:'var(--color-error)',fontWeight:600,cursor:'pointer',fontFamily:'var(--font-family)',fontSize:13}}>Cancel Ride</button>
+            <button style={{flex:1,padding:12,background:'var(--color-primary)',color:'#fff',border:'none',borderRadius:8,fontWeight:600,cursor:'pointer',fontFamily:'var(--font-family)',fontSize:13}} onClick={handleSave}>Save Changes</button>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
 /* ── Booking Modal (passenger) ── */
 function BookingModal({ ride, onClose, onConfirm }) {
   const [seats, setSeats] = useState(1);
@@ -270,6 +303,7 @@ export default function RideDetailsPage() {
   const { isDriver } = useAuth();
   const [showShare, setShowShare] = useState(false);
   const [showManage, setShowManage] = useState(false);
+  const [showManageRide, setShowManageRide] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showBooking, setShowBooking] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
@@ -333,7 +367,7 @@ export default function RideDetailsPage() {
           {isDriver || isManageMode ? (
             <>
               <button className="rd-msg-btn" onClick={() => setShowManage(true)}><UsersIcon size={15}/> Manage Passengers</button>
-              <button className="rd-book-btn" onClick={() => setShowManage(true)}>Manage Ride</button>
+              <button className="rd-book-btn" onClick={() => setShowManageRide(true)}>Manage Ride</button>
             </>
           ) : (
             <>
@@ -354,6 +388,8 @@ export default function RideDetailsPage() {
       {showProfile && <DriverProfileModal driver={RIDE.driver} onClose={() => setShowProfile(false)} />}
       {showBooking && <BookingModal ride={RIDE} onClose={() => setShowBooking(false)} onConfirm={(booking) => { setShowBooking(false); setBookingResult(booking); }} />}
       {bookingResult && <BookingConfirmation ride={RIDE} booking={bookingResult} onClose={() => setBookingResult(null)} onGoToRides={() => navigate('/rides')} />}
+      {showManage && <ManageModal ride={RIDE} onClose={() => setShowManage(false)} />}
+      {showManageRide && <ManageRideModal ride={RIDE} onClose={() => setShowManageRide(false)} />}  
     </div>
   );
 }
