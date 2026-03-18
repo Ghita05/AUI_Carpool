@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './theme/variables.css';
+import { AuthProvider } from './context/AuthContext';
 import AppLayout from './AppLayout';
 
 // Auth pages
@@ -25,32 +26,34 @@ import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/"                  element={<Navigate to="/home" replace />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/"                  element={<Navigate to="/splash" replace />} />
 
-        {/* Auth — no sidebar */}
-        <Route path="/splash"            element={<SplashPage />} />
-        <Route path="/login"             element={<LoginPage />} />
-        <Route path="/admin-passcode"    element={<AdminPasscodePage />} />
-        <Route path="/signup"            element={<SignupEmailPage />} />
-        <Route path="/signup/inbox"      element={<SignupCheckInboxPage />} />
-        <Route path="/signup/profile"    element={<SignupCompleteProfilePage />} />
+          {/* Auth — no sidebar */}
+          <Route path="/splash"            element={<SplashPage />} />
+          <Route path="/login"             element={<LoginPage />} />
+          <Route path="/admin-passcode"    element={<AdminPasscodePage />} />
+          <Route path="/signup"            element={<SignupEmailPage />} />
+          <Route path="/signup/inbox"      element={<SignupCheckInboxPage />} />
+          <Route path="/signup/profile"    element={<SignupCompleteProfilePage />} />
 
-        {/* Admin section — no sidebar */}
-        <Route path="/admin/dashboard"   element={<AdminDashboard />} />
+          {/* Admin section — no sidebar */}
+          <Route path="/admin/dashboard"   element={<AdminDashboard />} />
 
-        {/* Main app — with AppLayout sidebar */}
-        <Route element={<AppLayout />}>
-          <Route path="/home"            element={<HomePage />} />
-          <Route path="/rides"           element={<MyRidesPage />} />
-          <Route path="/rides/create"    element={<CreateRidePage />} />
-          <Route path="/rides/:id"       element={<RideDetailsPage />} />
-          <Route path="/messages"        element={<MessagesPage />} />
-          <Route path="/notifications"   element={<NotificationsPage />} />
-          <Route path="/settings"        element={<AccountSettingsPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* Main app — with AppLayout sidebar */}
+          <Route element={<AppLayout />}>
+            <Route path="/home"            element={<HomePage />} />
+            <Route path="/rides"           element={<MyRidesPage />} />
+            <Route path="/rides/create"    element={<CreateRidePage />} />
+            <Route path="/rides/:id"       element={<RideDetailsPage />} />
+            <Route path="/messages"        element={<MessagesPage />} />
+            <Route path="/notifications"   element={<NotificationsPage />} />
+            <Route path="/settings"        element={<AccountSettingsPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

@@ -1,26 +1,10 @@
-/* My Rides Page Styles - Mockup Design */
-
-:root {
-  --color-primary: #1B5E20;
-  --color-accent: #F59E0B;
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #64748B;
-  --color-text-disabled: #CBD5E1;
-  --color-surface: #FFFFFF;
-  --color-surface-light: #F8FAFC;
-  --color-border: #E2E8F0;
-  --color-success: #10B981;
-  --color-error: #EF4444;
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-}
-
-* { box-sizing: border-box; }
+/* My Rides Page — uses design system variables from variables.css */
 
 .my-rides-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--color-surface-light);
+  background: var(--color-background);
   overflow: hidden;
 }
 
@@ -44,7 +28,7 @@
 .role-toggle {
   display: flex;
   gap: 8px;
-  background: var(--color-surface-light);
+  background: var(--color-background);
   padding: 4px;
   border-radius: 8px;
 }
@@ -124,7 +108,6 @@
 .rides-list::-webkit-scrollbar { width: 8px; }
 .rides-list::-webkit-scrollbar-track { background: transparent; }
 .rides-list::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
-.rides-list::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
 
 .empty-state {
   display: flex;
@@ -141,7 +124,7 @@
 
 .ride-card-mr {
   background: var(--color-surface);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--color-border);
   cursor: pointer;
@@ -194,20 +177,9 @@
   text-transform: capitalize;
 }
 
-.badge-upcoming {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--color-success);
-}
-
-.badge-completed {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--color-success);
-}
-
-.badge-cancelled {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-error);
-}
+.badge-upcoming { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
+.badge-completed { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
+.badge-cancelled { background: rgba(239, 68, 68, 0.1); color: var(--color-error); }
 
 .ride-driver {
   display: flex;
@@ -237,11 +209,7 @@
   flex-shrink: 0;
 }
 
-.avatar.sm {
-  width: 28px;
-  height: 28px;
-  font-size: 10px;
-}
+.avatar.sm { width: 28px; height: 28px; font-size: 10px; }
 
 .driver-name {
   font-size: 13px;
@@ -258,11 +226,6 @@
   color: var(--color-text-secondary);
 }
 
-.rating svg {
-  width: 11px;
-  height: 11px;
-}
-
 .view-btn {
   display: flex;
   align-items: center;
@@ -276,15 +239,12 @@
   font-weight: 600;
   font-family: var(--font-family);
   cursor: pointer;
-  transition: all 0.2s;
   white-space: nowrap;
 }
 
-.view-btn:hover {
-  background: #155218;
-}
+.view-btn:hover { background: #155218; }
 
-.ride-footer {
+.ride-footer-mr {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -311,12 +271,9 @@
   font-weight: 600;
   font-family: var(--font-family);
   cursor: pointer;
-  transition: all 0.2s;
 }
 
-.manage-btn:hover {
-  background: #155218;
-}
+.manage-btn:hover { background: #155218; }
 
 .mr-footer {
   padding: 20px 32px;
@@ -343,14 +300,10 @@
   transition: all 0.2s;
 }
 
-.primary-cta:hover {
-  background: #155218;
-}
+.primary-cta:hover { background: #155218; }
+.primary-cta:active { transform: scale(0.98); }
 
-.primary-cta:active {
-  transform: scale(0.98);
-}
-
+/* ── Responsive ── */
 @media (max-width: 768px) {
   .mr-header { padding: 16px; flex-direction: column; gap: 12px; align-items: flex-start; }
   .mr-header h1 { font-size: 22px; }

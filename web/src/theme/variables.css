@@ -1,5 +1,5 @@
 /* AUI Carpool Design System — Web */
-/* All tokens match Figma mockups exactly */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 :root {
   /* Primary */
@@ -17,8 +17,10 @@
   --color-surface: #FFFFFF;
   --color-border: #E5E7EB;
   --color-divider: #F3F4F6;
+  --color-hover: #F3F4F6;
 
   /* Text */
+  --color-text: #1A1A1A;
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #6B7280;
   --color-text-disabled: #9CA3AF;
@@ -33,7 +35,7 @@
   --color-warning-bg: #FFFBEB;
 
   /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Font sizes */
   --text-xs: 11px;

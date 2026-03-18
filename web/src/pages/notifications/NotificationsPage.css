@@ -17,3 +17,11 @@
 .np-item-title.bold { font-weight:700; }
 .np-time { font-size:11px; color:var(--color-text-secondary); margin-left:8px; flex-shrink:0; }
 .np-preview { font-size:12px; color:var(--color-text-secondary); line-height:1.5; }
+
+.np-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+.np-filter-pill { padding:6px 14px; border-radius:999px; border:1px solid var(--color-border); background:var(--color-surface); font-size:12px; font-weight:500; color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-family); transition:all .15s; }
+.np-filter-pill:hover { border-color:var(--color-primary); color:var(--color-primary); }
+.np-filter-pill.active { background:var(--color-primary); color:#fff; border-color:var(--color-primary); }
+.np-clickable { cursor:pointer; }
+.np-clickable:hover { background:var(--color-primary-bg)!important; }
+.np-empty { text-align:center; padding:40px; color:var(--color-text-secondary); font-size:14px; }

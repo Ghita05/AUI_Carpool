@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import '../../components/auth/AuthLayout.css';
+
+const ArrowLeftIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
+const LockIcon = ({ size = 48 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#1b5e20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
 
 const ADMIN_PASSCODE = '1234'; // Simple passcode - change as needed
 
@@ -28,12 +30,12 @@ export default function AdminPasscodePage() {
 
     setLoading(true);
     setTimeout(() => {
-      if (passcode === ADMIN_PASSCODE) {
+      if (passcode.trim() === ADMIN_PASSCODE) {
         setLoading(false);
         navigate('/admin/dashboard');
       } else {
         setLoading(false);
-        setError('Invalid passcode');
+        setError('Invalid passcode. Hint: try 1234');
         setPasscode('');
       }
     }, 800);
@@ -56,11 +58,11 @@ export default function AdminPasscodePage() {
           fontWeight: 600
         }}
       >
-        <ArrowLeft size={18} /> Back to Login
+        <ArrowLeftIcon /> Back to Login
       </button>
 
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <Lock size={48} color="#1b5e20" style={{ marginBottom: 12 }} />
+        <LockIcon size={48} />
         <h1 className="auth-title">Admin Access</h1>
         <p className="auth-subtitle">Enter the admin passcode to continue</p>
       </div>
@@ -70,8 +72,9 @@ export default function AdminPasscodePage() {
           <label className="auth-label">Passcode</label>
           <input
             className={`auth-input ${error ? 'input-error' : ''}`}
-            type="password"
-            placeholder="Enter admin passcode"
+            type="text"
+            inputMode="numeric"
+            placeholder="Enter admin passcode (e.g. 1234)"
             value={passcode}
             onChange={e => {
               setPasscode(e.target.value);

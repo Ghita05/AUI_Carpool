@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import StepIndicator from '../../components/common/StepIndicator';
 import '../../components/auth/AuthLayout.css';
 import './SignupCheckInboxPage.css';
+
+const MailIcon = () => <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>;
 
 export default function SignupCheckInboxPage() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function SignupCheckInboxPage() {
       <StepIndicator currentStep={2} totalSteps={3} />
 
       <div className="inbox-icon-box">
-        <Mail size={36} color="var(--color-primary)" strokeWidth={1.5} />
+        <MailIcon />
       </div>
 
       <div className="inbox-message">

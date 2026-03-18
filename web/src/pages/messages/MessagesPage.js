@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Send, Info } from 'lucide-react';
 import './MessagesPage.css';
+
+const SearchIcon = ({ size = 14 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+const SendIcon = ({ size = 15 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+const InfoIcon = ({ size = 16 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
 
 const CONVS = [
   { id:'1', name:'Ghita Nafa', initials:'GN', lastMsg:'See you at 2pm at the main gate!', time:'14:32', unread:2, rideTag:'AUI → Fez' },
@@ -39,7 +42,7 @@ export default function MessagesPage() {
         <div className="mp-sidebar-header">
           <h2 className="mp-title">Messages</h2>
           <div className="mp-search-box">
-            <Search size={14} color="var(--color-text-secondary)"/>
+            <SearchIcon size={14} />
             <input className="mp-search-input" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
         </div>
@@ -76,7 +79,7 @@ export default function MessagesPage() {
               <span className="mp-chat-name">{active.name}</span>
               <span className="mp-chat-ride">{active.rideTag}</span>
             </div>
-            <button className="mp-info-btn"><Info size={16}/></button>
+            <button className="mp-info-btn"><InfoIcon size={16}/></button>
           </div>
           <div className="mp-messages">
             {messages.map(m => (
@@ -97,7 +100,7 @@ export default function MessagesPage() {
               onKeyDown={e=>e.key==='Enter'&&send()}
             />
             <button className={`mp-send-btn ${!msg.trim()?'disabled':''}`} onClick={send}>
-              <Send size={15}/>
+              <SendIcon size={15}/>
             </button>
           </div>
         </div>
