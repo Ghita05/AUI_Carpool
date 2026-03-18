@@ -5,6 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
 const PASSENGER_UPCOMING = [
   {
@@ -169,7 +170,8 @@ function DriverRideCard({ ride, navigation }) {
 }
 
 export default function MyRidesScreen({ navigation }) {
-  const [role, setRole] = useState('passenger'); // 'passenger' | 'driver'
+  const { user, isDriver } = useAuth();
+  const [role, setRole] = useState(user.role); // 'passenger' | 'driver'
   const [tab, setTab] = useState('upcoming');    // 'upcoming' | 'past'
 
   const upcomingData = role === 'passenger' ? PASSENGER_UPCOMING : DRIVER_UPCOMING;
@@ -183,7 +185,8 @@ export default function MyRidesScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Rides</Text>
-        {/* Role toggle */}
+        {/* Role toggle — only for drivers */}
+        {isDriver && (
         <View style={styles.roleToggle}>
           {['passenger', 'driver'].map(r => (
             <TouchableOpacity
@@ -197,6 +200,7 @@ export default function MyRidesScreen({ navigation }) {
             </TouchableOpacity>
           ))}
         </View>
+        )}
       </View>
 
       {/* Tabs */}
@@ -253,20 +257,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
     backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: Typography['2xl'], fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
+  headerTitle: { fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary },
   roleToggle: { flexDirection: 'row', backgroundColor: Colors.background, borderRadius: Radius.sm, padding: 2 },
   roleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.sm - 2 },
   roleBtnActive: { backgroundColor: Colors.surface, ...Shadows.sm },
-  roleBtnText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  roleBtnTextActive: { fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
+  roleBtnText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
+  roleBtnTextActive: { fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary },
   tabs: {
     flexDirection: 'row', backgroundColor: Colors.surface,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   tab: { flex: 1, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: Colors.primary },
-  tabText: { fontSize: Typography.md, fontFamily: 'Inter_500Medium', color: Colors.textSecondary },
-  tabTextActive: { fontFamily: 'Inter_700Bold', color: Colors.primary },
+  tabText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_500Medium', color: Colors.textSecondary },
+  tabTextActive: { fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary },
   scroll: { flex: 1 },
   rideCard: {
     backgroundColor: Colors.surface, borderRadius: Radius.md,
@@ -277,32 +281,32 @@ const styles = StyleSheet.create({
   routeDotRow: { alignItems: 'center', marginRight: Spacing.sm },
   routeDot: { width: 8, height: 8, borderRadius: 4 },
   routeLine: { width: 1.5, height: 16, backgroundColor: Colors.border, marginVertical: 2 },
-  routeCity: { fontSize: Typography.md, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary, lineHeight: 22 },
+  routeCity: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary, lineHeight: 22 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full },
-  badgeText: { fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold' },
+  badgeText: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_600SemiBold' },
   metaRow: { flexDirection: 'row', gap: Spacing.lg, marginBottom: Spacing.md },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
+  metaText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   driverChip: { flexDirection: 'row', alignItems: 'center' },
   driverAvatar: {
     width: 26, height: 26, borderRadius: 13,
     backgroundColor: Colors.primaryBg, alignItems: 'center', justifyContent: 'center', marginRight: 6,
   },
-  driverAvatarText: { fontSize: Typography.xs, fontFamily: 'Inter_700Bold', color: Colors.primary },
-  driverName: { fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary },
-  driverRating: { fontSize: Typography.xs, fontFamily: 'Inter_400Regular', color: Colors.textSecondary, marginLeft: 2 },
+  driverAvatarText: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary },
+  driverName: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary },
+  driverRating: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginLeft: 2 },
   passengerChip: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  passengerText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
+  passengerText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border,
   },
   actionBtnAccent: { borderColor: Colors.accent },
-  actionBtnText: { fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary },
+  actionBtnText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary },
   empty: { alignItems: 'center', paddingVertical: 60, gap: Spacing.sm },
-  emptyText: { fontSize: Typography.md, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
+  emptyText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   bottomBar: {
     padding: Spacing.lg, paddingBottom: Spacing.xl,
     backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border,
@@ -311,5 +315,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     height: 52, backgroundColor: Colors.primary, borderRadius: Radius.md,
   },
-  ctaBtnText: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textWhite },
+  ctaBtnText: { fontSize: Typography.lg, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textWhite },
 });

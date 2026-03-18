@@ -1,301 +1,123 @@
 import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
-const PROFILE = {
-  name: 'Ghita Nafa', initials: 'GN', email: 'g.nafa@aui.ma',
-  rating: 4.8, rides: 23, cancellations: 1, memberSince: 'Sept 2023',
-  smoking: 'Non-smoker', drivingStyle: 'Calm driver', role: 'Both',
-};
-
-const REVIEWS_RECEIVED = [
-  {
-    id: '1', author: 'Ahmed B.', authorInitials: 'AB', rating: 5,
-    date: 'Feb 21, 2026', rideTag: 'AUI → Fez',
-    text: 'Excellent driver! Very punctual and smooth ride. Would definitely book again.',
-  },
-  {
-    id: '2', author: 'Kenza N.', authorInitials: 'KN', rating: 4,
-    date: 'Feb 10, 2026', rideTag: 'AUI → Meknes',
-    text: 'Great trip! Comfortable car and good conversation. Slightly late departure.',
-  },
+const REVIEWS = [
+  {id:'1',author:'Ahmed B.',initials:'AB',rating:5,date:'Feb 21',route:'AUI → Fez',text:'Excellent driver! Very punctual.'},
+  {id:'2',author:'Kenza N.',initials:'KN',rating:4,date:'Feb 10',route:'AUI → Meknes',text:'Great trip! Slightly late.'},
+  {id:'3',author:'Omar S.',initials:'OS',rating:5,date:'Jan 28',route:'Casa → AUI',text:'Reliable and great company.'},
 ];
 
-const REVIEWS_GIVEN = [
-  {
-    id: '3', author: 'Omar S.', authorInitials: 'OS', rating: 5,
-    date: 'Jan 28, 2026', rideTag: 'Casa → AUI',
-    text: 'Very reliable passenger, confirmed on time and great company.',
-  },
-];
+function StarRow({rating,size=14}){return(<View style={{flexDirection:'row',gap:2}}>{[1,2,3,4,5].map(i=>(<Ionicons key={i} name={i<=rating?'star':'star-outline'} size={size} color={i<=rating?Colors.accent:Colors.border}/>))}</View>);}
 
-function StarRow({ rating, size = 14 }) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 2 }}>
-      {[1,2,3,4,5].map(i => (
-        <Ionicons
-          key={i}
-          name={i <= rating ? 'star' : 'star-outline'}
-          size={size}
-          color={i <= rating ? Colors.accent : Colors.border}
-        />
-      ))}
-    </View>
-  );
-}
+export default function UserProfileScreen({ navigation }) {
+  const { user, isDriver, logout } = useAuth();
+  const [tab,setTab]=useState('received');
 
-function ReviewCard({ review }) {
-  return (
-    <View style={styles.reviewCard}>
-      <View style={styles.reviewHeader}>
-        <View style={styles.reviewAvatar}>
-          <Text style={styles.reviewAvatarText}>{review.authorInitials}</Text>
-        </View>
-        <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-          <View style={styles.reviewNameRow}>
-            <Text style={styles.reviewAuthor}>{review.author}</Text>
-            <Text style={styles.reviewDate}>{review.date}</Text>
-          </View>
-          <StarRow rating={review.rating} size={12} />
-        </View>
-      </View>
-      <View style={styles.rideTag}>
-        <Ionicons name="location-outline" size={10} color={Colors.primary} />
-        <Text style={styles.rideTagText}>{review.rideTag}</Text>
-      </View>
-      <Text style={styles.reviewText}>{review.text}</Text>
-    </View>
-  );
-}
-
-export default function UserProfileScreen({ navigation, route }) {
-  const isOwnProfile = route?.params?.isOwnProfile !== false;
-  const [activeTab, setActiveTab] = useState('received');
+  const handleLogout=()=>{logout();navigation.reset({index:0,routes:[{name:'Splash'}]});};
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isOwnProfile ? 'My Profile' : 'Profile'}</Text>
-        {isOwnProfile ? (
-          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('AccountSettings')}>
-            <Ionicons name="settings-outline" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.headerBtn}>
-            <Ionicons name="ellipsis-horizontal" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Avatar + Name */}
-        <View style={styles.heroSection}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{PROFILE.initials}</Text>
-            </View>
-            {isOwnProfile && (
-              <TouchableOpacity style={styles.cameraBadge}>
-                <Ionicons name="camera" size={12} color={Colors.textWhite} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={styles.profileName}>{PROFILE.name}</Text>
-          <View style={styles.emailRow}>
-            <Ionicons name="checkmark-circle" size={14} color={Colors.primary} />
-            <Text style={styles.emailText}>{PROFILE.email}</Text>
-          </View>
-          <Text style={styles.memberSince}>Member since {PROFILE.memberSince}</Text>
+    <SafeAreaView style={st.safe} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface}/>
+      <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={st.profileHeader}>
+          <View style={st.avatar}><Text style={st.avatarText}>{user.initials||'GN'}</Text></View>
+          <Text style={st.name}>{user.firstName} {user.lastName}</Text>
+          <View style={st.emailRow}><Ionicons name="mail-outline" size={13} color={Colors.textSecondary}/><Text style={st.email}>{user.email||'g.nafa@aui.ma'}</Text></View>
+          <View style={st.roleBadge}><Text style={st.roleText}>{isDriver?'Driver':'Passenger'}</Text></View>
         </View>
 
-        {/* Stats Bar */}
-        <View style={styles.statsBar}>
-          {[
-            { val: PROFILE.rides,         label: 'Rides',         color: Colors.textPrimary },
-            { val: PROFILE.rating,        label: 'Rating',        color: Colors.textPrimary, star: true },
-            { val: PROFILE.cancellations, label: 'Cancellations', color: Colors.error },
-          ].map((s, i) => (
-            <View key={i} style={[styles.statItem, i < 2 && styles.statDivider]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, justifyContent: 'center' }}>
-                {s.star && <Ionicons name="star" size={14} color={Colors.accent} />}
-                <Text style={[styles.statVal, { color: s.color }]}>{s.val}</Text>
-              </View>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
+        {/* Stats */}
+        <View style={st.statsRow}>
+          <View style={st.statItem}><Text style={st.statBig}>{user.rating||4.8}</Text><Text style={st.statLabel}>Rating</Text></View>
+          <View style={[st.statItem,st.statBorder]}><Text style={st.statBig}>{user.rides||23}</Text><Text style={st.statLabel}>Rides</Text></View>
+          <View style={st.statItem}><Text style={st.statBig}>0</Text><Text style={st.statLabel}>Cancels</Text></View>
         </View>
 
         {/* Preferences */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <View style={styles.prefRow}>
-            <Ionicons name="ban-outline" size={16} color={Colors.textSecondary} />
-            <Text style={styles.prefText}>{PROFILE.smoking}</Text>
-            {isOwnProfile && (
-              <TouchableOpacity style={styles.editIconBtn}>
-                <Ionicons name="pencil-outline" size={14} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.prefRow}>
-            <Ionicons name="speedometer-outline" size={16} color={Colors.textSecondary} />
-            <Text style={styles.prefText}>{PROFILE.drivingStyle}</Text>
-            {isOwnProfile && (
-              <TouchableOpacity style={styles.editIconBtn}>
-                <Ionicons name="pencil-outline" size={14} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            )}
+        <View style={st.card}>
+          <Text style={st.cardTitle}>Preferences</Text>
+          <View style={{flexDirection:'row',gap:8,marginTop:8}}>
+            <View style={st.chip}><Ionicons name="ban-outline" size={12} color={Colors.primary}/><Text style={st.chipText}>Non-smoker</Text></View>
+            {isDriver && <View style={[st.chip,{backgroundColor:Colors.background}]}><Ionicons name="speedometer-outline" size={12} color={Colors.textSecondary}/><Text style={[st.chipText,{color:Colors.textSecondary}]}>Calm driver</Text></View>}
           </View>
         </View>
 
-        {/* Actions for other's profile */}
-        {!isOwnProfile && (
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.actionBtn}>
-              <Ionicons name="chatbubble-outline" size={16} color={Colors.textWhite} />
-              <Text style={styles.actionBtnText}>Message</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtnOutline}>
-              <Ionicons name="flag-outline" size={16} color={Colors.error} />
-              <Text style={[styles.actionBtnText, { color: Colors.error }]}>Report</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Reviews */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Reviews</Text>
-          <View style={styles.reviewTabs}>
-            {['received', 'given'].map(t => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.reviewTab, activeTab === t && styles.reviewTabActive]}
-                onPress={() => setActiveTab(t)}
-              >
-                <Text style={[styles.reviewTabText, activeTab === t && styles.reviewTabTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)} ({t === 'received' ? REVIEWS_RECEIVED.length : REVIEWS_GIVEN.length})
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={st.card}>
+          <Text style={st.cardTitle}>Reviews</Text>
+          <View style={st.tabRow}>
+            {['received','given'].map(t=>(<TouchableOpacity key={t} style={[st.tab,tab===t&&st.tabActive]} onPress={()=>setTab(t)}><Text style={[st.tabText,tab===t&&st.tabTextActive]}>{t.charAt(0).toUpperCase()+t.slice(1)}</Text></TouchableOpacity>))}
           </View>
-          {(activeTab === 'received' ? REVIEWS_RECEIVED : REVIEWS_GIVEN).map(r => (
-            <ReviewCard key={r.id} review={r} />
+          {REVIEWS.map(r=>(
+            <View key={r.id} style={st.reviewCard}>
+              <View style={st.reviewTop}>
+                <View style={st.reviewAvatar}><Text style={{fontSize:10,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary}}>{r.initials}</Text></View>
+                <View style={{flex:1}}><Text style={st.reviewAuthor}>{r.author}</Text><StarRow rating={r.rating} size={11}/></View>
+                <View><Text style={{fontSize:10,color:Colors.textSecondary}}>{r.date}</Text><View style={st.routeTag}><Text style={st.routeTagText}>{r.route}</Text></View></View>
+              </View>
+              <Text style={st.reviewText}>{r.text}</Text>
+            </View>
           ))}
         </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* Bottom Bar - own profile only */}
-      {isOwnProfile && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.editProfileBtn}
-            onPress={() => navigation.navigate('AccountSettings')}
-          >
-            <Ionicons name="pencil-outline" size={16} color={Colors.textWhite} />
-            <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+        {/* Actions */}
+        <View style={st.card}>
+          <TouchableOpacity style={st.menuRow} onPress={()=>navigation.navigate('AccountSettings')}>
+            <Ionicons name="settings-outline" size={18} color={Colors.textPrimary}/>
+            <Text style={st.menuText}>Account Settings</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/>
+          </TouchableOpacity>
+          <View style={st.menuDivider}/>
+          <TouchableOpacity style={st.menuRow} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={18} color={Colors.error}/>
+            <Text style={[st.menuText,{color:Colors.error}]}>Log Out</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/>
           </TouchableOpacity>
         </View>
-      )}
+        <View style={{height:40}}/>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: {
-    height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, backgroundColor: Colors.surface,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
-  scroll: { flex: 1 },
-  heroSection: { alignItems: 'center', paddingVertical: Spacing.xl, backgroundColor: Colors.surface },
-  avatarContainer: { position: 'relative', marginBottom: Spacing.md },
-  avatar: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: Colors.primaryBg, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 3, borderColor: Colors.primary,
-  },
-  avatarText: { fontSize: Typography['4xl'], fontFamily: 'Inter_700Bold', color: Colors.primary },
-  cameraBadge: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: Colors.surface,
-  },
-  profileName: { fontSize: Typography['3xl'], fontFamily: 'Inter_700Bold', color: Colors.textPrimary, marginBottom: 4 },
-  emailRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  emailText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  memberSince: { fontSize: Typography.xs, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  statsBar: {
-    flexDirection: 'row', backgroundColor: Colors.surface,
-    marginVertical: Spacing.sm, paddingVertical: Spacing.lg,
-  },
-  statItem: { flex: 1, alignItems: 'center', gap: 3 },
-  statDivider: { borderRightWidth: 1, borderRightColor: Colors.border },
-  statVal: { fontSize: Typography['2xl'], fontFamily: 'Inter_700Bold' },
-  statLabel: { fontSize: Typography.xs, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  card: {
-    backgroundColor: Colors.surface, marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg,
-  },
-  sectionTitle: { fontSize: Typography.md, fontFamily: 'Inter_700Bold', color: Colors.textPrimary, marginBottom: Spacing.md },
-  prefRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
-  prefText: { flex: 1, fontSize: Typography.base, fontFamily: 'Inter_400Regular', color: Colors.textPrimary },
-  editIconBtn: { padding: Spacing.xs },
-  actionsRow: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
-  actionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    height: 44, backgroundColor: Colors.primary, borderRadius: Radius.sm,
-  },
-  actionBtnOutline: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    height: 44, borderRadius: Radius.sm, borderWidth: 1.5, borderColor: Colors.error,
-  },
-  actionBtnText: { fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', color: Colors.textWhite },
-  reviewTabs: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
-  reviewTab: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full, backgroundColor: Colors.background },
-  reviewTabActive: { backgroundColor: Colors.primaryBg },
-  reviewTabText: { fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold', color: Colors.textSecondary },
-  reviewTabTextActive: { color: Colors.primary },
-  reviewCard: { marginBottom: Spacing.md },
-  reviewHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
-  reviewAvatar: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center',
-  },
-  reviewAvatarText: { fontSize: Typography.sm, fontFamily: 'Inter_700Bold', color: Colors.textSecondary },
-  reviewNameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  reviewAuthor: { fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary },
-  reviewDate: { fontSize: Typography.xs, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  rideTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.primaryBg, paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: Radius.full, alignSelf: 'flex-start', marginBottom: Spacing.xs,
-  },
-  rideTagText: { fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  reviewText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary, lineHeight: 20 },
-  bottomBar: {
-    padding: Spacing.lg, paddingBottom: Spacing.xl,
-    backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border,
-  },
-  editProfileBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    height: 52, backgroundColor: Colors.primary, borderRadius: Radius.md,
-  },
-  editProfileBtnText: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textWhite },
+const st = StyleSheet.create({
+  safe:{flex:1,backgroundColor:Colors.background},
+  scroll:{flex:1},
+  profileHeader:{alignItems:'center',paddingVertical:Spacing['2xl'],backgroundColor:Colors.surface,borderBottomWidth:1,borderBottomColor:Colors.border},
+  avatar:{width:72,height:72,borderRadius:36,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',marginBottom:12},
+  avatarText:{fontSize:24,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  name:{fontSize:Typography['2xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  emailRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:4},
+  email:{fontSize:Typography.sm,color:Colors.textSecondary},
+  roleBadge:{marginTop:8,paddingHorizontal:12,paddingVertical:4,backgroundColor:Colors.primaryBg,borderRadius:Radius.full},
+  roleText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  statsRow:{flexDirection:'row',backgroundColor:Colors.surface,marginHorizontal:Spacing.lg,marginTop:Spacing.md,borderRadius:Radius.md,...Shadows.card},
+  statItem:{flex:1,alignItems:'center',paddingVertical:Spacing.lg},
+  statBorder:{borderLeftWidth:1,borderRightWidth:1,borderColor:Colors.divider},
+  statBig:{fontSize:Typography['3xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
+  statLabel:{fontSize:Typography.xs,color:Colors.textSecondary,marginTop:2},
+  card:{backgroundColor:Colors.surface,marginHorizontal:Spacing.lg,marginTop:Spacing.md,borderRadius:Radius.md,padding:Spacing.lg,...Shadows.card},
+  cardTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  chip:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:10,paddingVertical:4,borderRadius:Radius.full,backgroundColor:Colors.primaryBg},
+  chipText:{fontSize:11,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  tabRow:{flexDirection:'row',gap:0,marginTop:12,marginBottom:8,borderBottomWidth:1,borderBottomColor:Colors.border},
+  tab:{paddingVertical:8,paddingHorizontal:16,borderBottomWidth:2,borderBottomColor:'transparent'},
+  tabActive:{borderBottomColor:Colors.primary},
+  tabText:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},
+  tabTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
+  reviewCard:{paddingVertical:12,borderBottomWidth:1,borderBottomColor:Colors.divider},
+  reviewTop:{flexDirection:'row',alignItems:'flex-start',gap:10},
+  reviewAvatar:{width:32,height:32,borderRadius:16,backgroundColor:Colors.primaryBg,alignItems:'center',justifyContent:'center'},
+  reviewAuthor:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  reviewText:{fontSize:13,color:Colors.textSecondary,marginTop:6,lineHeight:18},
+  routeTag:{backgroundColor:Colors.primaryBg,paddingHorizontal:6,paddingVertical:2,borderRadius:4,marginTop:4},
+  routeTagText:{fontSize:9,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  menuRow:{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:14},
+  menuText:{flex:1,fontSize:14,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+  menuDivider:{height:1,backgroundColor:Colors.divider},
 });

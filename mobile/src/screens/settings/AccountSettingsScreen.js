@@ -1,329 +1,170 @@
 import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, TextInput, Switch
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
-const SMOKING_OPTIONS = ['Non-smoker', 'Smoker'];
-const DRIVING_OPTIONS  = ['Calm', 'Moderate', 'Fast'];
-const VEHICLE_SIZES    = ['Small', 'Medium', 'Large'];
+function Card({title,children,action}){return(<View style={st.card}><View style={st.cardH}><Text style={st.cardTitle}>{title}</Text>{action}</View>{children}</View>);}
+function Pills({options,selected,onSelect,disabled}){return(<View style={st.pillRow}>{options.map(o=>(<TouchableOpacity key={o} style={[st.pill,selected===o&&st.pillActive]} onPress={()=>!disabled&&onSelect(o)} disabled={disabled}><Text style={[st.pillText,selected===o&&st.pillTextActive]}>{o}</Text></TouchableOpacity>))}</View>);}
 
-function SectionCard({ title, children, action }) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        {action}
-      </View>
-      {children}
-    </View>
-  );
+function ChangePasswordModal({visible,onClose}){
+  const [cur,setCur]=useState('');const [nw,setNw]=useState('');const [conf,setConf]=useState('');const [loading,setLoading]=useState(false);
+  const handleSave=()=>{if(!cur||!nw||nw!==conf){Alert.alert('Error','Please fill all fields and make sure passwords match');return;}setLoading(true);setTimeout(()=>{setLoading(false);onClose();Alert.alert('Success','Password updated');},800);};
+  return(<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
+    <View style={st.modalH}><Text style={st.modalTitle}>Change Password</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
+    {[{label:'Current Password',val:cur,set:setCur},{label:'New Password',val:nw,set:setNw},{label:'Confirm New Password',val:conf,set:setConf}].map((f,i)=>(
+      <View key={i} style={{marginBottom:12}}><Text style={st.mLabel}>{f.label}</Text><TextInput style={st.mInput} secureTextEntry value={f.val} onChangeText={f.set} placeholder={f.label} placeholderTextColor={Colors.textDisabled}/></View>
+    ))}
+    <View style={{flexDirection:'row',gap:10,marginTop:8}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={st.saveBtn} onPress={handleSave}><Text style={st.saveBtnText}>{loading?'Saving...':'Update'}</Text></TouchableOpacity></View>
+  </View></View></Modal>);
 }
 
-function FieldRow({ label, children, half }) {
-  return (
-    <View style={[styles.fieldRow, half && styles.fieldRowHalf]}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-function PillGroup({ options, selected, onSelect }) {
-  return (
-    <View style={styles.pillGroup}>
-      {options.map(opt => (
-        <TouchableOpacity
-          key={opt}
-          style={[styles.pill, selected === opt && styles.pillActive]}
-          onPress={() => onSelect(opt)}
-        >
-          <Text style={[styles.pillText, selected === opt && styles.pillTextActive]}>{opt}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
-function Stepper({ value, onInc, onDec, min = 1 }) {
-  return (
-    <View style={styles.stepperRow}>
-      <TouchableOpacity
-        style={[styles.stepBtn, value <= min && styles.stepBtnDisabled]}
-        onPress={() => value > min && onDec()}
-      >
-        <Ionicons name="remove" size={14} color={value <= min ? Colors.textDisabled : Colors.textSecondary} />
-      </TouchableOpacity>
-      <Text style={styles.stepperVal}>{value}</Text>
-      <TouchableOpacity style={styles.stepBtn} onPress={onInc}>
-        <Ionicons name="add" size={14} color={Colors.primary} />
-      </TouchableOpacity>
-    </View>
-  );
+function DeactivateModal({visible,onClose}){
+  const [confirmed,setConfirmed]=useState(false);
+  return(<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
+    <View style={st.modalH}><Text style={[st.modalTitle,{color:Colors.error}]}>Deactivate Account</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
+    <Text style={{fontSize:13,color:Colors.textSecondary,marginBottom:16,lineHeight:20}}>This action cannot be undone. Your account and all data will be permanently deleted.</Text>
+    <TouchableOpacity style={{flexDirection:'row',alignItems:'center',gap:8,marginBottom:16}} onPress={()=>setConfirmed(c=>!c)}>
+      <Ionicons name={confirmed?'checkbox':'square-outline'} size={20} color={confirmed?Colors.error:Colors.border}/>
+      <Text style={{fontSize:13,color:Colors.textPrimary,flex:1}}>I understand and want to deactivate my account</Text>
+    </TouchableOpacity>
+    <View style={{flexDirection:'row',gap:10}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[st.saveBtn,{backgroundColor:confirmed?Colors.error:Colors.border}]} disabled={!confirmed} onPress={()=>{onClose();Alert.alert('Account Deactivated');}}><Text style={st.saveBtnText}>Deactivate</Text></TouchableOpacity></View>
+  </View></View></Modal>);
 }
 
 export default function AccountSettingsScreen({ navigation }) {
-  const [firstName,  setFirstName]  = useState('Ghita');
-  const [lastName,   setLastName]   = useState('Nafa');
-  const [phone,      setPhone]      = useState('+212 612 345 678');
-  const [smoking,    setSmoking]    = useState('Non-smoker');
-  const [drivStyle,  setDrivStyle]  = useState('Calm');
-  // Vehicle (driver-only)
-  const isDriver = true;
-  const [vBrand,   setVBrand]   = useState('Dacia');
-  const [vModel,   setVModel]   = useState('Logan');
-  const [vColor,   setVColor]   = useState('White');
-  const [vYear,    setVYear]    = useState('2022');
-  const [vPlate,   setVPlate]   = useState('12345-AB-67');
-  const [vSize,    setVSize]    = useState('Medium');
-  const [vLuggage, setVLuggage] = useState(3);
+  const { user, isDriver, logout } = useAuth();
+  const [editing,setEditing]=useState(false);
+  const [firstName,setFirstName]=useState(user.firstName||'Ghita');
+  const [lastName,setLastName]=useState(user.lastName||'Nafa');
+  const [phone,setPhone]=useState('+212 612 345 678');
+  const [smoking,setSmoking]=useState('Non-smoker');
+  const [driving,setDriving]=useState('Calm');
+  const [vBrand,setVBrand]=useState('Dacia');const [vModel,setVModel]=useState('Logan');const [vColor,setVColor]=useState('White');const [vYear,setVYear]=useState('2022');const [vPlate,setVPlate]=useState('12345-AB-67');const [vSize,setVSize]=useState('Medium');const [vLug,setVLug]=useState(3);
+  const [showPwModal,setShowPwModal]=useState(false);const [showDeactivate,setShowDeactivate]=useState(false);
+  const [saveStatus,setSaveStatus]=useState('');
+
+  const handleSave=()=>{setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);};
+  const handleLogout=()=>{logout();navigation.reset({index:0,routes:[{name:'Splash'}]});};
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Account Settings</Text>
-        <View style={{ width: 36 }} />
+    <SafeAreaView style={st.safe} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface}/>
+      <View style={st.header}>
+        <TouchableOpacity onPress={()=>navigation.goBack()} style={st.headerBtn}><Ionicons name="arrow-back" size={22} color={Colors.textPrimary}/></TouchableOpacity>
+        <Text style={st.headerTitle}>Settings</Text>
+        <View style={{width:36}}/>
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-
+      <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
         {/* Avatar */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>GN</Text>
-            </View>
-            <TouchableOpacity style={styles.cameraBadge}>
-              <Ionicons name="camera" size={12} color={Colors.textWhite} />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity>
-            <Text style={styles.changePhotoText}>Change photo</Text>
-          </TouchableOpacity>
+        <View style={st.avatarSection}>
+          <View style={st.avatarWrap}><Text style={st.avatarText}>{user.initials||'GN'}</Text></View>
+          <TouchableOpacity onPress={()=>Alert.alert('Change Photo','Photo picker will open in the full version')}><Text style={st.changePhoto}>Change photo</Text></TouchableOpacity>
         </View>
 
-        {/* Personal Info */}
-        <SectionCard title="Personal Information">
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>First Name</Text>
-              <TextInput
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>Last Name</Text>
-              <TextInput
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                autoCapitalize="words"
-              />
-            </View>
+        <Card title="Personal Information" action={<TouchableOpacity onPress={()=>setEditing(e=>!e)}><Text style={st.editLink}>{editing?'Lock':'Edit'}</Text></TouchableOpacity>}>
+          <View style={{flexDirection:'row',gap:12}}>
+            <View style={{flex:1}}><Text style={st.fLabel}>First Name</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={firstName} onChangeText={setFirstName} editable={editing}/></View>
+            <View style={{flex:1}}><Text style={st.fLabel}>Last Name</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={lastName} onChangeText={setLastName} editable={editing}/></View>
           </View>
+          <Text style={st.fLabel}>AUI Email</Text>
+          <View style={st.emailLocked}><Ionicons name="lock-closed" size={13} color={Colors.primary}/><Text style={{flex:1,fontSize:13,color:Colors.textPrimary}}>{user.email||'g.nafa@aui.ma'}</Text><Text style={{fontSize:11,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary}}>✓ Verified</Text></View>
+          <Text style={st.fLabel}>Phone Number</Text>
+          <TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={phone} onChangeText={setPhone} editable={editing}/>
+        </Card>
 
-          {/* Verified email */}
-          <Text style={styles.fieldLabel}>AUI Email</Text>
-          <View style={styles.verifiedEmailBox}>
-            <Ionicons name="lock-closed" size={14} color={Colors.primary} />
-            <Text style={styles.verifiedEmailText}>g.nafa@aui.ma</Text>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={12} color={Colors.primary} />
-              <Text style={styles.verifiedBadgeText}>Verified</Text>
-            </View>
-          </View>
+        <Card title="Travel Preferences">
+          <Text style={st.fLabel}>Smoking</Text>
+          <Pills options={['Non-smoker','Smoker']} selected={smoking} onSelect={setSmoking} disabled={!editing}/>
+          <Text style={[st.fLabel,{marginTop:12}]}>Driving Style</Text>
+          <Pills options={['Calm','Moderate','Fast']} selected={driving} onSelect={setDriving} disabled={!editing}/>
+        </Card>
 
-          <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
-        </SectionCard>
-
-        {/* Travel Preferences */}
-        <SectionCard title="Travel Preferences">
-          <Text style={styles.fieldLabel}>Smoking Preference</Text>
-          <PillGroup options={SMOKING_OPTIONS} selected={smoking} onSelect={setSmoking} />
-
-          <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>Driving Style</Text>
-          <PillGroup options={DRIVING_OPTIONS} selected={drivStyle} onSelect={setDrivStyle} />
-        </SectionCard>
-
-        {/* Vehicle (driver only) */}
         {isDriver && (
-          <SectionCard
-            title="My Vehicle"
-            action={
-              <TouchableOpacity>
-                <Text style={styles.editLink}>Edit</Text>
-              </TouchableOpacity>
-            }
-          >
-            <View style={styles.twoCol}>
-              <View style={styles.col}>
-                <Text style={styles.fieldLabel}>Brand</Text>
-                <TextInput style={styles.input} value={vBrand} onChangeText={setVBrand} />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.fieldLabel}>Model</Text>
-                <TextInput style={styles.input} value={vModel} onChangeText={setVModel} />
-              </View>
+          <Card title="My Vehicle" action={<TouchableOpacity onPress={()=>setEditing(e=>!e)}><Text style={st.editLink}>{editing?'Lock':'Edit'}</Text></TouchableOpacity>}>
+            <View style={{flexDirection:'row',gap:12}}>
+              <View style={{flex:1}}><Text style={st.fLabel}>Brand</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vBrand} onChangeText={setVBrand} editable={editing}/></View>
+              <View style={{flex:1}}><Text style={st.fLabel}>Model</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vModel} onChangeText={setVModel} editable={editing}/></View>
             </View>
-            <View style={styles.twoCol}>
-              <View style={styles.col}>
-                <Text style={styles.fieldLabel}>Color</Text>
-                <TextInput style={styles.input} value={vColor} onChangeText={setVColor} />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.fieldLabel}>Year</Text>
-                <TextInput style={styles.input} value={vYear} onChangeText={setVYear} keyboardType="numeric" />
-              </View>
+            <View style={{flexDirection:'row',gap:12}}>
+              <View style={{flex:1}}><Text style={st.fLabel}>Color</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vColor} onChangeText={setVColor} editable={editing}/></View>
+              <View style={{flex:1}}><Text style={st.fLabel}>Year</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vYear} onChangeText={setVYear} editable={editing}/></View>
             </View>
-
-            <Text style={styles.fieldLabel}>License Plate</Text>
-            <TextInput
-              style={styles.input}
-              value={vPlate}
-              onChangeText={setVPlate}
-              autoCapitalize="characters"
-            />
-
-            <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>Vehicle Size</Text>
-            <PillGroup options={VEHICLE_SIZES} selected={vSize} onSelect={setVSize} />
-
-            <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>Luggage Capacity (bags)</Text>
-            <Stepper
-              value={vLuggage}
-              onInc={() => setVLuggage(v => v + 1)}
-              onDec={() => setVLuggage(v => v - 1)}
-              min={1}
-            />
-          </SectionCard>
+            <Text style={st.fLabel}>License Plate</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vPlate} onChangeText={setVPlate} editable={editing}/>
+            <Text style={[st.fLabel,{marginTop:8}]}>Vehicle Size</Text><Pills options={['Small','Medium','Large']} selected={vSize} onSelect={setVSize} disabled={!editing}/>
+            <Text style={[st.fLabel,{marginTop:8}]}>Vehicle Photo</Text>
+            <TouchableOpacity style={st.carUpload} onPress={()=>editing&&Alert.alert('Upload Vehicle Photo','Camera/gallery picker will open in the full version')} disabled={!editing}>
+              <Ionicons name="camera-outline" size={20} color={editing?Colors.primary:Colors.textDisabled}/>
+              <Text style={{fontSize:13,color:editing?Colors.primary:Colors.textDisabled}}>Upload a photo of your vehicle</Text>
+            </TouchableOpacity>
+          </Card>
         )}
 
-        {/* Security */}
-        <SectionCard title="Security">
-          <TouchableOpacity style={styles.securityRow}>
-            <Ionicons name="lock-closed-outline" size={18} color={Colors.textPrimary} />
-            <Text style={styles.securityLabel}>Change Password</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} style={{ marginLeft: 'auto' }} />
-          </TouchableOpacity>
-          <View style={styles.secDivider} />
-          <TouchableOpacity style={styles.securityRow}>
-            <Ionicons name="person-remove-outline" size={18} color={Colors.error} />
-            <Text style={[styles.securityLabel, { color: Colors.error }]}>Deactivate Account</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.error} style={{ marginLeft: 'auto' }} />
-          </TouchableOpacity>
-        </SectionCard>
+        <Card title="Security">
+          <TouchableOpacity style={st.secRow} onPress={()=>setShowPwModal(true)}><Ionicons name="lock-closed-outline" size={16} color={Colors.textPrimary}/><Text style={st.secRowText}>Change Password</Text><Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/></TouchableOpacity>
+          <View style={st.secDivider}/>
+          <TouchableOpacity style={st.secRow} onPress={()=>setShowDeactivate(true)}><Ionicons name="trash-outline" size={16} color={Colors.error}/><Text style={[st.secRowText,{color:Colors.error}]}>Deactivate Account</Text><Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/></TouchableOpacity>
+        </Card>
 
-        <View style={{ height: 100 }} />
+        {/* Logout */}
+        <TouchableOpacity style={st.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color={Colors.error}/>
+          <Text style={st.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+
+        {editing && <TouchableOpacity style={st.saveFab} onPress={handleSave}><Text style={st.saveFabText}>Save Changes</Text></TouchableOpacity>}
+        {!!saveStatus && <Text style={st.saveMsg}>{saveStatus}</Text>}
+        <View style={{height:40}}/>
       </ScrollView>
 
-      {/* Save Button */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.saveBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.saveBtnText}>Save Changes</Text>
-        </TouchableOpacity>
-      </View>
+      <ChangePasswordModal visible={showPwModal} onClose={()=>setShowPwModal(false)}/>
+      <DeactivateModal visible={showDeactivate} onClose={()=>setShowDeactivate(false)}/>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: {
-    height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, backgroundColor: Colors.surface,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
-  scroll: { flex: 1 },
-  avatarSection: { alignItems: 'center', paddingVertical: Spacing.xl, backgroundColor: Colors.surface, marginBottom: Spacing.sm },
-  avatarWrap: { position: 'relative', marginBottom: Spacing.sm },
-  avatar: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: Colors.primaryBg, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: Colors.primary,
-  },
-  avatarText: { fontSize: Typography['4xl'], fontFamily: 'Inter_700Bold', color: Colors.primary },
-  cameraBadge: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: Colors.surface,
-  },
-  changePhotoText: { fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  card: {
-    backgroundColor: Colors.surface, marginBottom: Spacing.sm,
-    padding: Spacing.lg,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
-  cardTitle: { fontSize: Typography.md, fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
-  editLink: { fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  twoCol: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xs },
-  col: { flex: 1 },
-  fieldLabel: {
-    fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold',
-    color: Colors.textSecondary, letterSpacing: 0.5,
-    textTransform: 'uppercase', marginBottom: Spacing.xs,
-  },
-  input: {
-    height: 46, backgroundColor: Colors.background, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
-    fontSize: Typography.md, fontFamily: 'Inter_400Regular', color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  verifiedEmailBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    height: 46, backgroundColor: Colors.primaryBg, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.primary,
-    paddingHorizontal: Spacing.md, marginBottom: Spacing.xs,
-  },
-  verifiedEmailText: { flex: 1, fontSize: Typography.md, fontFamily: 'Inter_400Regular', color: Colors.textPrimary },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  verifiedBadgeText: { fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  pillGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  pill: {
-    paddingHorizontal: 16, height: 36, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  pillActive: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary },
-  pillText: { fontSize: Typography.base, fontFamily: 'Inter_500Medium', color: Colors.textSecondary },
-  pillTextActive: { fontFamily: 'Inter_700Bold', color: Colors.primary },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
-  stepBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepBtnDisabled: { opacity: 0.4 },
-  stepperVal: { fontSize: Typography['2xl'], fontFamily: 'Inter_700Bold', color: Colors.textPrimary, minWidth: 28, textAlign: 'center' },
-  securityRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm },
-  securityLabel: { fontSize: Typography.md, fontFamily: 'Inter_500Medium', color: Colors.textPrimary },
-  secDivider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.xs },
-  bottomBar: {
-    padding: Spacing.lg, paddingBottom: Spacing.xl,
-    backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border,
-  },
-  saveBtn: {
-    height: 52, backgroundColor: Colors.primary, borderRadius: Radius.md,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  saveBtnText: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textWhite },
+const st = StyleSheet.create({
+  safe:{flex:1,backgroundColor:Colors.background},
+  header:{height:56,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:Spacing.lg,backgroundColor:Colors.surface,borderBottomWidth:1,borderBottomColor:Colors.border},
+  headerBtn:{width:36,height:36,alignItems:'center',justifyContent:'center'},
+  headerTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  scroll:{flex:1,padding:Spacing.lg},
+  avatarSection:{alignItems:'center',marginBottom:Spacing.lg},
+  avatarWrap:{width:72,height:72,borderRadius:36,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',marginBottom:8},
+  avatarText:{fontSize:24,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  changePhoto:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  card:{backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.lg,marginBottom:Spacing.md,...Shadows.card},
+  cardH:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.md},
+  cardTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  editLink:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  fLabel:{fontSize:10,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,textTransform:'uppercase',letterSpacing:.5,marginBottom:4,marginTop:10},
+  fInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,fontSize:13,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+  fInputDisabled:{backgroundColor:Colors.divider,color:Colors.textSecondary},
+  emailLocked:{flexDirection:'row',alignItems:'center',gap:8,height:42,backgroundColor:Colors.primaryBg,borderWidth:1,borderColor:Colors.primary,borderRadius:8,paddingHorizontal:12,marginBottom:4},
+  pillRow:{flexDirection:'row',gap:8,flexWrap:'wrap'},
+  pill:{paddingHorizontal:14,paddingVertical:7,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border},
+  pillActive:{backgroundColor:Colors.primaryBg,borderColor:Colors.primary},
+  pillText:{fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},
+  pillTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
+  carUpload:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,height:80,borderWidth:1.5,borderStyle:'dashed',borderColor:Colors.border,borderRadius:8,marginTop:4},
+  secRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:14},
+  secRowText:{flex:1,fontSize:14,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+  secDivider:{height:1,backgroundColor:Colors.divider},
+  logoutBtn:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,height:50,borderRadius:Radius.md,borderWidth:1.5,borderColor:Colors.error,marginBottom:Spacing.md},
+  logoutText:{fontSize:14,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.error},
+  saveFab:{backgroundColor:Colors.primary,borderRadius:Radius.md,paddingVertical:14,alignItems:'center',marginBottom:Spacing.md},
+  saveFabText:{fontSize:14,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  saveMsg:{textAlign:'center',fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.success,marginBottom:Spacing.md},
+  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'center',padding:Spacing.lg},
+  modalContent:{backgroundColor:Colors.surface,borderRadius:Radius.lg,padding:Spacing.xl},
+  modalH:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.lg},
+  modalTitle:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  mLabel:{fontSize:10,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:4},
+  mInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,fontSize:13,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+  cancelBtn:{flex:1,height:44,borderWidth:1,borderColor:Colors.border,borderRadius:8,alignItems:'center',justifyContent:'center'},
+  cancelBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary},
+  saveBtn:{flex:1,height:44,backgroundColor:Colors.primary,borderRadius:8,alignItems:'center',justifyContent:'center'},
+  saveBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
 });

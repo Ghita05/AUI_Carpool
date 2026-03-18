@@ -116,13 +116,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: Typography['4xl'],
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'PlusJakartaSans_700Bold',
     color: Colors.textWhite,
     marginBottom: Spacing.xs,
   },
   headerSubtitle: {
     fontSize: Typography.md,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: 'rgba(255,255,255,0.75)',
     textAlign: 'center',
   },
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
 
   fieldLabel: {
     fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     color: Colors.textPrimary,
     marginBottom: Spacing.sm,
   },
@@ -158,12 +158,12 @@ const styles = StyleSheet.create({
   },
   loginText: {
     fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: Colors.textSecondary,
   },
   loginLink: {
     fontSize: Typography.sm,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'PlusJakartaSans_700Bold',
     color: Colors.primaryLight,
     textDecorationLine: 'underline',
   },

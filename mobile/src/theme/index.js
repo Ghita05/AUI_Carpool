@@ -40,7 +40,7 @@ export const Colors = {
 
 export const Typography = {
   // Font family
-  fontFamily: 'Inter',
+  fontFamily: 'PlusJakartaSans',
 
   // Font sizes
   xs: 11,

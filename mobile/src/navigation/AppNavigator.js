@@ -55,7 +55,7 @@ function TabNavigator() {
         },
         tabBarLabelStyle: {
           fontSize: Typography.xs,
-          fontFamily: 'Inter_600SemiBold',
+          fontFamily: 'PlusJakartaSans_600SemiBold',
         },
         tabBarIcon: ({ focused, color }) => {
           const icons = {

@@ -35,7 +35,7 @@ export default function SplashScreen({ navigation }) {
 
       <Animated.View style={[styles.textGroup, { opacity: textOpacity }]}>
         <Text style={styles.appName}>AUI Carpool</Text>
-        <Text style={styles.tagline}>Your campus, connected.</Text>
+        <Text style={styles.tagline}>A Peer-to-Peer Ride Sharing Platform</Text>
       </Animated.View>
 
       <View style={styles.barTrack}>
@@ -55,8 +55,8 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)',
   },
   textGroup: { alignItems: 'center', marginBottom: 64 },
-  appName: { fontSize: Typography['4xl'], fontFamily: 'Inter_700Bold', color: '#fff', marginBottom: 8, letterSpacing: -0.5 },
-  tagline: { fontSize: Typography.md, fontFamily: 'Inter_400Regular', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
+  appName: { fontSize: Typography['4xl'], fontFamily: 'PlusJakartaSans_700Bold', color: '#fff', marginBottom: 8, letterSpacing: -0.5 },
+  tagline: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
   barTrack: { width: width * 0.5, height: 3, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden', position: 'absolute', bottom: 80 },
   barFill: { height: '100%', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 2 },
 });

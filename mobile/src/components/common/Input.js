@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     color: Colors.textSecondary,
     marginBottom: Spacing.xs,
     textTransform: 'uppercase',
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: Typography.md,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: Colors.textPrimary,
     paddingVertical: Spacing.sm,
   },
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: Typography.xs,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     color: Colors.primary,
   },
   leftIcon: {
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: Typography.xs,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
   },

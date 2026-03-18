@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
 
   // Labels
   label: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
   },
   label_primary: { color: Colors.textWhite },
   label_outline: { color: Colors.primary },

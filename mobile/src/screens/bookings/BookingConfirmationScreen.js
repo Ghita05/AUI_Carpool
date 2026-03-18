@@ -1,194 +1,142 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 export default function BookingConfirmationScreen({ navigation, route }) {
-  const { seats = 1, stop = 'AUI Main Gate', luggage = '1 suitcase', total = 50 } = route?.params || {};
+  const { seats=1, stop='AUI Main Gate', luggage='1 suitcase', total=50 } = route?.params || {};
+  const [rated, setRated] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(0);
+
+  const handleRate = (stars) => {
+    setSelectedRating(stars);
+    setTimeout(() => {
+      setRated(true);
+      Alert.alert('Thanks!', `You rated this ride ${stars} stars.`);
+    }, 300);
+  };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Booking Confirmed</Text>
-      </View>
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-
+    <SafeAreaView style={st.safe} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface}/>
+      <View style={st.header}><Text style={st.headerTitle}>Booking Confirmed</Text></View>
+      <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
         {/* Success Hero */}
-        <View style={styles.hero}>
-          <View style={styles.successCircle}>
-            <Ionicons name="checkmark" size={36} color={Colors.textWhite} />
-          </View>
-          <Text style={styles.heroTitle}>You're all set!</Text>
-          <Text style={styles.heroSub}>Booking #4001 is confirmed</Text>
+        <View style={st.hero}>
+          <View style={st.successCircle}><Ionicons name="checkmark" size={36} color="#fff"/></View>
+          <Text style={st.heroTitle}>You're all set!</Text>
+          <Text style={st.heroSub}>Booking #4001 is confirmed</Text>
         </View>
-
-        {/* Ride Details Card */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>RIDE DETAILS</Text>
-          <View style={styles.routeRow}>
-            <Ionicons name="location" size={14} color={Colors.primary} />
-            <Text style={styles.routeText}>AUI Main Gate → Fez Airport</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoGrid}>
-            {[
-              { icon: 'calendar-outline', val: 'Today, Feb 20', label: 'Date' },
-              { icon: 'time-outline', val: '14:00', label: 'Departure' },
-              { icon: 'person-outline', val: 'Ghita Nafa', label: 'Driver' },
-              { icon: 'car-outline', val: 'Dacia Logan', label: 'Vehicle' },
-            ].map((item, i) => (
-              <View key={i} style={styles.infoItem}>
-                <Ionicons name={item.icon} size={13} color={Colors.textSecondary} />
-                <Text style={styles.infoVal}>{item.val}</Text>
-                <Text style={styles.infoLabel}>{item.label}</Text>
-              </View>
+        {/* Ride Details */}
+        <View style={st.card}>
+          <Text style={st.sectionLabel}>RIDE DETAILS</Text>
+          <View style={st.routeRow}><Ionicons name="location" size={14} color={Colors.primary}/><Text style={st.routeText}>AUI Main Gate → Fez Airport</Text></View>
+          <View style={st.divider}/>
+          <View style={st.infoGrid}>
+            {[{icon:'calendar-outline',val:'Today, Feb 20',label:'Date'},{icon:'time-outline',val:'14:00',label:'Departure'},{icon:'person-outline',val:'Ghita Nafa',label:'Driver'},{icon:'car-outline',val:'Dacia Logan',label:'Vehicle'}].map((item,i)=>(
+              <View key={i} style={st.infoItem}><Ionicons name={item.icon} size={13} color={Colors.textSecondary}/><Text style={st.infoVal}>{item.val}</Text><Text style={st.infoLabel}>{item.label}</Text></View>
             ))}
           </View>
-          <View style={styles.divider} />
-          <View style={styles.infoGrid}>
-            <View style={styles.infoItem}>
-              <Ionicons name="location-outline" size={13} color={Colors.textSecondary} />
-              <Text style={styles.infoVal}>{stop}</Text>
-              <Text style={styles.infoLabel}>Your Stop</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="briefcase-outline" size={13} color={Colors.textSecondary} />
-              <Text style={styles.infoVal}>{luggage}</Text>
-              <Text style={styles.infoLabel}>Luggage</Text>
-            </View>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total To Be Paid</Text>
-            <Text style={styles.totalVal}>{total} MAD</Text>
-          </View>
+          <View style={st.divider}/>
+          <View style={st.totalRow}><Text style={st.totalLabel}>Total</Text><Text style={st.totalVal}>{total} MAD</Text></View>
         </View>
-
         {/* Driver Card */}
-        <View style={styles.card}>
-          <View style={styles.driverRow}>
-            <View style={styles.driverAvatar}>
-              <Text style={styles.driverAvatarText}>GN</Text>
-            </View>
-            <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>Ghita Nafa</Text>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={12} color={Colors.accent} />
-                <Text style={styles.ratingText}>4.8 · 23 rides</Text>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.msgBtn}>
-              <Ionicons name="chatbubble-outline" size={14} color={Colors.primary} />
-              <Text style={styles.msgBtnText}>Message</Text>
+        <View style={st.card}>
+          <View style={st.driverRow}>
+            <View style={st.driverAvatar}><Text style={st.driverAvatarText}>GN</Text></View>
+            <View style={st.driverInfo}><Text style={st.driverName}>Ghita Nafa</Text><View style={st.ratingRow}><Ionicons name="star" size={12} color="#F59E0B"/><Text style={st.ratingText}>4.8 · 23 rides</Text></View></View>
+            <TouchableOpacity style={st.msgBtn} onPress={() => navigation.navigate('Messages')}>
+              <Ionicons name="chatbubble-outline" size={14} color={Colors.primary}/>
+              <Text style={st.msgBtnText}>Message</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Info Banner */}
-        <View style={styles.infoBanner}>
-          <Ionicons name="information-circle-outline" size={18} color={Colors.accent} />
-          <Text style={styles.infoText}>The driver will confirm your spot shortly. You'll get a notification.</Text>
+        {/* What's Next */}
+        <View style={st.card}>
+          <Text style={st.sectionLabel}>WHAT'S NEXT?</Text>
+          {[{num:'1',title:'Driver confirms your booking',sub:'Usually within a few hours'},{num:'2',title:'You\'ll receive a notification',sub:'Check your alerts tab'},{num:'3',title:'Meet at departure time',sub:'AUI Main Gate at 13:50'}].map((s,i)=>(
+            <View key={i} style={st.stepRow}>
+              <View style={st.stepNum}><Text style={st.stepNumText}>{s.num}</Text></View>
+              <View style={{flex:1}}><Text style={st.stepTitle}>{s.title}</Text><Text style={st.stepSub}>{s.sub}</Text></View>
+            </View>
+          ))}
         </View>
-
-        <View style={{ height: 100 }} />
+        {/* Rate (if past ride) */}
+        <View style={st.card}>
+          <Text style={st.sectionLabel}>RATE YOUR EXPERIENCE</Text>
+          {rated ? (
+            <Text style={{fontSize:13,color:Colors.success,fontFamily:'PlusJakartaSans_600SemiBold'}}>Thanks for your rating!</Text>
+          ) : (
+            <View style={{flexDirection:'row',gap:8,justifyContent:'center',paddingVertical:8}}>
+              {[1,2,3,4,5].map(s=>(
+                <TouchableOpacity key={s} onPress={()=>handleRate(s)}>
+                  <Ionicons name={s<=selectedRating?'star':'star-outline'} size={32} color={s<=selectedRating?'#F59E0B':Colors.border}/>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+        {/* Info banner */}
+        <View style={st.infoBanner}>
+          <Ionicons name="information-circle" size={18} color="#92400E"/>
+          <Text style={st.infoText}>Payment is handled in cash. Please have the exact amount ready.</Text>
+        </View>
+        <View style={{height:20}}/>
       </ScrollView>
-
-      {/* Bottom Bar */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.outlineBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Rides' })}
-        >
-          <Text style={styles.outlineBtnText}>My Rides</Text>
+      {/* Bottom Actions */}
+      <View style={st.bottomBar}>
+        <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Main')}>
+          <Text style={st.outlineBtnText}>Back to Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
-        >
-          <Text style={styles.primaryBtnText}>Back to Map</Text>
+        <TouchableOpacity style={st.primaryBtn} onPress={()=>navigation.navigate('Main',{screen:'Rides'})}>
+          <Text style={st.primaryBtnText}>My Rides</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: {
-    height: 56, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  headerTitle: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
-  scroll: { flex: 1 },
-  hero: {
-    backgroundColor: Colors.primaryBg, paddingVertical: 32,
-    alignItems: 'center', marginBottom: Spacing.md,
-  },
-  successCircle: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md,
-  },
-  heroTitle: { fontSize: Typography['3xl'], fontFamily: 'Inter_700Bold', color: Colors.primary, marginBottom: 4 },
-  heroSub: { fontSize: Typography.base, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  card: {
-    backgroundColor: Colors.surface, borderRadius: Radius.md,
-    marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
-    padding: Spacing.lg, ...Shadows.card,
-  },
-  sectionLabel: {
-    fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold',
-    color: Colors.textSecondary, letterSpacing: 0.8, marginBottom: Spacing.sm,
-  },
-  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.xs },
-  routeText: { fontSize: Typography.lg, fontFamily: 'Inter_700Bold', color: Colors.textPrimary },
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.md },
-  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg },
-  infoItem: { flex: 1, minWidth: '40%', gap: 3 },
-  infoVal: { fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary },
-  infoLabel: { fontSize: Typography.xs, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLabel: { fontSize: Typography.base, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  totalVal: { fontSize: Typography['2xl'], fontFamily: 'Inter_700Bold', color: Colors.primary },
-  driverRow: { flexDirection: 'row', alignItems: 'center' },
-  driverAvatar: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.primaryBg, alignItems: 'center', justifyContent: 'center',
-  },
-  driverAvatarText: { fontSize: Typography.md, fontFamily: 'Inter_700Bold', color: Colors.primary },
-  driverInfo: { flex: 1, marginLeft: Spacing.sm },
-  driverName: { fontSize: Typography.md, fontFamily: 'Inter_600SemiBold', color: Colors.textPrimary },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  ratingText: { fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: Colors.textSecondary },
-  msgBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: Spacing.md, height: 36, borderRadius: Radius.sm,
-    borderWidth: 1.5, borderColor: Colors.primary,
-  },
-  msgBtnText: { fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  infoBanner: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
-    padding: Spacing.md, backgroundColor: '#FFFBEB',
-    borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.accent,
-  },
-  infoText: { flex: 1, fontSize: Typography.sm, fontFamily: 'Inter_400Regular', color: '#92400E' },
-  bottomBar: {
-    flexDirection: 'row', gap: Spacing.sm, padding: Spacing.lg,
-    paddingBottom: Spacing.xl, backgroundColor: Colors.surface,
-    borderTopWidth: 1, borderTopColor: Colors.border,
-  },
-  outlineBtn: {
-    flex: 1, height: 52, borderRadius: Radius.md,
-    borderWidth: 1.5, borderColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  outlineBtnText: { fontSize: Typography.md, fontFamily: 'Inter_600SemiBold', color: Colors.primary },
-  primaryBtn: {
-    flex: 1, height: 52, backgroundColor: Colors.primary,
-    borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center',
-  },
-  primaryBtnText: { fontSize: Typography.md, fontFamily: 'Inter_700Bold', color: Colors.textWhite },
+const st = StyleSheet.create({
+  safe:{flex:1,backgroundColor:Colors.background},
+  header:{height:56,alignItems:'center',justifyContent:'center',backgroundColor:Colors.surface,borderBottomWidth:1,borderBottomColor:Colors.border},
+  headerTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  scroll:{flex:1},
+  hero:{alignItems:'center',paddingVertical:Spacing['2xl'],backgroundColor:Colors.primaryBg},
+  successCircle:{width:64,height:64,borderRadius:32,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',marginBottom:12},
+  heroTitle:{fontSize:Typography['3xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  heroSub:{fontSize:Typography.base,color:Colors.textSecondary,marginTop:4},
+  card:{backgroundColor:Colors.surface,marginHorizontal:Spacing.lg,marginTop:Spacing.md,borderRadius:Radius.md,padding:Spacing.lg,...Shadows.card},
+  sectionLabel:{fontSize:10,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.8,marginBottom:Spacing.md},
+  routeRow:{flexDirection:'row',alignItems:'center',gap:6},
+  routeText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  divider:{height:1,backgroundColor:Colors.border,marginVertical:Spacing.md},
+  infoGrid:{flexDirection:'row',flexWrap:'wrap'},
+  infoItem:{width:'50%',marginBottom:Spacing.md},
+  infoVal:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary,marginTop:2},
+  infoLabel:{fontSize:Typography.xs,color:Colors.textSecondary,marginTop:1},
+  totalRow:{flexDirection:'row',justifyContent:'space-between'},
+  totalLabel:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  totalVal:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
+  driverRow:{flexDirection:'row',alignItems:'center'},
+  driverAvatar:{width:44,height:44,borderRadius:22,backgroundColor:Colors.primaryBg,alignItems:'center',justifyContent:'center'},
+  driverAvatarText:{fontSize:14,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
+  driverInfo:{flex:1,marginLeft:Spacing.sm},
+  driverName:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  ratingRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:2},
+  ratingText:{fontSize:Typography.sm,color:Colors.textSecondary},
+  msgBtn:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:Spacing.md,height:36,borderRadius:Radius.sm,borderWidth:1.5,borderColor:Colors.primary},
+  msgBtnText:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  stepRow:{flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:14},
+  stepNum:{width:28,height:28,borderRadius:14,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center'},
+  stepNumText:{fontSize:12,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  stepTitle:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  stepSub:{fontSize:11,color:Colors.textSecondary,marginTop:2},
+  infoBanner:{flexDirection:'row',alignItems:'flex-start',gap:10,marginHorizontal:Spacing.lg,marginTop:Spacing.md,padding:Spacing.md,backgroundColor:'#FFFBEB',borderRadius:Radius.md,borderWidth:1,borderColor:Colors.accent},
+  infoText:{flex:1,fontSize:Typography.sm,color:'#92400E'},
+  bottomBar:{flexDirection:'row',gap:Spacing.sm,padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border},
+  outlineBtn:{flex:1,height:50,borderRadius:Radius.md,borderWidth:1.5,borderColor:Colors.primary,alignItems:'center',justifyContent:'center'},
+  outlineBtnText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  primaryBtn:{flex:1,height:50,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},
+  primaryBtnText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
 });
