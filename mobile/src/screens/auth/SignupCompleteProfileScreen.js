@@ -7,11 +7,11 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import StepIndicator from '../../components/common/StepIndicator';
+import { register } from '../../services/authService';
 
 export default function SignupCompleteProfileScreen({ navigation, route }) {
-  const { setUser } = useAuth();
   const email = route?.params?.email || 'yourname@aui.ma';
-  const [form, setForm] = useState({ firstName: '', lastName: '', password: '', confirmPassword: '', phone: '', role: 'Passenger' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', password: '', confirmPassword: '', phone: '', auiId: '', role: 'Passenger' });
   const [cashwalletUploaded, setCashwalletUploaded] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -25,32 +25,48 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
     if (!form.password || form.password.length < 8) e.password = 'Min. 8 characters';
     if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!form.phone.trim()) e.phone = 'Required';
+    if (!form.auiId.trim()) e.auiId = 'Required';
     if (!cashwalletUploaded) e.cashwallet = 'Please upload your cashwallet scan';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleCashwalletUpload = () => {
-    // In a real app this would use expo-image-picker
     Alert.alert('Upload CashWallet', 'In the full version, this opens the camera/gallery to upload your cashwallet scan.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Simulate Upload', onPress: () => setCashwalletUploaded(true) },
     ]);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
     setLoading(true);
-    setTimeout(() => {
-      setUser({
-        firstName: form.firstName, lastName: form.lastName, email,
-        role: form.role.toLowerCase(),
-        initials: (form.firstName[0] + form.lastName[0]).toUpperCase(),
-        rating: 0, rides: 0, isAuthenticated: true,
+    try {
+      await register({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email,
+        password: form.password,
+        phoneNumber: form.phone.trim(),
+        auiId: form.auiId.trim(),
+        role: form.role,
       });
+      // Registration successful — user needs to verify email before logging in
+      Alert.alert(
+        'Account Created!',
+        'Please check your @aui.ma inbox and click the verification link, then log in.',
+        [{ text: 'Go to Login', onPress: () => navigation.replace('Login') }]
+      );
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Registration failed. Please try again.';
+      if (msg.toLowerCase().includes('email')) {
+        setErrors({ email: msg });
+      } else {
+        Alert.alert('Registration Error', msg);
+      }
+    } finally {
       setLoading(false);
-      navigation.replace('Main');
-    }, 1200);
+    }
   };
 
   return (
@@ -85,6 +101,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
           <Input label="Password" placeholder="Enter your password" value={form.password} onChangeText={t => update('password', t)} secureTextEntry error={errors.password} />
           <Input label="Confirm Password" placeholder="Confirm your password" value={form.confirmPassword} onChangeText={t => update('confirmPassword', t)} secureTextEntry error={errors.confirmPassword} />
           <Input label="Phone Number" placeholder="Enter your phone number" value={form.phone} onChangeText={t => update('phone', t)} keyboardType="phone-pad" error={errors.phone} />
+          <Input label="AUI Student ID" placeholder="Enter your AUI ID (e.g., 119468)" value={form.auiId} onChangeText={t => update('auiId', t)} keyboardType="number-pad" error={errors.auiId} />
 
           {/* CashWallet upload */}
           <Text style={styles.fieldLabel}>CASHWALLET</Text>

@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-
-const REVIEWS = [
-  {id:'1',author:'Ahmed B.',initials:'AB',rating:5,date:'Feb 21',route:'AUI → Fez',text:'Excellent driver! Very punctual.'},
-  {id:'2',author:'Kenza N.',initials:'KN',rating:4,date:'Feb 10',route:'AUI → Meknes',text:'Great trip! Slightly late.'},
-  {id:'3',author:'Omar S.',initials:'OS',rating:5,date:'Jan 28',route:'Casa → AUI',text:'Reliable and great company.'},
-];
+import { getUserReviews } from '../../services/reviewService';
 
 function StarRow({rating,size=14}){return(<View style={{flexDirection:'row',gap:2}}>{[1,2,3,4,5].map(i=>(<Ionicons key={i} name={i<=rating?'star':'star-outline'} size={size} color={i<=rating?Colors.accent:Colors.border}/>))}</View>);}
 
 export default function UserProfileScreen({ navigation }) {
   const { user, isDriver, logout } = useAuth();
   const [tab,setTab]=useState('received');
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
+  useEffect(() => {
+    if (user?._id) {
+      getUserReviews(user._id).then(r => setReviews(r.data?.reviews || [])).catch(() => {}).finally(() => setLoadingReviews(false));
+    }
+  }, [user?._id]);
 
   const handleLogout=()=>{logout();navigation.reset({index:0,routes:[{name:'Splash'}]});};
 
@@ -53,7 +56,7 @@ export default function UserProfileScreen({ navigation }) {
           <View style={st.tabRow}>
             {['received','given'].map(t=>(<TouchableOpacity key={t} style={[st.tab,tab===t&&st.tabActive]} onPress={()=>setTab(t)}><Text style={[st.tabText,tab===t&&st.tabTextActive]}>{t.charAt(0).toUpperCase()+t.slice(1)}</Text></TouchableOpacity>))}
           </View>
-          {REVIEWS.map(r=>(
+          {reviews.map(r=>(
             <View key={r.id} style={st.reviewCard}>
               <View style={st.reviewTop}>
                 <View style={st.reviewAvatar}><Text style={{fontSize:10,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary}}>{r.initials}</Text></View>

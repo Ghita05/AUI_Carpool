@@ -4,13 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { updateProfile, updatePreferences, changePassword as changePasswordAPI, deactivateAccount } from '../../services/authService';
 
 function Card({title,children,action}){return(<View style={st.card}><View style={st.cardH}><Text style={st.cardTitle}>{title}</Text>{action}</View>{children}</View>);}
 function Pills({options,selected,onSelect,disabled}){return(<View style={st.pillRow}>{options.map(o=>(<TouchableOpacity key={o} style={[st.pill,selected===o&&st.pillActive]} onPress={()=>!disabled&&onSelect(o)} disabled={disabled}><Text style={[st.pillText,selected===o&&st.pillTextActive]}>{o}</Text></TouchableOpacity>))}</View>);}
 
 function ChangePasswordModal({visible,onClose}){
   const [cur,setCur]=useState('');const [nw,setNw]=useState('');const [conf,setConf]=useState('');const [loading,setLoading]=useState(false);
-  const handleSave=()=>{if(!cur||!nw||nw!==conf){Alert.alert('Error','Please fill all fields and make sure passwords match');return;}setLoading(true);setTimeout(()=>{setLoading(false);onClose();Alert.alert('Success','Password updated');},800);};
+  const handleSave=async()=>{if(!cur||!nw||nw!==conf){Alert.alert('Error','Please fill all fields and make sure passwords match');return;}if(nw.length<8){Alert.alert('Error','Password must be at least 8 characters');return;}setLoading(true);try{await changePasswordAPI(cur,nw);onClose();Alert.alert('Success','Password updated');}catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to change password');}finally{setLoading(false);}};
   return(<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
     <View style={st.modalH}><Text style={st.modalTitle}>Change Password</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
     {[{label:'Current Password',val:cur,set:setCur},{label:'New Password',val:nw,set:setNw},{label:'Confirm New Password',val:conf,set:setConf}].map((f,i)=>(
@@ -29,23 +30,29 @@ function DeactivateModal({visible,onClose}){
       <Ionicons name={confirmed?'checkbox':'square-outline'} size={20} color={confirmed?Colors.error:Colors.border}/>
       <Text style={{fontSize:13,color:Colors.textPrimary,flex:1}}>I understand and want to deactivate my account</Text>
     </TouchableOpacity>
-    <View style={{flexDirection:'row',gap:10}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[st.saveBtn,{backgroundColor:confirmed?Colors.error:Colors.border}]} disabled={!confirmed} onPress={()=>{onClose();Alert.alert('Account Deactivated');}}><Text style={st.saveBtnText}>Deactivate</Text></TouchableOpacity></View>
+    <View style={{flexDirection:'row',gap:10}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[st.saveBtn,{backgroundColor:confirmed?Colors.error:Colors.border}]} disabled={!confirmed} onPress={async()=>{try{await deactivateAccount();onClose();Alert.alert('Account Deactivated','Your account has been deactivated.');}catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to deactivate');}}}><Text style={st.saveBtnText}>Deactivate</Text></TouchableOpacity></View>
   </View></View></Modal>);
 }
 
 export default function AccountSettingsScreen({ navigation }) {
   const { user, isDriver, logout } = useAuth();
   const [editing,setEditing]=useState(false);
-  const [firstName,setFirstName]=useState(user.firstName||'Ghita');
-  const [lastName,setLastName]=useState(user.lastName||'Nafa');
-  const [phone,setPhone]=useState('+212 612 345 678');
-  const [smoking,setSmoking]=useState('Non-smoker');
-  const [driving,setDriving]=useState('Calm');
+  const [firstName,setFirstName]=useState(user?.firstName||'');
+  const [lastName,setLastName]=useState(user?.lastName||'');
+  const [phone,setPhone]=useState(user?.phoneNumber||'');
+  const [smoking,setSmoking]=useState(user?.smokingPreference||'Non-smoker');
+  const [driving,setDriving]=useState(user?.drivingStyle||'Calm');
   const [vBrand,setVBrand]=useState('Dacia');const [vModel,setVModel]=useState('Logan');const [vColor,setVColor]=useState('White');const [vYear,setVYear]=useState('2022');const [vPlate,setVPlate]=useState('12345-AB-67');const [vSize,setVSize]=useState('Medium');const [vLug,setVLug]=useState(3);
   const [showPwModal,setShowPwModal]=useState(false);const [showDeactivate,setShowDeactivate]=useState(false);
   const [saveStatus,setSaveStatus]=useState('');
 
-  const handleSave=()=>{setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);};
+  const handleSave=async()=>{
+    try{
+      await updateProfile({firstName,lastName,phoneNumber:phone});
+      await updatePreferences({smokingPreference:smoking,drivingStyle:driving});
+      setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);
+    }catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to save');}
+  };
   const handleLogout=()=>{logout();navigation.reset({index:0,routes:[{name:'Splash'}]});};
 
   return (

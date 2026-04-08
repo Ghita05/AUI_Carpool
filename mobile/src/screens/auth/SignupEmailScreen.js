@@ -8,6 +8,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import StepIndicator from '../../components/common/StepIndicator';
+import { sendVerificationLink } from '../../services/authService';
 
 export default function SignupEmailScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -28,11 +29,15 @@ export default function SignupEmailScreen({ navigation }) {
     }
     setError('');
     setLoading(true);
-    // TODO: call Auth Service POST /auth/send-verification
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await sendVerificationLink(email.trim());
       navigation.navigate('SignupCheckInbox', { email: email.trim() });
-    }, 1200);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to send verification link. Please try again.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getEmailState = () => {

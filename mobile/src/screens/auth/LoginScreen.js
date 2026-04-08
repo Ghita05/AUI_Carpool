@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar, Modal, TextInput, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import { recoverPassword } from '../../services/authService';
 
 const isAuiEmail = (email) => /^[^\s@]+@aui\.ma$/i.test(email.trim());
 
@@ -13,11 +14,21 @@ function ForgotPasswordModal({ visible, onClose }) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!email) { setError('Email is required'); return; }
     if (!isAuiEmail(email)) { setError('Please use your AUI email (@aui.ma)'); return; }
-    setSent(true);
+    setLoading(true);
+    try {
+      await recoverPassword(email.trim());
+      setSent(true);
+    } catch {
+      // Always show success to prevent email enumeration (matches backend behavior)
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleClose = () => { setSent(false); setEmail(''); setError(''); onClose(); };
@@ -41,7 +52,7 @@ function ForgotPasswordModal({ visible, onClose }) {
               </View>
               <Text style={styles.modalSub}>Enter your AUI email and we'll send you a link to reset your password.</Text>
               <Input label="AUI Email" placeholder="yourname@aui.ma" value={email} onChangeText={(t) => { setEmail(t); setError(''); }} keyboardType="email-address" error={error} />
-              <Button label="Send Reset Link" onPress={handleSend} style={{ marginTop: Spacing.md }} />
+              <Button label="Send Reset Link" onPress={handleSend} loading={loading} style={{ marginTop: Spacing.md }} />
             </>
           )}
         </View>
@@ -51,7 +62,7 @@ function ForgotPasswordModal({ visible, onClose }) {
 }
 
 export default function LoginScreen({ navigation }) {
-  const { setUser } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,20 +81,22 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     if (!validate()) return;
     setLoading(true);
-    const namePart = email.split('@')[0];
-    const firstName = namePart.split('.')[0] || 'User';
-    const lastName = namePart.split('.')[1] || '';
-    const initials = (firstName[0] + (lastName[0] || '')).toUpperCase();
-    setTimeout(() => {
-      setUser(prev => ({
-        ...prev,
-        firstName: firstName.charAt(0).toUpperCase() + firstName.slice(1),
-        lastName: lastName ? lastName.charAt(0).toUpperCase() + lastName.slice(1) : '',
-        email, initials, isAuthenticated: true,
-      }));
-      setLoading(false);
+    try {
+      await login(email.trim(), password);
       navigation.replace('Main');
-    }, 1500);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Login failed. Please try again.';
+      // Show the backend's error message in the appropriate field
+      if (msg.toLowerCase().includes('verify')) {
+        setErrors({ email: msg });
+      } else if (msg.toLowerCase().includes('password') || msg.toLowerCase().includes('invalid')) {
+        setErrors({ password: msg });
+      } else {
+        setErrors({ password: msg });
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,0 +1,512 @@
+{
+  "info": {
+    "name": "AUI Carpool API — Sprint 4",
+    "description": "Complete endpoint test collection for the AUI Carpooling Platform backend.\n\n**Setup:**\n1. Set {{baseUrl}} variable to http://localhost:5000\n2. Run '1. Register User' first\n3. Manually verify email in MongoDB Atlas (set verificationStatus: true)\n4. Run '2. Login' — token is auto-saved\n5. All other requests use the saved token automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "vehicleId", "value": "" },
+    { "key": "rideId", "value": "" },
+    { "key": "bookingId", "value": "" },
+    { "key": "requestId", "value": "" },
+    { "key": "reviewId", "value": "" },
+    { "key": "notificationId", "value": "" },
+    { "key": "otherUserId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      }
+    },
+    {
+      "name": "BB1 — Manage User Accounts",
+      "item": [
+        {
+          "name": "1. Register User (Driver)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.userId) {",
+                  "  pm.collectionVariables.set('userId', json.data.userId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/users/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Ghita\",\n  \"lastName\": \"Nafa\",\n  \"email\": \"g.nafa@aui.ma\",\n  \"password\": \"SecurePass123!\",\n  \"phoneNumber\": \"+212612345678\",\n  \"auiId\": \"119468\",\n  \"role\": \"Driver\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Register User (Passenger)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.userId) {",
+                  "  pm.collectionVariables.set('otherUserId', json.data.userId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/users/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Ahmed\",\n  \"lastName\": \"Benali\",\n  \"email\": \"a.benali@aui.ma\",\n  \"password\": \"PassengerPass1!\",\n  \"phoneNumber\": \"+212698765432\",\n  \"auiId\": \"120001\",\n  \"role\": \"Passenger\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Login (Driver)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', json.data.accessToken);",
+                  "  pm.collectionVariables.set('userId', json.data.user._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/users/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"g.nafa@aui.ma\",\n  \"password\": \"SecurePass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4. Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "5. Update Profile",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/users/profile",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"drivingStyle\": \"Calm\",\n  \"smokingPreference\": \"Non-smoker\"\n}"
+            }
+          }
+        },
+        {
+          "name": "6. Search Users by Name",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/search?query=Ahmed&searchType=name",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "7. View Other User Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/profile/{{otherUserId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB3 — Manage Vehicles",
+      "item": [
+        {
+          "name": "1. Add Vehicle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.vehicleId) {",
+                  "  pm.collectionVariables.set('vehicleId', json.data.vehicleId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/vehicles",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand\": \"Dacia\",\n  \"model\": \"Logan\",\n  \"color\": \"White\",\n  \"licensePlate\": \"12345-AB-67\",\n  \"sizeCategory\": \"Medium\",\n  \"luggageCapacity\": 3,\n  \"year\": 2020,\n  \"smokingPolicy\": \"Not Allowed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get My Vehicles",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/vehicles",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Select Vehicle (for ride creation)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/vehicles/select",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB2.1 — Manage Ride Offers",
+      "item": [
+        {
+          "name": "1. Post Ride Offer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.rideId) {",
+                  "  pm.collectionVariables.set('rideId', json.data.rideId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/rides",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"departureLocation\": \"AUI Main Gate\",\n  \"destination\": \"Fez Airport\",\n  \"stops\": [\"Ifrane Marché\", \"Ifrane DT\"],\n  \"departureDateTime\": \"2026-04-15T14:00:00.000Z\",\n  \"totalSeats\": 4,\n  \"pricePerSeat\": 50,\n  \"genderPreference\": \"All\",\n  \"route\": {\n    \"originLat\": 33.5333,\n    \"originLng\": -5.1000,\n    \"destLat\": 33.9272,\n    \"destLng\": -4.9779,\n    \"distanceKM\": 65.5,\n    \"durationMinutes\": 55\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get Available Rides",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides?destination=Fez",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Get Ride Details",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides/{{rideId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "4. Get My Rides (Driver)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides/driver/my-rides?status=upcoming",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB2.4 — Manage Bookings",
+      "description": "NOTE: Switch to Passenger token before running these. Login as a.benali@aui.ma first.",
+      "item": [
+        {
+          "name": "1. Book Ride",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.bookingId) {",
+                  "  pm.collectionVariables.set('bookingId', json.data.bookingId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/rides/{{rideId}}/bookings",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seatsCount\": 1,\n  \"pickupLocation\": \"Ifrane Marché\",\n  \"luggageDeclaration\": \"1 suitcase\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Declare Luggage",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/rides/bookings/{{bookingId}}/luggage",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"luggageDeclaration\": \"1 suitcase + 1 small bag\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Get Current Bookings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides/bookings/current",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "4. Get Passenger List (Driver only)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides/{{rideId}}/passengers",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "5. Cancel Booking",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/rides/bookings/{{bookingId}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Change of plans\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB2.2 — Manage Ride Requests",
+      "item": [
+        {
+          "name": "1. Post Ride Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.requestId) {",
+                  "  pm.collectionVariables.set('requestId', json.data.requestId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/rides/requests",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"departureLocation\": \"AUI Main Gate\",\n  \"destination\": \"Rabat\",\n  \"travelDateTime\": \"2026-04-20T08:00:00.000Z\",\n  \"passengerCount\": 2,\n  \"maxPrice\": 100,\n  \"notes\": \"Flexible on departure time\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get Open Ride Requests",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/rides/requests/all",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Accept Ride Request (Driver)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/rides/requests/{{requestId}}/accept",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"{{rideId}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB4 — Manage Reviews",
+      "item": [
+        {
+          "name": "1. Write Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.reviewId) {",
+                  "  pm.collectionVariables.set('reviewId', json.data.reviewId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/reviews",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"{{otherUserId}}\",\n  \"rideId\": \"{{rideId}}\",\n  \"rating\": 5,\n  \"content\": \"Great driver, very punctual. Calm driving style.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get User Reviews",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reviews/user/{{otherUserId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Get User Ratings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reviews/user/{{otherUserId}}/rating",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB5 — Manage Notifications",
+      "item": [
+        {
+          "name": "1. Get Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/notifications",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "2. Get Unread Count",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/notifications/unread-count",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/notifications/mark-all-read",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BB6 — Manage Messages",
+      "item": [
+        {
+          "name": "1. Send Message",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/messages",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiverId\": \"{{otherUserId}}\",\n  \"rideId\": \"{{rideId}}\",\n  \"content\": \"Hey! Are you still going to Fez tomorrow?\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Get Conversations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/messages/conversations",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "3. Get Message History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/messages/{{otherUserId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "4. Search Messages",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/messages/search?query=Fez",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    }
+  ]
+}

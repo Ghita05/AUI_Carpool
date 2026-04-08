@@ -3,14 +3,33 @@ import { View, Text, StyleSheet, Animated, Dimensions, StatusBar } from 'react-n
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 export default function SplashScreen({ navigation }) {
+  const { isAuthenticated, loading } = useAuth();
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const barWidth = useRef(new Animated.Value(0)).current;
+
+  // Use refs to avoid stale closures in the animation callback
+  const animDone = useRef(false);
+  const loadingRef = useRef(loading);
+  const authRef = useRef(isAuthenticated);
+  const navigated = useRef(false);
+
+  // Keep refs in sync with latest state
+  loadingRef.current = loading;
+  authRef.current = isAuthenticated;
+
+  const tryNavigate = () => {
+    if (navigated.current) return;
+    if (!animDone.current || loadingRef.current) return;
+    navigated.current = true;
+    navigation?.replace(authRef.current ? 'Main' : 'Login');
+  };
 
   useEffect(() => {
     Animated.sequence([
@@ -21,9 +40,15 @@ export default function SplashScreen({ navigation }) {
       Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(barWidth, { toValue: width * 0.5, duration: 1200, useNativeDriver: false }),
     ]).start(() => {
-      setTimeout(() => navigation?.replace('Login'), 300);
+      animDone.current = true;
+      tryNavigate();
     });
   }, []);
+
+  // Also try navigating when loading state changes
+  useEffect(() => {
+    tryNavigate();
+  }, [loading, isAuthenticated]);
 
   return (
     <LinearGradient colors={[Colors.primary, Colors.primaryLight]} style={styles.container}>

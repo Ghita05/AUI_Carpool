@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { selectVehicle } from '../../services/vehicleService';
+import { postRideOffer } from '../../services/rideService';
 
-const VEHICLES = ['Dacia Logan (White)', 'Renault Clio (Black)'];
+// Vehicles loaded from API in useEffect
 
 function SectionCard({ title, children }) {
   return (
@@ -51,17 +53,52 @@ function ToggleRow({ label, sublabel, value, onToggle }) {
 }
 
 export default function CreateRideScreen({ navigation }) {
+  const [vehicles, setVehicles] = useState([]);
   const [departure, setDeparture] = useState('AUI Main Gate');
   const [destination, setDestination] = useState('');
   const [stops, setStops] = useState([]);
-  const [date, setDate] = useState('Feb 20, 2026');
+  const [date, setDate] = useState('2026-04-20');
   const [time, setTime] = useState('14:00');
   const [seats, setSeats] = useState(3);
   const [price, setPrice] = useState('50');
-  const [vehicle, setVehicle] = useState(VEHICLES[0]);
+  const [vehicle, setVehicle] = useState(null);
   const [womenOnly, setWomenOnly] = useState(false);
   const [noSmoking, setNoSmoking] = useState(true);
   const [drivStyle, setDrivStyle] = useState('Calm');
+  const [publishing, setPublishing] = useState(false);
+
+  useEffect(() => {
+    selectVehicle().then(res => {
+      const v = res.data?.vehicles || [];
+      setVehicles(v);
+      if (v.length > 0) setVehicle(v[0]);
+    }).catch(() => {});
+  }, []);
+
+  const vehicleLabel = vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.color})` : 'No vehicle — add one in settings';
+
+  const handlePublish = async () => {
+    if (!destination.trim()) { Alert.alert('Missing info', 'Please enter a destination.'); return; }
+    if (!vehicle) { Alert.alert('No vehicle', 'Please add a vehicle in your settings first.'); return; }
+    setPublishing(true);
+    try {
+      await postRideOffer({
+        vehicleId: vehicle._id,
+        departureLocation: departure.trim(),
+        destination: destination.trim(),
+        stops,
+        departureDateTime: new Date(`${date}T${time}:00`).toISOString(),
+        totalSeats: seats,
+        pricePerSeat: parseInt(price) || 50,
+        genderPreference: womenOnly ? 'Women-Only' : 'All',
+      });
+      Alert.alert('Ride Published!', 'Your ride is now visible to passengers.', [
+        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) },
+      ]);
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to publish ride.');
+    } finally { setPublishing(false); }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -166,7 +203,7 @@ export default function CreateRideScreen({ navigation }) {
           <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>Vehicle</Text>
           <TouchableOpacity style={styles.vehicleSelector}>
             <Ionicons name="car-outline" size={16} color={Colors.textSecondary} />
-            <Text style={styles.vehicleSelectorText}>{vehicle}</Text>
+            <Text style={styles.vehicleSelectorText}>{vehicleLabel}</Text>
             <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
         </SectionCard>
@@ -188,10 +225,11 @@ export default function CreateRideScreen({ navigation }) {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.publishBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+          onPress={handlePublish}
+          disabled={publishing}
         >
           <Ionicons name="send-outline" size={16} color={Colors.textWhite} />
-          <Text style={styles.publishBtnText}>Publish Ride</Text>
+          <Text style={styles.publishBtnText}>{publishing ? 'Publishing...' : 'Publish Ride'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

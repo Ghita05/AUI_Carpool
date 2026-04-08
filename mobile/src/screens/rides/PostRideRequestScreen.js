@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { postRideRequest } from '../../services/rideService';
 
 function SectionCard({ title, children }) {
   return (
@@ -18,11 +19,33 @@ function SectionCard({ title, children }) {
 export default function PostRideRequestScreen({ navigation }) {
   const [from, setFrom] = useState('AUI Campus');
   const [to, setTo] = useState('');
-  const [date, setDate] = useState('Feb 25, 2026');
+  const [date, setDate] = useState('2026-04-25');
   const [time, setTime] = useState('09:00');
   const [passengers, setPassengers] = useState(1);
   const [maxPrice, setMaxPrice] = useState('');
   const [notes, setNotes] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  const handlePost = async () => {
+    if (!to.trim()) { Alert.alert('Missing info', 'Please enter a destination.'); return; }
+    if (!maxPrice) { Alert.alert('Missing info', 'Please enter a max budget.'); return; }
+    setPosting(true);
+    try {
+      await postRideRequest({
+        departureLocation: from.trim(),
+        destination: to.trim(),
+        travelDateTime: new Date(`${date}T${time}:00`).toISOString(),
+        passengerCount: passengers,
+        maxPrice: parseInt(maxPrice) || 100,
+        notes,
+      });
+      Alert.alert('Request Posted!', 'Drivers will be notified of your request.', [
+        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) },
+      ]);
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to post request.');
+    } finally { setPosting(false); }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -144,9 +167,10 @@ export default function PostRideRequestScreen({ navigation }) {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.postBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+          onPress={handlePost}
+          disabled={posting}
         >
-          <Text style={styles.postBtnText}>Post Request</Text>
+          <Text style={styles.postBtnText}>{posting ? 'Posting...' : 'Post Request'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelBtn}>
           <Text style={styles.cancelBtnText}>Cancel</Text>

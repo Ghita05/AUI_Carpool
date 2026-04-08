@@ -1,51 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { getMyRides } from '../../services/rideService';
+import { getCurrentBookings, getBookingHistory } from '../../services/bookingService';
 
-const PASSENGER_UPCOMING = [
-  {
-    id: '1', from: 'AUI Main Gate', to: 'Fez Airport', date: 'Today', time: '14:00',
-    cost: 50, status: 'upcoming', driver: 'Ghita N.', driverInitials: 'GN', driverRating: 4.8,
-  },
-  {
-    id: '2', from: 'AUI Main Gate', to: 'Rabat', date: 'Feb 25', time: '09:00',
-    cost: 100, status: 'upcoming', driver: 'Ahmed B.', driverInitials: 'AB', driverRating: 4.6,
-  },
-];
-
-const PASSENGER_PAST = [
-  {
-    id: '3', from: 'AUI Main Gate', to: 'Meknes', date: 'Feb 10', time: '15:30',
-    cost: 40, status: 'completed', driver: 'Kenza N.', driverInitials: 'KN', driverRating: 4.9, rated: false,
-  },
-  {
-    id: '4', from: 'Casablanca', to: 'AUI Main Gate', date: 'Jan 28', time: '10:00',
-    cost: 120, status: 'cancelled', driver: 'Omar S.', driverInitials: 'OS', driverRating: 4.2, rated: true,
-  },
-];
-
-const DRIVER_UPCOMING = [
-  {
-    id: '1', from: 'AUI Main Gate', to: 'Fez', date: 'Today', time: '14:00',
-    price: 50, status: 'upcoming', passengers: 3, totalSeats: 4,
-  },
-  {
-    id: '2', from: 'AUI Main Gate', to: 'Rabat', date: 'Feb 25', time: '09:00',
-    price: 100, status: 'upcoming', passengers: 2, totalSeats: 4,
-  },
-];
-
-const DRIVER_PAST = [
-  {
-    id: '3', from: 'AUI Main Gate', to: 'Meknes', date: 'Feb 10', time: '15:30',
-    price: 40, status: 'completed', passengers: 4, totalSeats: 4,
-  },
-];
+// Data fetched from API — see useEffect below
 
 const STATUS_STYLES = {
   upcoming:  { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
@@ -171,12 +135,71 @@ function DriverRideCard({ ride, navigation }) {
 
 export default function MyRidesScreen({ navigation }) {
   const { user, isDriver } = useAuth();
-  const [role, setRole] = useState(user.role); // 'passenger' | 'driver'
-  const [tab, setTab] = useState('upcoming');    // 'upcoming' | 'past'
+  const [role, setRole] = useState(isDriver ? 'Driver' : 'Passenger');
+  const [tab, setTab] = useState('upcoming');
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const upcomingData = role === 'passenger' ? PASSENGER_UPCOMING : DRIVER_UPCOMING;
-  const pastData     = role === 'passenger' ? PASSENGER_PAST     : DRIVER_PAST;
-  const currentData  = tab === 'upcoming' ? upcomingData : pastData;
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (role === 'Passenger') {
+        if (tab === 'upcoming') {
+          const res = await getCurrentBookings();
+          // Map bookings to the card shape
+          setData((res.data?.bookings || []).map(b => {
+            const r = b.rideId || {};
+            const d = r.driverId || {};
+            return {
+              id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
+              date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
+              time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
+              cost: r.pricePerSeat * b.seatsCount, status: 'upcoming',
+              driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
+              driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
+              driverRating: d.averageRating || 0,
+              rideId: r._id,
+            };
+          }));
+        } else {
+          const res = await getBookingHistory();
+          setData((res.data?.bookings || []).map(b => {
+            const r = b.rideId || {};
+            const d = r.driverId || {};
+            return {
+              id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
+              date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
+              time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
+              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0,
+              status: b.status?.toLowerCase() === 'confirmed' ? 'upcoming' : b.status?.toLowerCase() || 'completed',
+              driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
+              driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
+              driverRating: d.averageRating || 0,
+              rated: false, rideId: r._id,
+            };
+          }));
+        }
+      } else {
+        // Driver view
+        const res = await getMyRides(tab === 'upcoming' ? 'upcoming' : 'past');
+        setData((res.data?.rides || []).map(r => {
+          const v = r.vehicleId || {};
+          return {
+            id: r._id, from: r.departureLocation, to: r.destination,
+            date: new Date(r.departureDateTime).toLocaleDateString(),
+            time: new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            price: r.pricePerSeat,
+            status: ['Active', 'Full'].includes(r.status) ? 'upcoming' : r.status?.toLowerCase() || 'completed',
+            passengers: r.totalSeats - r.availableSeats, totalSeats: r.totalSeats,
+            rideId: r._id,
+          };
+        }));
+      }
+    } catch { setData([]); }
+    finally { setLoading(false); }
+  }, [role, tab]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -188,14 +211,14 @@ export default function MyRidesScreen({ navigation }) {
         {/* Role toggle — only for drivers */}
         {isDriver && (
         <View style={styles.roleToggle}>
-          {['passenger', 'driver'].map(r => (
+          {['Passenger', 'Driver'].map(r => (
             <TouchableOpacity
               key={r}
               style={[styles.roleBtn, role === r && styles.roleBtnActive]}
               onPress={() => { setRole(r); setTab('upcoming'); }}
             >
               <Text style={[styles.roleBtnText, role === r && styles.roleBtnTextActive]}>
-                {r.charAt(0).toUpperCase() + r.slice(1)}
+                {r}
               </Text>
             </TouchableOpacity>
           ))}
@@ -219,13 +242,15 @@ export default function MyRidesScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: Spacing.lg }}>
-        {currentData.length === 0 ? (
+        {loading ? (
+          <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 40 }} />
+        ) : data.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="car-outline" size={40} color={Colors.border} />
             <Text style={styles.emptyText}>No {tab} rides</Text>
           </View>
-        ) : currentData.map(ride => (
-          role === 'passenger'
+        ) : data.map(ride => (
+          role === 'Passenger'
             ? <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} />
             : <DriverRideCard    key={ride.id} ride={ride} navigation={navigation} />
         ))}
@@ -234,7 +259,7 @@ export default function MyRidesScreen({ navigation }) {
 
       {/* Bottom CTA */}
       <View style={styles.bottomBar}>
-        {role === 'passenger' ? (
+        {role === 'Passenger' ? (
           <TouchableOpacity style={styles.ctaBtn} onPress={() => navigation.navigate('Home')}>
             <Ionicons name="search-outline" size={16} color={Colors.textWhite} />
             <Text style={styles.ctaBtnText}>Find a Ride</Text>

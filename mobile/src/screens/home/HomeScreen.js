@@ -1,53 +1,72 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, StatusBar, TextInput, Platform, Modal,
-  KeyboardAvoidingView, Animated
+  KeyboardAvoidingView, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { getAvailableRides } from '../../services/rideService';
+import { postRideRequest } from '../../services/rideService';
 
 const { width } = Dimensions.get('window');
 
-const RIDES = [
-  { id:1,from:'AUI Main Gate',to:'Fez Airport',dest:'Fez',price:50,time:'14:00 today',driver:'Ghita N.',initials:'GN',rating:4.8,seats:4,taken:2,color:Colors.primary },
-  { id:2,from:'AUI Main Gate',to:'Rabat Agdal',dest:'Rabat',price:100,time:'17:30 today',driver:'Ahmed B.',initials:'AB',rating:3.9,seats:4,taken:3,color:'#F59E0B' },
-  { id:3,from:'AUI Main Gate',to:'Meknes Centre',dest:'Meknes',price:40,time:'15:30 today',driver:'Kenza N.',initials:'KN',rating:5.0,seats:4,taken:4,color:Colors.textSecondary },
-];
+const PIN_POS = { Fez:{ top:'22%', right:'12%' }, Rabat:{ top:'48%', left:'8%' }, Meknes:{ bottom:'32%', left:'32%' }, Casablanca:{ bottom:'48%', left:'5%' } };
 
-const PIN_POS = { Fez:{ top:'22%', right:'12%' }, Rabat:{ top:'48%', left:'8%' }, Meknes:{ bottom:'32%', left:'32%' } };
+/* ── helpers ── */
+const getDestColor = (ride) => {
+  if (ride.availableSeats === 0) return Colors.textSecondary;
+  if (ride.availableSeats === 1) return Colors.accent;
+  return Colors.primary;
+};
+const getInitials = (driver) => {
+  if (!driver) return '??';
+  return ((driver.firstName?.[0] || '') + (driver.lastName?.[0] || '')).toUpperCase();
+};
+const getDriverName = (driver) => {
+  if (!driver) return 'Unknown';
+  return `${driver.firstName} ${driver.lastName?.[0] || ''}.`;
+};
 
 /* ── Filter Modal ── */
-function FilterModal({ visible, onClose }) {
-  const [maxPrice,setMaxPrice]=useState(100);
-  const [dest,setDest]=useState('Fez');
+function FilterModal({ visible, onClose, onApply }) {
+  const [dest,setDest]=useState('');
   const [date,setDate]=useState('Today');
   const [gender,setGender]=useState('All');
   const [smoking,setSmoking]=useState('Any');
   const Pill = ({label,active,onPress}) => <TouchableOpacity style={[st.fpill,active&&st.fpillActive]} onPress={onPress}><Text style={[st.fpillText,active&&st.fpillTextActive]}>{label}</Text></TouchableOpacity>;
+
+  const handleApply = () => {
+    const filters = {};
+    if (dest) filters.destination = dest;
+    if (gender === 'Women only') filters.genderPreference = 'Women-Only';
+    onApply(filters);
+    onClose();
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={st.modalOverlay}><View style={st.filterModal}>
         <View style={st.filterHeader}><Text style={st.filterTitle}>Filters</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Text style={st.filterLabel}>DESTINATION</Text>
-          <View style={st.pillRow}>{['Fez','Meknes','Casablanca','Rabat'].map(d=><Pill key={d} label={d} active={dest===d} onPress={()=>setDest(d)}/>)}</View>
+          <View style={st.pillRow}>{['Fez','Meknes','Casablanca','Rabat'].map(d=><Pill key={d} label={d} active={dest===d} onPress={()=>setDest(prev=>prev===d?'':d)}/>)}</View>
           <Text style={st.filterLabel}>DATE</Text>
           <View style={st.pillRow}>{['Today','Tomorrow'].map(d=><Pill key={d} label={d} active={date===d} onPress={()=>setDate(d)}/>)}</View>
-          <Text style={st.filterLabel}>MAX PRICE: {maxPrice} MAD</Text>
+          <Text style={st.filterLabel}>GENDER</Text>
           <View style={st.pillRow}>{['All','Women only'].map(g=><Pill key={g} label={g} active={gender===g} onPress={()=>setGender(g)}/>)}</View>
           <Text style={st.filterLabel}>SMOKING</Text>
           <View style={st.pillRow}>{['Any','Non-smoking'].map(s=><Pill key={s} label={s} active={smoking===s} onPress={()=>setSmoking(s)}/>)}</View>
         </ScrollView>
-        <TouchableOpacity style={st.filterApply} onPress={onClose}><Text style={st.filterApplyText}>Show Rides</Text></TouchableOpacity>
+        <TouchableOpacity style={st.filterApply} onPress={handleApply}><Text style={st.filterApplyText}>Show Rides</Text></TouchableOpacity>
       </View></View>
     </Modal>
   );
 }
 
-/* ── Community Modal ── */
+/* ── Community Modal (stays static for now — would need aggregate endpoints) ── */
 function CommunityModal({ visible, onClose }) {
   const members = [{label:'Top Driver',name:'Ghita Nafa',stat:'4.8 avg · 23 rides',initials:'GN'},{label:'Top Passenger',name:'Ahmed Benali',stat:'4.9 avg · 15 trips',initials:'AB'},{label:'Most Active',name:'Kenza Nouri',stat:'5.0 avg · 31 rides',initials:'KN'}];
   const routes = [{route:'AUI → Fez',count:142,pct:100},{route:'AUI → Rabat',count:98,pct:69},{route:'AUI → Meknes',count:76,pct:54}];
@@ -90,7 +109,32 @@ function RideRequestModal({ visible, destination, onClose }) {
   const [seats,setSeats]=useState('1');
   const [notes,setNotes]=useState('');
   const [submitted,setSubmitted]=useState(false);
+  const [loading,setLoading]=useState(false);
+
   const handleClose = () => { setSubmitted(false);setDate('');setTime('');setSeats('1');setNotes('');onClose(); };
+
+  const handleSubmit = async () => {
+    if (!date || !time) { Alert.alert('Missing info','Please enter a date and time.'); return; }
+    setLoading(true);
+    try {
+      // Build a proper datetime from the date and time strings
+      const travelDateTime = new Date(`${date} ${time}`);
+      await postRideRequest({
+        departureLocation: 'AUI Campus',
+        destination,
+        travelDateTime: travelDateTime.toISOString(),
+        passengerCount: parseInt(seats) || 1,
+        maxPrice: 200,
+        notes,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to submit request.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
@@ -108,14 +152,16 @@ function RideRequestModal({ visible, destination, onClose }) {
                 <View style={st.filterHeader}><Text style={st.requestTitle}>No rides to "{destination}"</Text><TouchableOpacity onPress={handleClose}><Ionicons name="close" size={22} color={Colors.textSecondary}/></TouchableOpacity></View>
                 <Text style={st.requestSub}>Submit a request and matching drivers will be notified.</Text>
                 <Text style={st.inputLabel}>PREFERRED DATE</Text>
-                <TextInput style={st.reqInput} placeholder="e.g. Feb 28" value={date} onChangeText={setDate} placeholderTextColor={Colors.textDisabled}/>
+                <TextInput style={st.reqInput} placeholder="e.g. 2026-04-20" value={date} onChangeText={setDate} placeholderTextColor={Colors.textDisabled}/>
                 <Text style={st.inputLabel}>PREFERRED TIME</Text>
                 <TextInput style={st.reqInput} placeholder="e.g. 09:00" value={time} onChangeText={setTime} placeholderTextColor={Colors.textDisabled}/>
                 <Text style={st.inputLabel}>NUMBER OF SEATS</Text>
                 <TextInput style={st.reqInput} placeholder="1" value={seats} onChangeText={setSeats} keyboardType="numeric" placeholderTextColor={Colors.textDisabled}/>
                 <Text style={st.inputLabel}>NOTES (OPTIONAL)</Text>
                 <TextInput style={[st.reqInput,{height:60,textAlignVertical:'top'}]} placeholder="Any preferences..." value={notes} onChangeText={setNotes} multiline placeholderTextColor={Colors.textDisabled}/>
-                <TouchableOpacity style={st.requestBtn} onPress={()=>setSubmitted(true)}><Text style={st.requestBtnText}>Submit Ride Request</Text></TouchableOpacity>
+                <TouchableOpacity style={st.requestBtn} onPress={handleSubmit} disabled={loading}>
+                  <Text style={st.requestBtnText}>{loading ? 'Submitting...' : 'Submit Ride Request'}</Text>
+                </TouchableOpacity>
               </ScrollView>
             )}
           </View>
@@ -126,31 +172,54 @@ function RideRequestModal({ visible, destination, onClose }) {
 }
 
 function RideCard({ ride, onPress }) {
-  const avail = ride.seats - ride.taken;
+  const avail = ride.availableSeats;
+  const color = getDestColor(ride);
+  const driver = ride.driverId;
   return (
     <TouchableOpacity style={st.rideCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={st.rideCardRow}><View style={[st.destDot,{backgroundColor:ride.color}]}/><Text style={st.rideDestText}>{ride.dest}</Text><Text style={st.ridePriceText}>{ride.price} MAD</Text></View>
-      <View style={st.rideMetaRow}><Ionicons name="time-outline" size={12} color={Colors.textSecondary}/><Text style={st.rideMetaText}>{ride.time}</Text><View style={{flex:1}}/><Text style={[st.rideMetaText,{color:avail===0?Colors.textSecondary:avail===1?Colors.accent:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'}]}>{avail===0?'Full':`${avail} seats`}</Text></View>
-      <View style={st.rideDriverRow}><View style={st.driverAvatar}><Text style={st.driverAvatarText}>{ride.initials}</Text></View><Text style={st.driverName}>{ride.driver}</Text><Ionicons name="star" size={11} color="#F59E0B" style={{marginLeft:'auto'}}/><Text style={st.ratingText}>{ride.rating}</Text></View>
+      <View style={st.rideCardRow}><View style={[st.destDot,{backgroundColor:color}]}/><Text style={st.rideDestText}>{ride.destination}</Text><Text style={st.ridePriceText}>{ride.pricePerSeat} MAD</Text></View>
+      <View style={st.rideMetaRow}><Ionicons name="time-outline" size={12} color={Colors.textSecondary}/><Text style={st.rideMetaText}>{new Date(ride.departureDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text><View style={{flex:1}}/><Text style={[st.rideMetaText,{color,fontFamily:'PlusJakartaSans_600SemiBold'}]}>{avail===0?'Full':`${avail} seats`}</Text></View>
+      <View style={st.rideDriverRow}><View style={st.driverAvatar}><Text style={st.driverAvatarText}>{getInitials(driver)}</Text></View><Text style={st.driverName}>{getDriverName(driver)}</Text><Ionicons name="star" size={11} color="#F59E0B" style={{marginLeft:'auto'}}/><Text style={st.ratingText}>{driver?.averageRating || '—'}</Text></View>
     </TouchableOpacity>
   );
 }
 
 export default function HomeScreen({ navigation }) {
   const { isDriver } = useAuth();
+  const [rides, setRides] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [showFilter, setShowFilter] = useState(false);
   const [showCommunity, setShowCommunity] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [requestDest, setRequestDest] = useState('');
   const [highlightedPin, setHighlightedPin] = useState(null);
+  const [filters, setFilters] = useState({});
+
+  const fetchRides = useCallback(async (params = {}) => {
+    setLoading(true);
+    try {
+      const res = await getAvailableRides({ ...filters, ...params });
+      setRides(res.data?.rides || []);
+    } catch {
+      setRides([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => { fetchRides(); }, [fetchRides]);
+
+  const handleFilterApply = (newFilters) => {
+    setFilters(newFilters);
+  };
 
   const handleSearch = () => {
     if (!searchText.trim()) return;
-    const match = RIDES.find(r => r.dest.toLowerCase().includes(searchText.toLowerCase()));
+    const match = rides.find(r => r.destination.toLowerCase().includes(searchText.toLowerCase()));
     if (match) {
-      setHighlightedPin(match.dest);
-      setTimeout(() => navigation.navigate('RideDetails', { ride: match }), 600);
+      setHighlightedPin(match.destination);
+      setTimeout(() => navigation.navigate('RideDetails', { rideId: match._id }), 600);
     } else {
       setRequestDest(searchText.trim());
       setShowRequest(true);
@@ -160,8 +229,8 @@ export default function HomeScreen({ navigation }) {
   const handleSearchChange = (text) => {
     setSearchText(text);
     if (text.trim()) {
-      const match = RIDES.find(r => r.dest.toLowerCase().includes(text.toLowerCase()));
-      setHighlightedPin(match ? match.dest : null);
+      const match = rides.find(r => r.destination.toLowerCase().includes(text.toLowerCase()));
+      setHighlightedPin(match ? match.destination : null);
     } else {
       setHighlightedPin(null);
     }
@@ -174,40 +243,37 @@ export default function HomeScreen({ navigation }) {
       {/* Map Area */}
       <View style={st.mapArea}>
         <View style={st.mapBg}>
-          {/* Map grid */}
           {[0.2,0.4,0.6,0.8].map(p=><View key={`h${p}`} style={[st.gridH,{top:`${p*100}%`}]}/>)}
           {[0.25,0.5,0.75].map(p=><View key={`v${p}`} style={[st.gridV,{left:`${p*100}%`}]}/>)}
 
-          {/* Morocco cities text */}
           <Text style={[st.cityLabel,{top:'15%',right:'8%'}]}>FEZ</Text>
           <Text style={[st.cityLabel,{top:'42%',left:'5%'}]}>RABAT</Text>
           <Text style={[st.cityLabel,{bottom:'25%',left:'28%'}]}>MEKNES</Text>
           <Text style={[st.cityLabel,{bottom:'10%',right:'10%'}]}>IFRANE</Text>
 
-          {/* AUI marker */}
           <View style={[st.auiMarker,{bottom:'12%',right:'15%'}]}><Text style={st.auiText}>AUI</Text></View>
 
-          {/* Ride pins */}
-          {RIDES.map(ride => {
-            const pos = PIN_POS[ride.dest] || {};
-            const isHL = highlightedPin === ride.dest;
+          {/* Dynamic ride pins */}
+          {rides.map(ride => {
+            const pos = PIN_POS[ride.destination] || PIN_POS[Object.keys(PIN_POS).find(k => ride.destination.includes(k))] || {};
+            if (!Object.keys(pos).length) return null;
+            const color = getDestColor(ride);
+            const isHL = highlightedPin === ride.destination;
             return (
-              <TouchableOpacity key={ride.id} style={[st.ridePin,pos,{borderColor:ride.color},isHL&&st.ridePinHL]} onPress={()=>navigation.navigate('RideDetails',{ride})} activeOpacity={0.7}>
-                <View style={[st.pinDot,{backgroundColor:ride.color}]}/>
-                <View><Text style={st.pinLabel}>{ride.dest}</Text><Text style={st.pinPrice}>{ride.price} MAD</Text></View>
+              <TouchableOpacity key={ride._id} style={[st.ridePin,pos,{borderColor:color},isHL&&st.ridePinHL]} onPress={()=>navigation.navigate('RideDetails',{rideId:ride._id})} activeOpacity={0.7}>
+                <View style={[st.pinDot,{backgroundColor:color}]}/>
+                <View><Text style={st.pinLabel}>{ride.destination}</Text><Text style={st.pinPrice}>{ride.pricePerSeat} MAD</Text></View>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Search Bar */}
         <View style={st.searchBar}>
           <Ionicons name="search-outline" size={18} color={Colors.textSecondary} style={{marginRight:Spacing.sm}}/>
           <TextInput style={st.searchInput} placeholder="Where are you going?" placeholderTextColor={Colors.textDisabled} value={searchText} onChangeText={handleSearchChange} onSubmitEditing={handleSearch} returnKeyType="search"/>
           <TouchableOpacity onPress={()=>setShowFilter(true)}><Ionicons name="options-outline" size={18} color={Colors.textSecondary}/></TouchableOpacity>
         </View>
 
-        {/* Community badge */}
         <TouchableOpacity style={st.communityBadge} onPress={()=>setShowCommunity(true)}>
           <Ionicons name="trophy-outline" size={14} color={Colors.primary}/>
           <Text style={st.communityText}>Community</Text>
@@ -217,13 +283,19 @@ export default function HomeScreen({ navigation }) {
       {/* Bottom Sheet */}
       <View style={st.bottomSheet}>
         <View style={st.handle}/>
-        <View style={st.sheetHeader}><Text style={st.sheetTitle}>Available Rides</Text><Text style={st.sheetCount}>{RIDES.length} rides</Text></View>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {RIDES.map(ride=><RideCard key={ride.id} ride={ride} onPress={()=>navigation.navigate('RideDetails',{ride})}/>)}
-        </ScrollView>
+        <View style={st.sheetHeader}><Text style={st.sheetTitle}>Available Rides</Text><Text style={st.sheetCount}>{rides.length} rides</Text></View>
+        {loading ? (
+          <ActivityIndicator color={Colors.primary} style={{paddingVertical:20}}/>
+        ) : rides.length === 0 ? (
+          <Text style={{textAlign:'center',color:Colors.textSecondary,paddingVertical:20,fontSize:Typography.base}}>No rides available right now</Text>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {rides.map(ride=><RideCard key={ride._id} ride={ride} onPress={()=>navigation.navigate('RideDetails',{rideId:ride._id})}/>)}
+          </ScrollView>
+        )}
       </View>
 
-      <FilterModal visible={showFilter} onClose={()=>setShowFilter(false)}/>
+      <FilterModal visible={showFilter} onClose={()=>setShowFilter(false)} onApply={handleFilterApply}/>
       <CommunityModal visible={showCommunity} onClose={()=>setShowCommunity(false)}/>
       <RideRequestModal visible={showRequest} destination={requestDest} onClose={()=>setShowRequest(false)}/>
     </SafeAreaView>
@@ -265,7 +337,6 @@ const st = StyleSheet.create({
   driverAvatarText:{fontSize:9,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
   driverName:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary},
   ratingText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,marginLeft:2},
-  // Modals shared
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end'},
   modalOverlayCenter:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'center',padding:Spacing.lg},
   filterModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'80%'},
@@ -281,7 +352,6 @@ const st = StyleSheet.create({
   fpillTextActive:{color:'#fff'},
   filterApply:{backgroundColor:Colors.primary,borderRadius:Radius.md,paddingVertical:14,alignItems:'center',marginTop:Spacing.lg},
   filterApplyText:{color:'#fff',fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold'},
-  // Community
   memberRow:{flexDirection:'row',alignItems:'center',gap:Spacing.md,paddingVertical:10,borderBottomWidth:1,borderBottomColor:Colors.divider},
   memberRank:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:Colors.accent,width:28},
   memberAvatar:{width:36,height:36,borderRadius:18,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center'},
@@ -297,7 +367,6 @@ const st = StyleSheet.create({
   statBox:{alignItems:'center'},
   statBig:{fontSize:Typography['3xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
   statLabel:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,marginTop:2},
-  // Ride request
   requestTitle:{fontSize:Typography['2xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary,flex:1,marginBottom:8},
   requestSub:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,lineHeight:20,marginBottom:Spacing.lg},
   inputLabel:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:4},

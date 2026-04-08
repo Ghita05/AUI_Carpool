@@ -1,16 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import StepIndicator from '../../components/common/StepIndicator';
+import { resendVerification, checkVerification } from '../../services/authService';
 
 export default function SignupCheckInboxScreen({ navigation, route }) {
   const email = route?.params?.email || 'yourname@aui.ma';
   const [resendCooldown, setResendCooldown] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const pollRef = useRef(null);
 
-  const handleResend = () => {
+  // Auto-poll every 4 seconds to detect when user clicks the email link
+  useEffect(() => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await checkVerification(email);
+        if (res.data?.verified) {
+          clearInterval(pollRef.current);
+          navigation.navigate('SignupCompleteProfile', { email });
+        }
+      } catch {}
+    }, 4000);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [email]);
+
+  const handleResend = async () => {
     if (resendCooldown) return;
+    try {
+      await resendVerification(email);
+    } catch {}
     setResendCooldown(true);
     setTimeout(() => setResendCooldown(false), 30000);
   };
@@ -36,6 +57,12 @@ export default function SignupCheckInboxScreen({ navigation, route }) {
           <Text style={styles.emailText}>{email}</Text>
           <Text style={styles.instruction}>Click the link in your inbox to continue</Text>
 
+          {/* Waiting indicator */}
+          <View style={styles.waitingRow}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+            <Text style={styles.waitingText}>Waiting for verification...</Text>
+          </View>
+
           <View style={styles.resendRow}>
             <Text style={styles.resendPrompt}>Didn't receive it? </Text>
             <TouchableOpacity onPress={handleResend} disabled={resendCooldown}>
@@ -49,14 +76,10 @@ export default function SignupCheckInboxScreen({ navigation, route }) {
 
           <View style={styles.changeRow}>
             <Text style={styles.changePrompt}>Wrong email address? </Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
+            <TouchableOpacity onPress={() => { if(pollRef.current) clearInterval(pollRef.current); navigation.goBack(); }}>
               <Text style={styles.changeLink}>Change it</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity onPress={() => navigation.navigate('SignupCompleteProfile', { email })} style={styles.continueButton}>
-            <Text style={styles.continueText}>I've verified my email →</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </>
@@ -74,15 +97,15 @@ const styles = StyleSheet.create({
   heading: { fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: Spacing.sm, textAlign: 'center' },
   sub: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, textAlign: 'center' },
   emailText: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, textAlign: 'center', marginBottom: Spacing.xs, textDecorationLine: 'underline' },
-  instruction: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xl },
+  instruction: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.lg },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.xl, paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, backgroundColor: Colors.primaryBg, borderRadius: Radius.sm },
+  waitingText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_500Medium', color: Colors.primary },
   resendRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
   resendPrompt: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   resendLink: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primaryLight, textDecorationLine: 'underline' },
   resendDisabled: { color: Colors.success, textDecorationLine: 'none' },
   divider: { width: '100%', height: 1, backgroundColor: Colors.border, marginBottom: Spacing.lg },
-  changeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xl },
+  changeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
   changePrompt: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   changeLink: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primaryLight, textDecorationLine: 'underline' },
-  continueButton: { paddingVertical: Spacing.sm },
-  continueText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
 });
