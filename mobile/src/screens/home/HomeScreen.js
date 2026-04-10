@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
@@ -102,34 +103,80 @@ function CommunityModal({ visible, onClose }) {
   );
 }
 
+// ── Date / time input formatters ──────────────────────────────────────────
+// formatDate: keeps only digits, auto-inserts '-' after YYYY and MM.
+// Clamps month to 01–12 and day to 01–31 so the user can't type nonsense.
+// Output is always a valid YYYY-MM-DD prefix as the user types.
+function formatDate(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  let out = digits;
+  if (digits.length > 4) {
+    const mm = Math.min(parseInt(digits.slice(4, 6) || '0', 10), 12);
+    out = digits.slice(0, 4) + '-' + String(mm).padStart(2, '0');
+    if (digits.length > 6) {
+      const dd = Math.min(parseInt(digits.slice(6, 8) || '0', 10), 31);
+      out += '-' + String(dd).padStart(2, '0');
+    }
+  }
+  return out;
+}
+// formatTime: keeps only digits, auto-inserts ':' after HH.
+// Clamps hour to 00–23 and minute to 00–59.
+function formatTime(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  const hh = Math.min(parseInt(digits.slice(0, 2), 10), 23);
+  const mm = Math.min(parseInt(digits.slice(2, 4), 10), 59);
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+
 /* ── Ride Request Modal ── */
 function RideRequestModal({ visible, destination, onClose }) {
   const [date,setDate]=useState('');
   const [time,setTime]=useState('');
-  const [seats,setSeats]=useState('1');
+  const [seats,setSeats]=useState(1);
   const [notes,setNotes]=useState('');
   const [submitted,setSubmitted]=useState(false);
   const [loading,setLoading]=useState(false);
 
-  const handleClose = () => { setSubmitted(false);setDate('');setTime('');setSeats('1');setNotes('');onClose(); };
+  const handleClose = () => { setSubmitted(false);setDate('');setTime('');setSeats(1);setNotes('');onClose(); };
 
   const handleSubmit = async () => {
-    if (!date || !time) { Alert.alert('Missing info','Please enter a date and time.'); return; }
+    // Full format check before attempting Date construction
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      Alert.alert('Invalid Date', 'Please enter a date in YYYY-MM-DD format (e.g. 2026-04-20).');
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(time)) {
+      Alert.alert('Invalid Time', 'Please enter a time in HH:MM format (e.g. 14:30).');
+      return;
+    }
+    const travelDateTime = new Date(`${date}T${time}:00`);
+    if (isNaN(travelDateTime.getTime())) {
+      Alert.alert('Invalid Date/Time', 'The date or time you entered is not valid.');
+      return;
+    }
     setLoading(true);
     try {
-      // Build a proper datetime from the date and time strings
-      const travelDateTime = new Date(`${date} ${time}`);
       await postRideRequest({
         departureLocation: 'AUI Campus',
         destination,
         travelDateTime: travelDateTime.toISOString(),
-        passengerCount: parseInt(seats) || 1,
+        passengerCount: seats,
         maxPrice: 200,
         notes,
       });
       setSubmitted(true);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to submit request.');
+      // Drill through every shape the backend might use to surface the real error
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        (typeof err.response?.data === 'string' ? err.response.data : null) ||
+        err.message ||
+        'Failed to submit request.';
+      const status = err.response?.status ? ` (${err.response.status})` : '';
+      Alert.alert('Error' + status, msg);
     } finally {
       setLoading(false);
     }
@@ -143,22 +190,75 @@ function RideRequestModal({ visible, destination, onClose }) {
             {submitted ? (
               <View style={{alignItems:'center',padding:Spacing.xl}}>
                 <Ionicons name="checkmark-circle" size={48} color={Colors.primary}/>
-                <Text style={st.requestTitle}>Request Submitted!</Text>
-                <Text style={st.requestSub}>We'll notify you when a driver posts a ride to <Text style={{fontFamily:'PlusJakartaSans_700Bold'}}>{destination}</Text>.</Text>
+                <Text style={[st.requestTitle,{textAlign:'center',marginBottom:Spacing.sm}]}>Request Posted!</Text>
+                <Text style={[st.requestSub,{textAlign:'center'}]}>
+                  Your request to <Text style={{fontFamily:'PlusJakartaSans_700Bold'}}>{destination}</Text> is now visible to drivers. They can choose to accept it — you'll be notified if one does.
+                </Text>
                 <TouchableOpacity style={st.requestBtn} onPress={handleClose}><Text style={st.requestBtnText}>Done</Text></TouchableOpacity>
               </View>
             ) : (
-              <ScrollView keyboardShouldPersistTaps="handled">
-                <View style={st.filterHeader}><Text style={st.requestTitle}>No rides to "{destination}"</Text><TouchableOpacity onPress={handleClose}><Ionicons name="close" size={22} color={Colors.textSecondary}/></TouchableOpacity></View>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={st.filterHeader}>
+                  <Text style={st.requestTitle}>No rides to "{destination}"</Text>
+                  <TouchableOpacity onPress={handleClose}><Ionicons name="close" size={22} color={Colors.textSecondary}/></TouchableOpacity>
+                </View>
                 <Text style={st.requestSub}>Submit a request and matching drivers will be notified.</Text>
-                <Text style={st.inputLabel}>PREFERRED DATE</Text>
-                <TextInput style={st.reqInput} placeholder="e.g. 2026-04-20" value={date} onChangeText={setDate} placeholderTextColor={Colors.textDisabled}/>
-                <Text style={st.inputLabel}>PREFERRED TIME</Text>
-                <TextInput style={st.reqInput} placeholder="e.g. 09:00" value={time} onChangeText={setTime} placeholderTextColor={Colors.textDisabled}/>
-                <Text style={st.inputLabel}>NUMBER OF SEATS</Text>
-                <TextInput style={st.reqInput} placeholder="1" value={seats} onChangeText={setSeats} keyboardType="numeric" placeholderTextColor={Colors.textDisabled}/>
-                <Text style={st.inputLabel}>NOTES (OPTIONAL)</Text>
-                <TextInput style={[st.reqInput,{height:60,textAlignVertical:'top'}]} placeholder="Any preferences..." value={notes} onChangeText={setNotes} multiline placeholderTextColor={Colors.textDisabled}/>
+
+                <View style={st.reqTwoCol}>
+                  <View style={st.reqCol}>
+                    <Text style={st.inputLabel}>DATE</Text>
+                    <View style={st.reqFieldInput}>
+                      <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary}/>
+                      <TextInput
+                        style={st.reqFieldText}
+                        value={date}
+                        onChangeText={v => setDate(formatDate(v))}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={Colors.textDisabled}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={st.reqCol}>
+                    <Text style={st.inputLabel}>TIME</Text>
+                    <View style={st.reqFieldInput}>
+                      <Ionicons name="time-outline" size={13} color={Colors.textSecondary}/>
+                      <TextInput
+                        style={st.reqFieldText}
+                        value={time}
+                        onChangeText={v => setTime(formatTime(v))}
+                        placeholder="HH:MM"
+                        placeholderTextColor={Colors.textDisabled}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={[st.inputLabel,{marginTop:Spacing.md}]}>NUMBER OF SEATS</Text>
+                <View style={st.reqStepperRow}>
+                  <TouchableOpacity
+                    style={st.reqStepBtn}
+                    onPress={() => seats > 1 && setSeats(s => s - 1)}
+                  >
+                    <Ionicons name="remove" size={14} color={seats <= 1 ? Colors.textDisabled : Colors.textSecondary}/>
+                  </TouchableOpacity>
+                  <Text style={st.reqStepVal}>{seats}</Text>
+                  <TouchableOpacity style={st.reqStepBtn} onPress={() => setSeats(s => s + 1)}>
+                    <Ionicons name="add" size={14} color={Colors.primary}/>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[st.inputLabel,{marginTop:Spacing.md}]}>NOTES (OPTIONAL)</Text>
+                <TextInput
+                  style={[st.reqInput,{height:72,textAlignVertical:'top',paddingTop:Spacing.sm}]}
+                  placeholder="Any preferences..."
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  placeholderTextColor={Colors.textDisabled}
+                />
+
                 <TouchableOpacity style={st.requestBtn} onPress={handleSubmit} disabled={loading}>
                   <Text style={st.requestBtnText}>{loading ? 'Submitting...' : 'Submit Ride Request'}</Text>
                 </TouchableOpacity>
@@ -209,6 +309,10 @@ export default function HomeScreen({ navigation }) {
   }, [filters]);
 
   useEffect(() => { fetchRides(); }, [fetchRides]);
+
+  // Re-fetch when screen regains focus — ensures rides cancelled by drivers
+  // are removed from the available list without requiring a manual pull-to-refresh
+  useFocusEffect(useCallback(() => { fetchRides(); }, [fetchRides]));
 
   const handleFilterApply = (newFilters) => {
     setFilters(newFilters);
@@ -371,6 +475,15 @@ const st = StyleSheet.create({
   requestSub:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,lineHeight:20,marginBottom:Spacing.lg},
   inputLabel:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:4},
   reqInput:{height:44,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.sm,paddingHorizontal:12,fontSize:Typography.base,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary,marginBottom:Spacing.md},
+  // Date + Time side-by-side layout inside the request modal
+  reqTwoCol:{flexDirection:'row',gap:Spacing.md,marginBottom:Spacing.sm},
+  reqCol:{flex:1},
+  reqFieldInput:{flexDirection:'row',alignItems:'center',gap:6,height:44,backgroundColor:Colors.background,borderRadius:Radius.sm,borderWidth:1,borderColor:Colors.border,paddingHorizontal:Spacing.sm},
+  reqFieldText:{flex:1,fontSize:Typography.base,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
+  // Stepper for seats
+  reqStepperRow:{flexDirection:'row',alignItems:'center',gap:Spacing.lg,height:44,marginBottom:Spacing.sm},
+  reqStepBtn:{width:32,height:32,borderRadius:16,backgroundColor:Colors.background,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},
+  reqStepVal:{fontSize:Typography['2xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary,minWidth:24,textAlign:'center'},
   requestBtn:{backgroundColor:Colors.primary,borderRadius:Radius.md,paddingVertical:14,alignItems:'center',marginTop:Spacing.sm},
   requestBtnText:{color:'#fff',fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold'},
 });

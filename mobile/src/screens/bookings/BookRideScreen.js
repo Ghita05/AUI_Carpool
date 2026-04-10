@@ -65,6 +65,7 @@ export default function BookRideScreen({ navigation, route }) {
             <View style={st.summaryRoute}><Ionicons name="location" size={14} color={Colors.primary}/><Text style={st.summaryRouteText}>{ride.departureLocation} → {ride.destination}</Text></View>
             <View style={st.divider}/>
             <View style={st.summaryGrid}>
+              <View style={st.summaryItem}><Text style={st.summaryLabel}>Date</Text><Text style={st.summaryVal}>{new Date(ride.departureDateTime).toLocaleDateString([],{month:'short',day:'numeric'})}</Text></View>
               <View style={st.summaryItem}><Text style={st.summaryLabel}>Departure</Text><Text style={st.summaryVal}>{new Date(ride.departureDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text></View>
               <View style={st.summaryItem}><Text style={st.summaryLabel}>Driver</Text><Text style={st.summaryVal}>{driver.firstName} {driver.lastName}</Text></View>
               <View style={st.summaryItem}><Text style={st.summaryLabel}>Vehicle</Text><Text style={st.summaryVal}>{vehicle.brand} {vehicle.model}</Text></View>

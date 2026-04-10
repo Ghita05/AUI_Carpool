@@ -35,7 +35,7 @@ function DeactivateModal({visible,onClose}){
 }
 
 export default function AccountSettingsScreen({ navigation }) {
-  const { user, isDriver, logout } = useAuth();
+  const { user, isDriver, logout, setUser } = useAuth();
   const [editing,setEditing]=useState(false);
   const [firstName,setFirstName]=useState(user?.firstName||'');
   const [lastName,setLastName]=useState(user?.lastName||'');
@@ -47,12 +47,14 @@ export default function AccountSettingsScreen({ navigation }) {
   const [saveStatus,setSaveStatus]=useState('');
 
   const handleSave=async()=>{
-    try{
-      await updateProfile({firstName,lastName,phoneNumber:phone});
-      await updatePreferences({smokingPreference:smoking,drivingStyle:driving});
-      setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);
-    }catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to save');}
-  };
+  try{
+    await updateProfile({phoneNumber:phone});
+    await updatePreferences({smokingPreference:smoking,drivingStyle:driving});
+    // Update the in-memory user so the UI reflects changes immediately
+    setUser(prev => prev ? {...prev, phoneNumber:phone, smokingPreference:smoking, drivingStyle:driving} : prev);
+    setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);
+  }catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to save');}
+};
   const handleLogout=()=>{logout();navigation.reset({index:0,routes:[{name:'Splash'}]});};
 
   return (

@@ -4,8 +4,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { Colors, Typography, Spacing, Radius } from '../../theme';
 import { postRideRequest } from '../../services/rideService';
+import DateTimePickerModal from '../../components/DateTimePickerModal';
 
 function SectionCard({ title, children }) {
   return (
@@ -19,22 +20,25 @@ function SectionCard({ title, children }) {
 export default function PostRideRequestScreen({ navigation }) {
   const [from, setFrom] = useState('AUI Campus');
   const [to, setTo] = useState('');
-  const [date, setDate] = useState('2026-04-25');
-  const [time, setTime] = useState('09:00');
+  const [departureDateTime, setDepartureDateTime] = useState(null);
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [passengers, setPassengers] = useState(1);
   const [maxPrice, setMaxPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [posting, setPosting] = useState(false);
 
   const handlePost = async () => {
-    if (!to.trim()) { Alert.alert('Missing info', 'Please enter a destination.'); return; }
-    if (!maxPrice) { Alert.alert('Missing info', 'Please enter a max budget.'); return; }
+    if (!from.trim()) { Alert.alert('Missing info', 'Please enter a departure location.'); return; }
+    if (!to.trim())   { Alert.alert('Missing info', 'Please enter a destination.'); return; }
+    if (!departureDateTime) { Alert.alert('Missing info', 'Please select a date and time.'); return; }
+    if (!maxPrice)    { Alert.alert('Missing info', 'Please enter a max budget.'); return; }
+
     setPosting(true);
     try {
       await postRideRequest({
         departureLocation: from.trim(),
         destination: to.trim(),
-        travelDateTime: new Date(`${date}T${time}:00`).toISOString(),
+        travelDateTime: departureDateTime.toISOString(),
         passengerCount: passengers,
         maxPrice: parseInt(maxPrice) || 100,
         notes,
@@ -43,8 +47,15 @@ export default function PostRideRequestScreen({ navigation }) {
         { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) },
       ]);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to post request.');
-    } finally { setPosting(false); }
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to post request.';
+      Alert.alert('Error', msg);
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
@@ -60,7 +71,7 @@ export default function PostRideRequestScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Info Banner */}
         <View style={styles.infoBanner}>
@@ -72,7 +83,7 @@ export default function PostRideRequestScreen({ navigation }) {
 
         {/* Route */}
         <SectionCard>
-          <View style={styles.routeField}>
+          <View style={styles.routeFieldWrap}>
             <Ionicons name="location" size={14} color={Colors.primary} />
             <TextInput
               style={styles.routeInput}
@@ -82,8 +93,8 @@ export default function PostRideRequestScreen({ navigation }) {
               placeholderTextColor={Colors.textDisabled}
             />
           </View>
-          <View style={styles.routeDivider} />
-          <View style={styles.routeField}>
+          <View style={{ height: Spacing.sm }} />
+          <View style={styles.routeFieldWrap}>
             <Ionicons name="location" size={14} color={Colors.error} />
             <TextInput
               style={styles.routeInput}
@@ -97,22 +108,17 @@ export default function PostRideRequestScreen({ navigation }) {
 
         {/* Date & Time */}
         <SectionCard title="Date & Time">
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>Date</Text>
-              <TouchableOpacity style={styles.fieldBtn}>
-                <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
-                <Text style={styles.fieldBtnText}>{date}</Text>
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.dateTimePickerButton} onPress={() => setShowDateTimePicker(true)}>
+            <Ionicons name="calendar-outline" size={16} color={Colors.primary} style={{marginRight: 8}}/>
+            <View style={{flex: 1}}>
+              <Text style={styles.dateTimePickerText}>
+                {departureDateTime 
+                  ? `${new Date(departureDateTime).toLocaleDateString()} ${new Date(departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`
+                  : 'Select Date & Time'}
+              </Text>
             </View>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>Time</Text>
-              <TouchableOpacity style={styles.fieldBtn}>
-                <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
-                <Text style={styles.fieldBtnText}>{time}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/>
+          </TouchableOpacity>
         </SectionCard>
 
         {/* Passengers & Budget */}
@@ -120,7 +126,7 @@ export default function PostRideRequestScreen({ navigation }) {
           <View style={styles.twoCol}>
             <View style={styles.col}>
               <Text style={styles.fieldLabel}>Passengers</Text>
-              <View style={styles.stepperRow}>
+              <View style={styles.stepperRowInline}>
                 <TouchableOpacity
                   style={styles.stepBtn}
                   onPress={() => passengers > 1 && setPassengers(p => p - 1)}
@@ -163,13 +169,20 @@ export default function PostRideRequestScreen({ navigation }) {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      <DateTimePickerModal
+        visible={showDateTimePicker}
+        date={departureDateTime}
+        time={departureDateTime ? new Date(departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '09:00'}
+        onClose={() => setShowDateTimePicker(false)}
+        onConfirm={(selectedDateTime) => {
+          setDepartureDateTime(selectedDateTime);
+          setShowDateTimePicker(false);
+        }}
+      />
+
       {/* Post Button */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.postBtn}
-          onPress={handlePost}
-          disabled={posting}
-        >
+        <TouchableOpacity style={styles.postBtn} onPress={handlePost} disabled={posting}>
           <Text style={styles.postBtnText}>{posting ? 'Posting...' : 'Post Request'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelBtn}>
@@ -196,15 +209,24 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryBg, borderRadius: Radius.md,
     borderWidth: 1, borderColor: Colors.primary,
   },
-  bannerText: { flex: 1, fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.primary, lineHeight: 18 },
-  card: { backgroundColor: Colors.surface, padding: Spacing.lg, marginBottom: Spacing.sm },
-  cardTitle: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: Spacing.md },
-  routeField: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    minHeight: 46, paddingHorizontal: Spacing.md,
+  bannerText: {
+    flex: 1, fontSize: Typography.sm,
+    fontFamily: 'PlusJakartaSans_400Regular', color: Colors.primary, lineHeight: 18,
   },
-  routeInput: { flex: 1, fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary, paddingVertical: Spacing.sm },
-  routeDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: Spacing.lg },
+  card: { backgroundColor: Colors.surface, padding: Spacing.lg, marginBottom: Spacing.sm },
+  cardTitle: {
+    fontSize: Typography.md, fontFamily: 'PlusJakartaSans_700Bold',
+    color: Colors.textPrimary, marginBottom: Spacing.md,
+  },
+  routeFieldWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.md, height: 48, backgroundColor: Colors.background,
+  },
+  routeInput: {
+    flex: 1, fontSize: Typography.md,
+    fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary,
+  },
   twoCol: { flexDirection: 'row', gap: Spacing.md },
   col: { flex: 1 },
   fieldLabel: {
@@ -212,19 +234,26 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary, letterSpacing: 0.5,
     textTransform: 'uppercase', marginBottom: Spacing.xs,
   },
-  fieldBtn: {
+  fieldInput: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     height: 46, backgroundColor: Colors.background, borderRadius: Radius.sm,
     borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.md,
   },
-  fieldBtnText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, height: 46 },
+  fieldInputText: {
+    flex: 1, fontSize: Typography.md,
+    fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary,
+  },
+  stepperRowInline: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md, height: 46,
+  },
   stepBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepVal: { fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary },
+  stepVal: {
+    fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary,
+  },
   input: {
     height: 46, backgroundColor: Colors.background, borderRadius: Radius.sm,
     borderWidth: 1, borderColor: Colors.border,
@@ -248,5 +277,13 @@ const styles = StyleSheet.create({
   },
   postBtnText: { fontSize: Typography.lg, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textWhite },
   cancelBtn: { height: 44, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
+  cancelBtnText: {
+    fontSize: Typography.base, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary,
+  },
+  dateTimePickerButton: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 46, backgroundColor: Colors.background, borderRadius: Radius.sm,
+    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.md,
+  },
+  dateTimePickerText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary },
 });

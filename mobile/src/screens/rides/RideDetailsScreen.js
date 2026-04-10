@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Share, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Share, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -7,16 +7,67 @@ import { useAuth } from '../../context/AuthContext';
 import { getRideDetails, cancelRide, modifyRide } from '../../services/rideService';
 import { getPassengerList } from '../../services/rideService';
 import { getUserReviews } from '../../services/reviewService';
+import DateTimePickerModal from '../../components/DateTimePickerModal';
+
+// Better time formatter that allows natural editing
+function formatTime(raw) {
+  // Strip all non-digits
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) return digits;
+  
+  // Insert colon after 2 digits
+  const hh = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  
+  // Clamp values
+  const hhClamped = Math.min(parseInt(hh, 10), 23);
+  const mmClamped = Math.min(parseInt(mm, 10), 59);
+  
+  return `${String(hhClamped).padStart(2, '0')}:${String(mmClamped).padStart(2, '0')}`;
+}
+
+// Smart time input handler - allows free typing but enforces constraints
+function handleSmartTimeInput(input, setTime) {
+  // Strip non-digits and limit to 4
+  let digits = input.replace(/\D/g, '').slice(0, 4);
+  
+  // If user is typing, show raw digits (no colon yet)
+  if (digits.length <= 2) {
+    setTime(digits);
+    return;
+  }
+  
+  // Once they have 3+ digits, start enforcing constraints
+  const hh = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  
+  // Clamp hours to 0-23
+  const hhClamped = Math.min(parseInt(hh, 10), 23);
+  const hourStr = String(hhClamped).padStart(2, '0');
+  
+  // If they haven't finished typing minutes yet, show with colon but unclamped minutes
+  if (digits.length < 4) {
+    setTime(hourStr + ':' + mm);
+    return;
+  }
+  
+  // They've typed 4 digits - clamp minutes to 0-59
+  const mmClamped = Math.min(parseInt(mm, 10), 59);
+  const minStr = String(mmClamped).padStart(2, '0');
+  setTime(hourStr + ':' + minStr);
+}
 
 function Card({children,style}){return <View style={[st.card,style]}>{children}</View>;}
 
 const getInitials = (u) => u ? ((u.firstName?.[0]||'')+(u.lastName?.[0]||'')).toUpperCase() : '??';
 const getName = (u) => u ? `${u.firstName||''} ${u.lastName||''}`.trim() : 'Unknown';
 
-function DriverProfileModal({visible,driver,onClose}){
+function DriverProfileModal({visible,ride,driver,onClose}){
   const [reviews,setReviews]=useState([]);
   const [loadingR,setLoadingR]=useState(true);
-
+  const [gender, setGender] = useState('All');
   useEffect(()=>{
     if(visible&&driver?._id){
       setLoadingR(true);
@@ -36,6 +87,7 @@ function DriverProfileModal({visible,driver,onClose}){
           <View style={{flexDirection:'row',gap:8,marginBottom:Spacing.lg}}>
             {driver.smokingPreference&&<View style={st.prefChip}><Ionicons name="ban-outline" size={12} color={Colors.primary}/><Text style={st.prefChipText}>{driver.smokingPreference}</Text></View>}
             {driver.drivingStyle&&<View style={[st.prefChip,{backgroundColor:Colors.background}]}><Ionicons name="speedometer-outline" size={12} color={Colors.textSecondary}/><Text style={[st.prefChipText,{color:Colors.textSecondary}]}>{driver.drivingStyle}</Text></View>}
+            {ride.genderPreference&&<View style={st.prefChip}><Ionicons name="ban-outline" size={12} color={Colors.primary}/><Text style={st.prefChipText}>{ride.genderPreference}</Text></View>}
           </View>
           <Text style={st.sectionLabel}>Reviews ({reviews.length})</Text>
           {loadingR?<ActivityIndicator color={Colors.primary}/>:reviews.length===0?<Text style={{color:Colors.textSecondary,fontSize:13}}>No reviews yet</Text>:
@@ -83,36 +135,169 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
   );
 }
 
-function ManageRideModal({visible,ride,onClose,onUpdated}){
-  const [saving,setSaving]=useState(false);
-  const handleCancel=()=>{
-    Alert.alert('Cancel Ride','Are you sure? All passengers will be notified.',[
-      {text:'No',style:'cancel'},
-      {text:'Yes, Cancel',style:'destructive',onPress:async()=>{
-        try{await cancelRide(ride._id,'Driver cancelled');Alert.alert('Cancelled','Ride has been cancelled.');onUpdated();onClose();}catch(e){Alert.alert('Error',e.response?.data?.message||'Failed to cancel');}
-      }}
-    ]);
-  };
-  const handleSave=async()=>{setSaving(true);try{await modifyRide(ride._id,{});Alert.alert('Saved','Ride updated.');onUpdated();onClose();}catch(e){Alert.alert('Error',e.response?.data?.message||'Failed to update');}finally{setSaving(false);}};
+function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
+  const [price, setPrice] = useState('');
+  const [gender, setGender] = useState('All');
+  const [saving, setSaving] = useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  const [departureDateTime, setDepartureDateTime] = useState(null);
 
-  if(!ride)return null;
-  return(
+  useEffect(() => {
+    if (visible && ride) {
+      setPrice(String(ride.pricePerSeat));
+      setGender(ride.genderPreference || 'All');
+      setDepartureDateTime(ride.departureDateTime);
+    }
+  }, [visible, ride]);
+
+  const handleCancel = () => {
+    Alert.alert(
+      'Cancel Ride',
+      'Are you sure? All confirmed passengers will be notified and their bookings cancelled.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Ride', style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelRide(ride._id, 'Driver cancelled');
+              onClose();
+              Alert.alert(
+                'Ride Cancelled',
+                'All passengers have been notified.',
+                [{ text: 'OK', onPress: onCancelledAndBack }]
+              );
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Failed to cancel ride');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSave = async () => {
+    const parsedPrice = parseFloat(price);
+    if (!price || isNaN(parsedPrice) || parsedPrice <= 0) {
+      Alert.alert('Invalid Price', 'Please enter a valid price per seat.');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const updates = {};
+      if (parsedPrice !== ride.pricePerSeat) updates.pricePerSeat = parsedPrice;
+      if (gender !== (ride.genderPreference || 'All')) updates.genderPreference = gender;
+      if (departureDateTime && departureDateTime !== ride.departureDateTime) {
+        updates.departureDateTime = departureDateTime;
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        Alert.alert('No Changes', 'Nothing was changed.');
+        onClose();
+        return;
+      }
+      
+      await modifyRide(ride._id, updates);
+      Alert.alert('Saved', 'Ride has been updated.');
+      onUpdated();
+      onClose();
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Failed to update ride');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!ride) return null;
+  return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={st.modalOv}><View style={st.manageModal}>
-        <View style={st.modalH}><Text style={st.modalTitle}>Manage Ride</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
-        <ScrollView>
-          <Text style={st.mngLabel}>Departure</Text><View style={st.mngInput}><Text style={st.mngInputText}>{ride.departureLocation}</Text></View>
-          <Text style={st.mngLabel}>Destination</Text><View style={st.mngInput}><Text style={st.mngInputText}>{ride.destination}</Text></View>
-          <View style={{flexDirection:'row',gap:12}}>
-            <View style={{flex:1}}><Text style={st.mngLabel}>Time</Text><View style={st.mngInput}><Text style={st.mngInputText}>{new Date(ride.departureDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text></View></View>
-            <View style={{flex:1}}><Text style={st.mngLabel}>Price (MAD)</Text><View style={st.mngInput}><Text style={st.mngInputText}>{ride.pricePerSeat}</Text></View></View>
+      <KeyboardAvoidingView style={st.modalOv} behavior="padding" keyboardVerticalOffset={50}>
+        <View style={st.manageModal}>
+          <View style={st.modalH}>
+            <Text style={st.modalTitle}>Manage Ride</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={Colors.textSecondary}/>
+            </TouchableOpacity>
           </View>
-          <View style={{flexDirection:'row',gap:10,marginTop:Spacing.lg}}>
-            <TouchableOpacity style={st.cancelRideBtn} onPress={handleCancel}><Text style={st.cancelRideBtnText}>Cancel Ride</Text></TouchableOpacity>
-            <TouchableOpacity style={st.saveRideBtn} onPress={handleSave}><Text style={st.saveRideBtnText}>{saving?'Saving...':'Save Changes'}</Text></TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View></View>
+
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingBottom: Spacing.xl}}>
+            {/* Read-only route — immutable post-posting */}
+            <Text style={st.mngSectionLabel}>ROUTE · READ-ONLY</Text>
+            <Text style={st.mngHint}>Route cannot be changed after posting</Text>
+            <View style={st.mngReadonlyRow}>
+              <View style={[st.routeDotSm, {backgroundColor: Colors.primary}]}/>
+              <Text style={st.mngReadonlyText}>{ride.departureLocation}</Text>
+            </View>
+            <View style={st.mngReadonlyRow}>
+              <View style={[st.routeDotSm, {backgroundColor: Colors.error}]}/>
+              <Text style={st.mngReadonlyText}>{ride.destination}</Text>
+            </View>
+
+            <View style={st.mngDivider}/>
+
+            {/* Editable fields */}
+            <Text style={st.mngSectionLabel}>EDITABLE DETAILS</Text>
+
+            <Text style={st.mngLabel}>Departure Date & Time</Text>
+            <TouchableOpacity style={st.mngDateTimeButton} onPress={() => setShowDateTimePicker(true)}>
+              <Ionicons name="calendar-outline" size={16} color={Colors.primary} style={{marginRight: 8}}/>
+              <View style={{flex: 1}}>
+                <Text style={st.mngDateTimeValue}>
+                  {new Date(departureDateTime).toLocaleDateString()} {new Date(departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/>
+            </TouchableOpacity>
+
+            <Text style={st.mngLabel}>Price per Seat (MAD)</Text>
+            <View style={st.mngInputRow}>
+              <Ionicons name="cash-outline" size={16} color={Colors.textSecondary} style={{marginRight: 8}}/>
+              <TextInput
+                style={st.mngInputField}
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="numeric"
+                placeholder="0"
+              />
+            </View>
+
+            <Text style={st.mngLabel}>Gender Preference</Text>
+            <View style={{flexDirection:'row', gap: 8, marginBottom: Spacing.lg}}>
+              {['All', 'Women-Only'].map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[st.genderPill, gender === opt && st.genderPillActive]}
+                  onPress={() => setGender(opt)}
+                >
+                  <Text style={[st.genderPillText, gender === opt && st.genderPillTextActive]}>
+                    {opt === 'All' ? 'All Genders' : 'Women Only'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={st.mngDivider}/>
+
+            <View style={{flexDirection:'row', gap: 10, marginTop: Spacing.sm}}>
+              <TouchableOpacity style={st.cancelRideBtn} onPress={handleCancel}>
+                <Ionicons name="close-circle-outline" size={14} color={Colors.error}/>
+                <Text style={st.cancelRideBtnText}>Cancel Ride</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.saveRideBtn} onPress={handleSave} disabled={saving}>
+                <Text style={st.saveRideBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+      <DateTimePickerModal 
+        visible={showDateTimePicker} 
+        date={departureDateTime}
+        time={departureDateTime ? new Date(departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: false}) : '09:00'}
+        onClose={() => setShowDateTimePicker(false)}
+        onConfirm={(isoDateTime, timeStr) => setDepartureDateTime(isoDateTime)}
+      />
     </Modal>
   );
 }
@@ -142,7 +327,10 @@ export default function RideDetailsScreen({ navigation, route }) {
   const driver = ride.driverId || {};
   const vehicle = ride.vehicleId || {};
   const isOwner = user?._id === driver._id;
-  const departureTime = new Date(ride.departureDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const dt = new Date(ride.departureDateTime);
+  const departureTime = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  // Short date: "Feb 20" — matches the Figma mockup (08-Book_Ride, 09-Booking_Confirmation)
+  const departureDate = dt.toLocaleDateString([],{month:'short',day:'numeric'});
   const distanceKM = ride.route?.distanceKM ? `${ride.route.distanceKM} km` : '—';
   const duration = ride.route?.durationMinutes ? `~${ride.route.durationMinutes} min` : '—';
 
@@ -160,7 +348,7 @@ export default function RideDetailsScreen({ navigation, route }) {
       <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
         <Card><View style={st.routeRow}><View style={st.routeDots}><View style={[st.dot,{backgroundColor:Colors.primary}]}/><View style={st.dashed}/><View style={[st.dot,{backgroundColor:Colors.error}]}/></View><View style={{flex:1,gap:16}}><Text style={st.routeCity}>{ride.departureLocation}</Text><Text style={st.routeCity}>{ride.destination}</Text></View></View>
           <View style={st.divider}/>
-          <View style={st.statsRow}>{[{icon:'time-outline',val:departureTime,label:'Departure'},{icon:'resize-outline',val:distanceKM,label:'Distance'},{icon:'hourglass-outline',val:duration,label:'Est. time'}].map((s,i)=>(<View key={i} style={st.stat}><Ionicons name={s.icon} size={14} color={Colors.textSecondary}/><Text style={st.statVal}>{s.val}</Text><Text style={st.statLabel}>{s.label}</Text></View>))}</View>
+          <View style={st.statsRow}>{[{icon:'calendar-outline',val:departureDate,label:'Date'},{icon:'time-outline',val:departureTime,label:'Departure'},{icon:'resize-outline',val:distanceKM,label:'Distance'},{icon:'hourglass-outline',val:duration,label:'Est. time'}].map((s,i)=>(<View key={i} style={st.stat}><Ionicons name={s.icon} size={14} color={Colors.textSecondary}/><Text style={st.statVal}>{s.val}</Text><Text style={st.statLabel}>{s.label}</Text></View>))}</View>
         </Card>
 
         <TouchableOpacity activeOpacity={isOwner?1:0.7} onPress={!isOwner?()=>setShowProfile(true):undefined}>
@@ -173,6 +361,7 @@ export default function RideDetailsScreen({ navigation, route }) {
             <View style={{flexDirection:'row',gap:8}}>
               {driver.smokingPreference&&<View style={st.prefChip}><Ionicons name="ban-outline" size={11} color={Colors.primary}/><Text style={st.prefChipText}>{driver.smokingPreference}</Text></View>}
               {driver.drivingStyle&&<View style={[st.prefChip,{backgroundColor:Colors.background}]}><Ionicons name="speedometer-outline" size={11} color={Colors.textSecondary}/><Text style={[st.prefChipText,{color:Colors.textSecondary}]}>{driver.drivingStyle}</Text></View>}
+              {ride.genderPreference&&<View style={st.prefChip}><Ionicons name="ban-outline" size={11} color={Colors.primary}/><Text style={st.prefChipText}>{ride.genderPreference}</Text></View>}
             </View>
           </Card>
         </TouchableOpacity>
@@ -224,9 +413,15 @@ export default function RideDetailsScreen({ navigation, route }) {
         )}
       </View>
 
-      <DriverProfileModal visible={showProfile} driver={driver} onClose={()=>setShowProfile(false)}/>
+      <DriverProfileModal visible={showProfile} ride={ride} driver={driver} onClose={()=>setShowProfile(false)}/>
       <ManagePassengersModal visible={showManagePax} rideId={ride._id} totalSeats={ride.totalSeats} onClose={()=>setShowManagePax(false)}/>
-      <ManageRideModal visible={showManageRide} ride={ride} onClose={()=>setShowManageRide(false)} onUpdated={fetchRide}/>
+      <ManageRideModal
+        visible={showManageRide}
+        ride={ride}
+        onClose={() => setShowManageRide(false)}
+        onCancelledAndBack={() => navigation.goBack()}
+        onUpdated={fetchRide}
+      />
     </SafeAreaView>
   );
 }
@@ -249,7 +444,7 @@ const st = StyleSheet.create({
   bottomBar:{flexDirection:'row',gap:Spacing.sm,padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border},
   outlineBtn:{flex:0.45,height:50,borderRadius:Radius.md,borderWidth:1.5,borderColor:Colors.primary,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},outlineBtnText:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
   primaryBtn:{flex:0.55,height:50,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},primaryBtnText:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
-  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end'},profileModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},manageModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'70%'},
+  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end'},profileModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},manageModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'50%'},
   modalH:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.lg},modalTitle:{fontSize:Typography['2xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
   sectionLabel:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:8},
   profHeader:{flexDirection:'row',alignItems:'center',gap:14,marginBottom:Spacing.lg},profAvatar:{width:56,height:56,borderRadius:28,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center'},profAvatarText:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},profName:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},profRole:{fontSize:13,color:Colors.textSecondary},
@@ -257,6 +452,21 @@ const st = StyleSheet.create({
   reviewCard:{paddingVertical:12,borderBottomWidth:1,borderBottomColor:Colors.divider},reviewTop:{flexDirection:'row',alignItems:'flex-start',gap:10},reviewAvatar:{width:32,height:32,borderRadius:16,backgroundColor:Colors.primaryBg,alignItems:'center',justifyContent:'center'},reviewName:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},reviewText:{fontSize:13,color:Colors.textSecondary,marginTop:6,lineHeight:18},
   paxRow:{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:12,borderBottomWidth:1,borderBottomColor:Colors.divider},paxAvatar:{width:36,height:36,borderRadius:18,backgroundColor:Colors.primaryBg,alignItems:'center',justifyContent:'center'},paxName:{fontSize:14,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
   mngLabel:{fontSize:11,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:4,marginTop:12},mngInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,justifyContent:'center',backgroundColor:Colors.background},mngInputText:{fontSize:13,color:Colors.textPrimary},
-  cancelRideBtn:{flex:1,height:46,borderWidth:1.5,borderColor:Colors.error,borderRadius:8,alignItems:'center',justifyContent:'center'},cancelRideBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.error},
+  // Manage Ride Modal — new entries
+  mngSectionLabel:{fontSize:10,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textSecondary,letterSpacing:1,marginBottom:4,marginTop:4},
+  mngHint:{fontSize:11,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textDisabled,marginBottom:8},
+  mngReadonlyRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:6,paddingHorizontal:4},
+  mngReadonlyText:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary},
+  mngDivider:{height:1,backgroundColor:Colors.border,marginVertical:Spacing.md},
+  mngInputRow:{flexDirection:'row',alignItems:'center',height:44,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,backgroundColor:Colors.background,marginBottom:4},
+  mngInputField:{flex:1,fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
+  routeDotSm:{width:8,height:8,borderRadius:4},
+  genderPill:{flex:1,height:40,borderRadius:Radius.sm,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},
+  genderPillActive:{backgroundColor:Colors.primaryBg,borderColor:Colors.primary},
+  genderPillText:{fontSize:12,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary},
+  genderPillTextActive:{color:Colors.primary},
+  cancelRideBtn:{flex:1,height:46,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,borderWidth:1.5,borderColor:Colors.error,borderRadius:8},cancelRideBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.error},
   saveRideBtn:{flex:1,height:46,backgroundColor:Colors.primary,borderRadius:8,alignItems:'center',justifyContent:'center'},saveRideBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  mngDateTimeButton:{flexDirection:'row',alignItems:'center',height:44,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,backgroundColor:Colors.background,marginBottom:4},
+  mngDateTimeValue:{fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
 });

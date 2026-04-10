@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
@@ -70,11 +71,14 @@ function PassengerRideCard({ ride, navigation }) {
           <Text style={styles.driverRating}>{ride.driverRating}</Text>
         </View>
         {!isPast ? (
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails')}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
             <Text style={styles.actionBtnText}>View Details</Text>
           </TouchableOpacity>
         ) : ride.status === 'completed' && !ride.rated ? (
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnAccent]}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnAccent]}
+            onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}
+          >
             <Ionicons name="star-outline" size={12} color={Colors.accent} />
             <Text style={[styles.actionBtnText, { color: Colors.accent }]}>Rate Ride</Text>
           </TouchableOpacity>
@@ -124,8 +128,11 @@ function DriverRideCard({ ride, navigation }) {
           <Text style={styles.passengerText}>{ride.passengers}/{ride.totalSeats} passengers · Booked</Text>
         </View>
         {!isPast && (
-          <TouchableOpacity style={styles.actionBtn}>
-            <Text style={styles.actionBtnText}>Manage</Text>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}
+          >
+            <Text style={styles.actionBtnText}>Details</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -146,15 +153,21 @@ export default function MyRidesScreen({ navigation }) {
       if (role === 'Passenger') {
         if (tab === 'upcoming') {
           const res = await getCurrentBookings();
-          // Map bookings to the card shape
+          // Map bookings to card shape.
+          // Status must be derived from the actual booking status — not hardcoded — because
+          // the driver may have cancelled the ride after the passenger booked, which cascades
+          // all bookings to Cancelled. getCurrentBookings may still return those until the
+          // backend filters them; deriving status here ensures correct badge rendering.
           setData((res.data?.bookings || []).map(b => {
             const r = b.rideId || {};
             const d = r.driverId || {};
+            const rawStatus = b.status?.toLowerCase() || 'confirmed';
+            const status = rawStatus === 'confirmed' ? 'upcoming' : rawStatus;
             return {
               id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
               date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
               time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
-              cost: r.pricePerSeat * b.seatsCount, status: 'upcoming',
+              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0, status,
               driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
               driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
               driverRating: d.averageRating || 0,
@@ -200,6 +213,9 @@ export default function MyRidesScreen({ navigation }) {
   }, [role, tab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Re-fetch whenever this screen regains focus (e.g., returning from RideDetails after cancel)
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
