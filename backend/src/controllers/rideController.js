@@ -9,6 +9,17 @@ const postRideOffer = async (req, res, next) => {
       route,
     } = req.body;
 
+    // Validate departure time is in the future (at least 1 hour from now)
+    const now = new Date();
+    const depTime = new Date(departureDateTime);
+    const minTimeFromNow = 60 * 60 * 1000; // 1 hour
+    if (depTime <= now) {
+      return error(res, 400, 'Departure time cannot be in the past.');
+    }
+    if (depTime - now < minTimeFromNow) {
+      return error(res, 400, 'Departure time must be at least 1 hour from now.');
+    }
+
     const routeData = route
       ? {
           originLatitude: route.originLat,
@@ -53,6 +64,36 @@ const modifyRide = async (req, res, next) => {
       return error(res, 400, `Cannot modify a ${ride.status.toLowerCase()} ride.`);
     }
 
+    // Check if departure time is being changed
+    if (req.body.departureDateTime) {
+      const now = new Date();
+      const newTime = new Date(req.body.departureDateTime);
+      const oldTime = new Date(ride.departureDateTime);
+
+      // Enforce max 10 time changes rate limit
+      if ((ride.timeChangeCount || 0) >= 10) {
+        return error(res, 400, 'Maximum time changes (10) reached for this ride.');
+      }
+
+      // Ensure new time is NOT in the past
+      if (newTime <= now) {
+        return error(res, 400, 'Departure time cannot be in the past.');
+      }
+
+      // Ensure new time is at least 1 hour from now
+      const minTimeFromNow = 60 * 60 * 1000; // 1 hour
+      if (newTime - now < minTimeFromNow) {
+        return error(res, 400, 'Departure time must be at least 1 hour from now.');
+      }
+
+      // Time change must be within 24 hours of the original departure time
+      const maxTimeDiff = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      const timeDiff = Math.abs(newTime - oldTime);
+      if (timeDiff > maxTimeDiff) {
+        return error(res, 400, 'Time can only be changed within ±24 hours of the original departure time.');
+      }
+    }
+
     const allowedFields = [
       'departureLocation', 'destination', 'stops', 'departureDateTime',
       'totalSeats', 'pricePerSeat', 'genderPreference',
@@ -72,6 +113,11 @@ const modifyRide = async (req, res, next) => {
         return error(res, 400, 'Cannot reduce seats below current bookings.');
       }
       updates.availableSeats = newAvailable;
+    }
+
+    // Increment time change counter if time was changed
+    if (updates.departureDateTime) {
+      updates.timeChangeCount = (ride.timeChangeCount || 0) + 1;
     }
 
     const updatedRide = await Ride.findByIdAndUpdate(
@@ -95,7 +141,23 @@ const cancelRide = async (req, res, next) => {
       return error(res, 403, 'You can only cancel your own rides.');
     }
 
+    if (['Completed', 'Cancelled'].includes(ride.status)) {
+      return error(res, 400, `Cannot cancel a ${ride.status.toLowerCase()} ride.`);
+    }
+
+    // Enforce cancellation time limit: can't cancel within 2 hours of departure
+    const now = new Date();
+    const departurTime = new Date(ride.departureDateTime);
+    const timeToDeparture = departurTime - now;
+    const twoHoursInMs = 2 * 60 * 60 * 1000;
+
+    if (timeToDeparture < twoHoursInMs) {
+      return error(res, 400, 'Cannot cancel a ride within 2 hours of departure.');
+    }
+
     ride.status = 'Cancelled';
+    ride.cancellationReason = req.body.reason || 'Cancelled by driver';
+    ride.cancellationDate = new Date();
     await ride.save({ validateModifiedOnly: true });
 
     const confirmedBookings = await Booking.find({

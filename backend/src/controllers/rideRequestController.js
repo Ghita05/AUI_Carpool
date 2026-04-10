@@ -8,6 +8,17 @@ const postRideRequest = async (req, res, next) => {
       passengerCount, maxPrice, notes,
     } = req.body;
 
+    // Validate travel time is in the future (at least 1 hour from now)
+    const now = new Date();
+    const travelTime = new Date(travelDateTime);
+    const minTimeFromNow = 60 * 60 * 1000; // 1 hour
+    if (travelTime <= now) {
+      return error(res, 400, 'Travel time cannot be in the past.');
+    }
+    if (travelTime - now < minTimeFromNow) {
+      return error(res, 400, 'Travel time must be at least 1 hour from now.');
+    }
+
     const request = await RideRequest.create({
       passengerId: req.user._id,
       departureLocation, destination, travelDateTime,
@@ -31,6 +42,23 @@ const modifyRideRequest = async (req, res, next) => {
 
     if (request.status !== 'Open') {
       return error(res, 400, 'Can only modify open requests.');
+    }
+
+    // Check if travel time is being changed
+    if (req.body.travelDateTime) {
+      const now = new Date();
+      const newTime = new Date(req.body.travelDateTime);
+      const minTimeFromNow = 60 * 60 * 1000; // 1 hour
+
+      // Ensure new time is NOT in the past
+      if (newTime <= now) {
+        return error(res, 400, 'Travel time cannot be in the past.');
+      }
+
+      // Ensure new time is at least 1 hour from now
+      if (newTime - now < minTimeFromNow) {
+        return error(res, 400, 'Travel time must be at least 1 hour from now.');
+      }
     }
 
     const allowedFields = [

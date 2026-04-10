@@ -82,6 +82,18 @@ const rideSchema = new mongoose.Schema(
       type: routeSchema,
       default: null,
     },
+    timeChangeCount: {
+      type: Number,
+      default: 0,
+    },
+    cancellationReason: {
+      type: String,
+      default: null,
+    },
+    cancellationDate: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

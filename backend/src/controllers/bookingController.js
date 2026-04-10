@@ -202,20 +202,38 @@ const cancelBooking = async (req, res, next) => {
       return error(res, 400, 'Booking is already cancelled.');
     }
 
+    if (booking.status === 'Completed') {
+      return error(res, 400, 'Cannot cancel a completed booking.');
+    }
+
+    // Get the ride to check departure time
+    const ride = await Ride.findById(booking.rideId);
+    if (!ride) return error(res, 404, 'Associated ride not found.');
+
+    // Enforce cancellation time limit: can't cancel within 2 hours of departure
+    const now = new Date();
+    const departureTime = new Date(ride.departureDateTime);
+    const timeToDeparture = departureTime - now;
+    const twoHoursInMs = 2 * 60 * 60 * 1000;
+
+    if (timeToDeparture < twoHoursInMs) {
+      return error(res, 400, 'Cannot cancel a booking within 2 hours of ride departure.');
+    }
+
     booking.status = 'Cancelled';
     booking.cancellationDate = new Date();
     booking.cancellationReason = reason;
     await booking.save({ validateModifiedOnly: true });
 
-    const ride = await Ride.findByIdAndUpdate(
+    const updatedRide = await Ride.findByIdAndUpdate(
       booking.rideId,
       { $inc: { availableSeats: booking.seatsCount } },
       { new: true }
     );
 
-    if (ride && ride.status === 'Full') {
-      ride.status = 'Active';
-      await ride.save({ validateModifiedOnly: true });
+    if (updatedRide && updatedRide.status === 'Full') {
+      updatedRide.status = 'Active';
+      await updatedRide.save({ validateModifiedOnly: true });
     }
 
     await User.findByIdAndUpdate(req.user._id, {
