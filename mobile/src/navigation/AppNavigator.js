@@ -20,6 +20,7 @@ import RideDetailsScreen     from '../screens/rides/RideDetailsScreen';
 import MyRidesScreen         from '../screens/rides/MyRidesScreen';
 import CreateRideScreen      from '../screens/rides/CreateRideScreen';
 import PostRideRequestScreen from '../screens/rides/PostRideRequestScreen';
+import RideRequestsScreen    from '../screens/rides/RideRequestsScreen';
 
 // Bookings
 import BookRideScreen           from '../screens/bookings/BookRideScreen';
@@ -101,6 +102,7 @@ export default function AppNavigator() {
         <Stack.Screen name="BookingConfirmation"  component={BookingConfirmationScreen} />
         <Stack.Screen name="CreateRide"           component={CreateRideScreen} />
         <Stack.Screen name="PostRideRequest"      component={PostRideRequestScreen} />
+        <Stack.Screen name="RideRequestsScreen"   component={RideRequestsScreen} />
         <Stack.Screen name="UserProfile"          component={UserProfileScreen} />
         <Stack.Screen name="AccountSettings"      component={AccountSettingsScreen} />
       </Stack.Navigator>

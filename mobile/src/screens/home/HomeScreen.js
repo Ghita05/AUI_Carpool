@@ -131,6 +131,9 @@ function formatTime(raw) {
   return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
 
+
+import { searchUsers } from '../../services/rideService';
+
 function RideRequestModal({ visible, destination, onClose }) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -138,7 +141,13 @@ function RideRequestModal({ visible, destination, onClose }) {
   const [notes, setNotes] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [pickerVisible, setPickerVisible] = useState(false);   // controls picker modal
+  const [pickerVisible, setPickerVisible] = useState(false);
+  // Group request state
+  const [groupMode, setGroupMode] = useState(false);
+  const [groupUsers, setGroupUsers] = useState([]); // [{_id, firstName, lastName, email, ...}]
+  const [userSearch, setUserSearch] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
 
   // Build a Date object from current date+time for the picker’s initial value
   const getInitialDateForPicker = () => {
@@ -157,12 +166,21 @@ function RideRequestModal({ visible, destination, onClose }) {
     setTime('');
     setSeats(1);
     setNotes('');
+    setGroupMode(false);
+    setGroupUsers([]);
+    setUserSearch('');
+    setUserSearchResults([]);
+    setUserSearchLoading(false);
     onClose();
   };
 
   const handleSubmit = async () => {
     if (!date || !time) {
       Alert.alert('Missing Info', 'Please select a date and time.');
+      return;
+    }
+    if (groupMode && groupUsers.length < 2) {
+      Alert.alert('Group Request', 'Select at least 2 users for a group request.');
       return;
     }
     const travelDateTime = new Date(`${date}T${time}:00`);
@@ -172,15 +190,32 @@ function RideRequestModal({ visible, destination, onClose }) {
     }
     setLoading(true);
     try {
-      await postRideRequest({
-        departureLocation: 'AUI Campus',
-        destination,
-        travelDateTime: travelDateTime.toISOString(),
-        passengerCount: seats,
-        maxPrice: 200,
-        notes,
-      });
+      let reqObj;
+      if (groupMode) {
+        reqObj = {
+          departureLocation: 'AUI Campus',
+          destination,
+          travelDateTime: travelDateTime.toISOString(),
+          passengerCount: groupUsers.length,
+          maxPrice: 200,
+          notes,
+          groupPassengerIds: groupUsers.map(u => u._id),
+        };
+      } else {
+        reqObj = {
+          departureLocation: 'AUI Campus',
+          destination,
+          travelDateTime: travelDateTime.toISOString(),
+          passengerCount: seats,
+          maxPrice: 200,
+          notes,
+        };
+      }
+      await postRideRequest(reqObj);
       setSubmitted(true);
+      setGroupUsers([]);
+      setUserSearch('');
+      setUserSearchResults([]);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
@@ -252,19 +287,85 @@ function RideRequestModal({ visible, destination, onClose }) {
                   </View>
                 </View>
 
-                <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NUMBER OF SEATS</Text>
-                <View style={st.reqStepperRow}>
+
+                {/* Group Mode Toggle & Group UI */}
+                <View style={{flexDirection:'row',alignItems:'center',marginTop:Spacing.md,marginBottom:10}}>
                   <TouchableOpacity
-                    style={st.reqStepBtn}
-                    onPress={() => seats > 1 && setSeats(s => s - 1)}
+                    style={{flexDirection:'row',alignItems:'center',gap:6,padding:6,borderRadius:8,borderWidth:1,borderColor:groupMode?Colors.primary:Colors.border,backgroundColor:groupMode?Colors.primaryBg:Colors.background,marginRight:10}}
+                    onPress={()=>setGroupMode(g=>!g)}
                   >
-                    <Ionicons name="remove" size={14} color={seats <= 1 ? Colors.textDisabled : Colors.textSecondary} />
+                    <Ionicons name={groupMode?"checkbox-outline":"square-outline"} size={18} color={groupMode?Colors.primary:Colors.textSecondary}/>
+                    <Text style={{color:groupMode?Colors.primary:Colors.textSecondary,fontFamily:'PlusJakartaSans_600SemiBold',fontSize:13}}>Group Request</Text>
                   </TouchableOpacity>
-                  <Text style={st.reqStepVal}>{seats}</Text>
-                  <TouchableOpacity style={st.reqStepBtn} onPress={() => setSeats(s => s + 1)}>
-                    <Ionicons name="add" size={14} color={Colors.primary} />
-                  </TouchableOpacity>
+                  <Text style={{color:Colors.textSecondary,fontSize:12}}>Request for multiple users</Text>
                 </View>
+                {groupMode ? (
+                  <>
+                    <Text style={st.inputLabel}>Add Users to Group</Text>
+                    <TextInput
+                      style={st.reqInput}
+                      value={userSearch}
+                      onChangeText={async (txt) => {
+                        setUserSearch(txt);
+                        if (txt.length >= 2) {
+                          setUserSearchLoading(true);
+                          try {
+                            const res = await searchUsers(txt);
+                            setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id)));
+                          } catch { setUserSearchResults([]); }
+                          setUserSearchLoading(false);
+                        } else {
+                          setUserSearchResults([]);
+                        }
+                      }}
+                      placeholder="Search by name or email"
+                      placeholderTextColor={Colors.textDisabled}
+                    />
+                    {userSearchLoading && <Text style={{color:Colors.textSecondary,fontSize:12,marginTop:4}}>Searching...</Text>}
+                    {userSearchResults.length > 0 && (
+                      <View style={{backgroundColor:Colors.background,borderWidth:1,borderColor:Colors.border,borderRadius:8,marginTop:4}}>
+                        {userSearchResults.map(u => (
+                          <TouchableOpacity key={u._id} style={{padding:10,flexDirection:'row',alignItems:'center',gap:8}} onPress={()=>{
+                            setGroupUsers([...groupUsers,u]);
+                            setUserSearch('');
+                            setUserSearchResults([]);
+                          }}>
+                            <Ionicons name="person-add-outline" size={16} color={Colors.primary}/>
+                            <Text style={{fontSize:13,color:Colors.textPrimary}}>{u.firstName} {u.lastName} <Text style={{color:Colors.textSecondary,fontSize:12}}>({u.email})</Text></Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    {groupUsers.length > 0 && (
+                      <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:8}}>
+                        {groupUsers.map(u => (
+                          <View key={u._id} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
+                            <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}</Text>
+                            <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
+                              <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NUMBER OF SEATS</Text>
+                    <View style={st.reqStepperRow}>
+                      <TouchableOpacity
+                        style={st.reqStepBtn}
+                        onPress={() => seats > 1 && setSeats(s => s - 1)}
+                      >
+                        <Ionicons name="remove" size={14} color={seats <= 1 ? Colors.textDisabled : Colors.textSecondary} />
+                      </TouchableOpacity>
+                      <Text style={st.reqStepVal}>{seats}</Text>
+                      <TouchableOpacity style={st.reqStepBtn} onPress={() => setSeats(s => s + 1)}>
+                        <Ionicons name="add" size={14} color={Colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
 
                 <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NOTES (OPTIONAL)</Text>
                 <TextInput

@@ -137,6 +137,7 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
 
 function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   const [price, setPrice] = useState('');
+  const [seats, setSeats] = useState('');
   const [gender, setGender] = useState('All');
   const [saving, setSaving] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
@@ -146,6 +147,7 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   useEffect(() => {
     if (visible && ride) {
       setPrice(String(ride.pricePerSeat));
+      setSeats(String(ride.totalSeats));
       setGender(ride.genderPreference || 'All');
       setDepartureDateTime(ride.departureDateTime);
     }
@@ -195,27 +197,23 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   };
 
   const handleSave = async () => {
-    const parsedPrice = parseFloat(price);
-    if (!price || isNaN(parsedPrice) || parsedPrice <= 0) {
-      Alert.alert('Invalid Price', 'Please enter a valid price per seat.');
-      return;
-    }
-    
     setSaving(true);
     try {
       const updates = {};
-      if (parsedPrice !== ride.pricePerSeat) updates.pricePerSeat = parsedPrice;
+      // Only allow seats, gender, and time to be changed
+      const parsedSeats = parseInt(seats, 10);
+      if (seats && !isNaN(parsedSeats) && parsedSeats > 0 && parsedSeats !== ride.totalSeats) {
+        updates.totalSeats = parsedSeats;
+      }
       if (gender !== (ride.genderPreference || 'All')) updates.genderPreference = gender;
       if (departureDateTime && departureDateTime !== ride.departureDateTime) {
         updates.departureDateTime = departureDateTime;
       }
-      
       if (Object.keys(updates).length === 0) {
         Alert.alert('No Changes', 'Nothing was changed.');
         onClose();
         return;
       }
-      
       await modifyRide(ride._id, updates);
       Alert.alert('Saved', 'Ride has been updated.');
       onUpdated();
@@ -268,15 +266,29 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
               <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary}/>
             </TouchableOpacity>
 
+
             <Text style={st.mngLabel}>Price per Seat (MAD)</Text>
-            <View style={st.mngInputRow}>
+            <View style={st.mngInputRow} pointerEvents="none">
               <Ionicons name="cash-outline" size={16} color={Colors.textSecondary} style={{marginRight: 8}}/>
               <TextInput
-                style={st.mngInputField}
+                style={[st.mngInputField, {color: Colors.textDisabled}]}
                 value={price}
-                onChangeText={setPrice}
+                editable={false}
+                selectTextOnFocus={false}
                 keyboardType="numeric"
                 placeholder="0"
+              />
+            </View>
+
+            <Text style={st.mngLabel}>Seats</Text>
+            <View style={st.mngInputRow}>
+              <Ionicons name="people-outline" size={16} color={Colors.textSecondary} style={{marginRight: 8}}/>
+              <TextInput
+                style={st.mngInputField}
+                value={seats}
+                onChangeText={setSeats}
+                keyboardType="numeric"
+                placeholder="Number of seats"
               />
             </View>
 

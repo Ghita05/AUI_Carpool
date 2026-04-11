@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../theme';
-import { postRideRequest } from '../../services/rideService';
+import { postRideRequest, searchUsers } from '../../services/rideService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
+import RequestConfirmationModal from '../../components/RequestConfirmationModal';
 
 function SectionCard({ title, children }) {
   return (
@@ -17,42 +18,66 @@ function SectionCard({ title, children }) {
   );
 }
 
+
 export default function PostRideRequestScreen({ navigation }) {
   const [from, setFrom] = useState('AUI Campus');
   const [to, setTo] = useState('');
   const [departureDateTime, setDepartureDateTime] = useState(null);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
-  const [passengers, setPassengers] = useState(1);
+  const [groupMode, setGroupMode] = useState(false);
+  const [groupUsers, setGroupUsers] = useState([]); // [{_id, firstName, lastName, email, ...}]
+  const [userSearch, setUserSearch] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [maxPrice, setMaxPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [posting, setPosting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [lastRequest, setLastRequest] = useState(null);
 
   const handlePost = async () => {
-    if (!from.trim()) { Alert.alert('Missing info', 'Please enter a departure location.'); return; }
-    if (!to.trim())   { Alert.alert('Missing info', 'Please enter a destination.'); return; }
-    if (!departureDateTime) { Alert.alert('Missing info', 'Please select a date and time.'); return; }
-    if (!maxPrice)    { Alert.alert('Missing info', 'Please enter a max budget.'); return; }
+    if (!from.trim()) { alert('Please enter a departure location.'); return; }
+    if (!to.trim())   { alert('Please enter a destination.'); return; }
+    if (!departureDateTime) { alert('Please select a date and time.'); return; }
+    if (!maxPrice)    { alert('Please enter a max budget.'); return; }
+    if (groupMode && groupUsers.length < 2) { alert('Select at least 2 users for a group request.'); return; }
 
     setPosting(true);
     try {
-      await postRideRequest({
-        departureLocation: from.trim(),
-        destination: to.trim(),
-        travelDateTime: departureDateTime.toISOString(),
-        passengerCount: passengers,
-        maxPrice: parseInt(maxPrice) || 100,
-        notes,
-      });
-      Alert.alert('Request Posted!', 'Drivers will be notified of your request.', [
-        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) },
-      ]);
+      let reqObj;
+      if (groupMode) {
+        reqObj = {
+          departureLocation: from.trim(),
+          destination: to.trim(),
+          travelDateTime: departureDateTime.toISOString(),
+          passengerCount: groupUsers.length,
+          maxPrice: parseInt(maxPrice) || 100,
+          notes,
+          groupPassengerIds: groupUsers.map(u => u._id),
+        };
+      } else {
+        reqObj = {
+          departureLocation: from.trim(),
+          destination: to.trim(),
+          travelDateTime: departureDateTime.toISOString(),
+          passengerCount: 1,
+          maxPrice: parseInt(maxPrice) || 100,
+          notes,
+        };
+      }
+      await postRideRequest(reqObj);
+      setLastRequest(reqObj);
+      setShowConfirmation(true);
+      setGroupUsers([]);
+      setUserSearch('');
+      setUserSearchResults([]);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
         err.response?.data?.error ||
         err.message ||
         'Failed to post request.';
-      Alert.alert('Error', msg);
+      alert(msg);
     } finally {
       setPosting(false);
     }
@@ -121,36 +146,90 @@ export default function PostRideRequestScreen({ navigation }) {
           </TouchableOpacity>
         </SectionCard>
 
-        {/* Passengers & Budget */}
+        {/* Group Mode Toggle & Group UI */}
         <SectionCard title="Group & Budget">
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>Passengers</Text>
-              <View style={styles.stepperRowInline}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => passengers > 1 && setPassengers(p => p - 1)}
-                >
-                  <Ionicons name="remove" size={14} color={passengers <= 1 ? Colors.textDisabled : Colors.textSecondary} />
-                </TouchableOpacity>
-                <Text style={styles.stepVal}>{passengers}</Text>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setPassengers(p => p + 1)}>
-                  <Ionicons name="add" size={14} color={Colors.primary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.fieldLabel}>Max Budget (MAD)</Text>
+          <View style={{flexDirection:'row',alignItems:'center',marginBottom:10}}>
+            <TouchableOpacity
+              style={{flexDirection:'row',alignItems:'center',gap:6,padding:6,borderRadius:8,borderWidth:1,borderColor:groupMode?Colors.primary:Colors.border,backgroundColor:groupMode?Colors.primaryBg:Colors.background,marginRight:10}}
+              onPress={()=>setGroupMode(g=>!g)}
+            >
+              <Ionicons name={groupMode?"checkbox-outline":"square-outline"} size={18} color={groupMode?Colors.primary:Colors.textSecondary}/>
+              <Text style={{color:groupMode?Colors.primary:Colors.textSecondary,fontFamily:'PlusJakartaSans_600SemiBold',fontSize:13}}>Group Request</Text>
+            </TouchableOpacity>
+            <Text style={{color:Colors.textSecondary,fontSize:12}}>Request for multiple users</Text>
+          </View>
+          {groupMode && (
+            <>
+              <Text style={styles.fieldLabel}>Add Users to Group</Text>
               <TextInput
                 style={styles.input}
-                value={maxPrice}
-                onChangeText={setMaxPrice}
-                keyboardType="numeric"
-                placeholder="e.g. 80"
+                value={userSearch}
+                onChangeText={async (txt) => {
+                  setUserSearch(txt);
+                  if (txt.length >= 2) {
+                    setUserSearchLoading(true);
+                    try {
+                      const res = await searchUsers(txt);
+                      setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id)));
+                    } catch { setUserSearchResults([]); }
+                    setUserSearchLoading(false);
+                  } else {
+                    setUserSearchResults([]);
+                  }
+                }}
+                placeholder="Search by name or email"
                 placeholderTextColor={Colors.textDisabled}
               />
+              {userSearchLoading && <Text style={{color:Colors.textSecondary,fontSize:12,marginTop:4}}>Searching...</Text>}
+              {userSearchResults.length > 0 && (
+                <View style={{backgroundColor:Colors.background,borderWidth:1,borderColor:Colors.border,borderRadius:8,marginTop:4}}>
+                  {userSearchResults.map(u => (
+                    <TouchableOpacity key={u._id} style={{padding:10,flexDirection:'row',alignItems:'center',gap:8}} onPress={()=>{
+                      setGroupUsers([...groupUsers,u]);
+                      setUserSearch('');
+                      setUserSearchResults([]);
+                    }}>
+                      <Ionicons name="person-add-outline" size={16} color={Colors.primary}/>
+                      <Text style={{fontSize:13,color:Colors.textPrimary}}>{u.firstName} {u.lastName} <Text style={{color:Colors.textSecondary,fontSize:12}}>({u.email})</Text></Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {groupUsers.length > 0 && (
+                <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:8}}>
+                  {groupUsers.map(u => (
+                    <View key={u._id} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
+                      <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}</Text>
+                      <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
+                        <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+          {!groupMode && (
+            <View style={styles.twoCol}>
+              <View style={styles.col}>
+                <Text style={styles.fieldLabel}>Passengers</Text>
+                <View style={styles.stepperRowInline}>
+                  <Text style={styles.stepVal}>1</Text>
+                </View>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.fieldLabel}>Max Budget (MAD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxPrice}
+                  onChangeText={setMaxPrice}
+                  keyboardType="numeric"
+                  placeholder="e.g. 80"
+                  placeholderTextColor={Colors.textDisabled}
+                />
+              </View>
             </View>
-          </View>
+          )}
         </SectionCard>
 
         {/* Notes */}
@@ -177,6 +256,14 @@ export default function PostRideRequestScreen({ navigation }) {
         onConfirm={(selectedDateTime) => {
           setDepartureDateTime(selectedDateTime);
           setShowDateTimePicker(false);
+        }}
+      />
+      <RequestConfirmationModal
+        visible={showConfirmation}
+        request={lastRequest}
+        onClose={() => {
+          setShowConfirmation(false);
+          navigation.navigate('Main', { screen: 'Home' });
         }}
       />
 

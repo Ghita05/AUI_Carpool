@@ -306,10 +306,16 @@ export default function MyRidesScreen({ navigation }) {
             <Text style={styles.ctaBtnText}>Find a Ride</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.ctaBtn} onPress={() => navigation.navigate('CreateRide')}>
-            <Ionicons name="add" size={16} color={Colors.textWhite} />
-            <Text style={styles.ctaBtnText}>Post a Ride</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.ctaBtn} onPress={() => navigation.navigate('CreateRide')}>
+              <Ionicons name="add" size={16} color={Colors.textWhite} />
+              <Text style={styles.ctaBtnText}>Post a Ride</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.ctaBtn, { marginTop: 10, backgroundColor: Colors.primaryLight }]} onPress={() => navigation.navigate('RideRequestsScreen')}>
+              <Ionicons name="list-outline" size={16} color={Colors.textWhite} />
+              <Text style={styles.ctaBtnText}>View Ride Requests</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
 

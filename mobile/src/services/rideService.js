@@ -1,3 +1,10 @@
+// ═══════════════════════════════════════════
+// USER SEARCH (for group ride requests)
+// ═══════════════════════════════════════════
+export const searchUsers = async (query) => {
+  const { data } = await api.get('/rides/users/search', { params: { q: query } });
+  return data;
+};
 import api from './api';
 
 // ═══════════════════════════════════════════
@@ -70,6 +77,11 @@ export const deleteRideRequest = async (requestId) => {
 
 export const acceptRideRequest = async (requestId, rideId) => {
   const { data } = await api.put(`/rides/requests/${requestId}/accept`, { rideId });
+  return data;
+};
+
+export const dismissRideRequest = async (requestId) => {
+  const { data } = await api.put(`/rides/requests/${requestId}/dismiss`);
   return data;
 };
 
