@@ -4,10 +4,27 @@ const ride = require('../controllers/rideController');
 const booking = require('../controllers/bookingController');
 const rideRequest = require('../controllers/rideRequestController');
 const { authenticate, authorize } = require('../middleware/auth');
+
+// ═══════════════════════════════════════════
+// BULK USER FETCH (for group ride requests)
+// ═══════════════════════════════════════════
+const User = require('../models/User');
+router.post('/users/by-ids', authenticate, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.json({ users: [] });
+    const users = await User.find({ _id: { $in: ids } })
+      .select('firstName lastName email auiId profilePicture _id');
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: 'User bulk fetch failed.' });
+  }
+});
+// Allow group member to leave a pending group request
+router.put('/requests/:requestId/leave', authenticate, rideRequest.leaveRideRequest);
 // ═══════════════════════════════════════════
 // USER SEARCH (for group ride requests)
 // ═══════════════════════════════════════════
-const User = require('../models/User');
 router.get('/users/search', authenticate, async (req, res) => {
   try {
     const { q } = req.query;

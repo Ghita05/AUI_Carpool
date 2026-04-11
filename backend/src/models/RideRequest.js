@@ -1,7 +1,12 @@
-const mongoose = require('mongoose');
+
+    const mongoose = require('mongoose');
 
 const rideRequestSchema = new mongoose.Schema(
   {
+    groupPassengerIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: [],
+    },
     passengerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

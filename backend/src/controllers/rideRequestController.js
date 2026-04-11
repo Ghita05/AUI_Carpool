@@ -1,4 +1,7 @@
-const { Ride, Vehicle, User } = require('../models');
+
+// Ensure all models are imported, including Vehicle
+const { RideRequest, Notification, User, Vehicle, Ride } = require('../models');
+
 // Accept a ride request: create a ride for the driver, create booking(s) for passenger(s), notify, mark request as accepted
 const acceptRideRequest = async (req, res, next) => {
   try {
@@ -30,25 +33,66 @@ const acceptRideRequest = async (req, res, next) => {
 
     // Create booking(s) for the passenger(s)
     const Booking = require('../models/Booking');
-    await Booking.create({
-      rideId: ride._id,
-      passengerId: request.passengerId,
-      seatsCount: request.passengerCount,
-      status: 'Confirmed',
-    });
+    const Notification = require('../models/Notification');
+    const Message = require('../models/Message');
+    let groupIds = request.groupPassengerIds || [];
+    // Always include the owner
+    if (!groupIds.includes(request.passengerId?.toString())) {
+      groupIds = [request.passengerId?.toString(), ...groupIds.map(id => id.toString())];
+    }
+    // Remove duplicates
+    groupIds = [...new Set(groupIds)];
+
+    if (groupIds.length > 1) {
+      // Group request: create a booking for each member
+      await Promise.all(groupIds.map(async (userId) => {
+        await Booking.create({
+          rideId: ride._id,
+          passengerId: userId,
+          seatsCount: 1,
+          status: 'Confirmed',
+        });
+        await Notification.create({
+          userId,
+          title: 'Ride Request Accepted',
+          content: `Your group ride request to ${request.destination} was accepted. A ride has been created and you have been booked.`,
+          type: 'Alert',
+        });
+        // Automated message from driver
+        await Message.create({
+          senderId: driverId,
+          receiverId: userId,
+          rideId: ride._id,
+          content: `Hi! I have accepted your group ride request to ${request.destination}. See you soon!`,
+        });
+      }));
+    } else {
+      // Solo request
+      await Booking.create({
+        rideId: ride._id,
+        passengerId: request.passengerId,
+        seatsCount: request.passengerCount,
+        status: 'Confirmed',
+      });
+      await Notification.create({
+        userId: request.passengerId,
+        title: 'Ride Request Accepted',
+        content: `Your ride request to ${request.destination} was accepted. A ride has been created and you have been booked.`,
+        type: 'Alert',
+      });
+      // Automated message from driver
+      await Message.create({
+        senderId: driverId,
+        receiverId: request.passengerId,
+        rideId: ride._id,
+        content: `Hi! I have accepted your ride request to ${request.destination}. See you soon!`,
+      });
+    }
 
     // Mark request as accepted and link ride
     request.status = 'Accepted';
     request.acceptedRideId = ride._id;
     await request.save({ validateModifiedOnly: true });
-
-    // Notify the passenger
-    await Notification.create({
-      userId: request.passengerId,
-      title: 'Ride Request Accepted',
-      content: `Your ride request to ${request.destination} was accepted. A ride has been created and you have been booked.`,
-      type: 'Alert',
-    });
 
     return success(res, 200, 'Ride request accepted, ride created, and booking confirmed.', { ride });
   } catch (err) {
@@ -74,7 +118,7 @@ const dismissRideRequest = async (req, res, next) => {
     next(err);
   }
 };
-const { RideRequest, Notification } = require('../models');
+// Duplicate import removed. Already declared at the top.
 const { success, error } = require('../utils/responses');
 
 const postRideRequest = async (req, res, next) => {
@@ -97,14 +141,18 @@ const postRideRequest = async (req, res, next) => {
 
     // If groupPassengerIds is present and is an array, treat as group request
     if (Array.isArray(groupPassengerIds) && groupPassengerIds.length > 1) {
+      // Always include the creator (owner) in groupPassengerIds
+      let groupIds = groupPassengerIds.map(id => id.toString());
+      const ownerId = req.user._id.toString();
+      if (!groupIds.includes(ownerId)) groupIds = [ownerId, ...groupIds];
       // Validate all users exist
-      const users = await User.find({ _id: { $in: groupPassengerIds } });
-      if (users.length !== groupPassengerIds.length) {
+      const users = await User.find({ _id: { $in: groupIds } });
+      if (users.length !== groupIds.length) {
         return error(res, 400, 'One or more selected users do not exist.');
       }
       // Prevent duplicate requests for any user in group for same time/location
       const existing = await RideRequest.findOne({
-        passengerId: { $in: groupPassengerIds },
+        passengerId: { $in: groupIds },
         departureLocation,
         destination,
         travelDateTime,
@@ -113,13 +161,25 @@ const postRideRequest = async (req, res, next) => {
       if (existing) {
         return error(res, 409, 'One or more users already have an open request for this ride/time.');
       }
+      // No restriction on user role (Driver/Passenger) for group membership
       const request = await RideRequest.create({
         passengerId: req.user._id, // requester is the owner
         departureLocation, destination, travelDateTime,
-        passengerCount: groupPassengerIds.length,
+        passengerCount: groupIds.length,
         maxPrice, notes: notes || '',
-        groupPassengerIds,
+        groupPassengerIds: groupIds,
       });
+      // Notify all group members (including requester)
+      const Notification = require('../models/Notification');
+      const uniqueMembers = [...new Set(groupIds)];
+      await Promise.all(uniqueMembers.map(async (userId) => {
+        await Notification.create({
+          userId,
+          title: 'Ride Request Submitted',
+          content: `A group ride request to ${destination} was submitted.`,
+          type: 'Alert',
+        });
+      }));
       return success(res, 201, 'Group ride request posted.', { requestId: request._id, request });
     }
 
@@ -143,7 +203,54 @@ const postRideRequest = async (req, res, next) => {
       passengerCount: 1,
       maxPrice, notes: notes || '',
     });
+    // Notify requester
+    const Notification = require('../models/Notification');
+    await Notification.create({
+      userId: req.user._id,
+      title: 'Ride Request Submitted',
+      content: `Your ride request to ${destination} was submitted.`,
+      type: 'Alert',
+    });
     return success(res, 201, 'Ride request posted.', { requestId: request._id, request });
+  } catch (err) {
+    next(err);
+  }
+};
+// Allow group member to leave a pending group request
+const leaveRideRequest = async (req, res, next) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+    const request = await RideRequest.findById(requestId);
+    if (!request) return error(res, 404, 'Ride request not found.');
+    if (request.status !== 'Open') return error(res, 400, 'Can only leave pending requests.');
+    let groupIds = (request.groupPassengerIds || []).map(id => id.toString());
+    if (!groupIds.includes(userId)) return error(res, 403, 'You are not a member of this group request.');
+    // If owner is leaving, must transfer ownership
+    if (request.passengerId.toString() === userId) {
+      // Remove self from group
+      groupIds = groupIds.filter(id => id !== userId);
+      if (groupIds.length === 0) {
+        // No one left, delete request
+        await RideRequest.findByIdAndDelete(requestId);
+        return success(res, 200, 'Request deleted as last member left.');
+      }
+      // Transfer ownership
+      const newOwnerId = req.body.newOwnerId || groupIds[0];
+      if (!groupIds.includes(newOwnerId)) return error(res, 400, 'New owner must be a group member.');
+      request.passengerId = newOwnerId;
+      request.groupPassengerIds = groupIds;
+      request.passengerCount = groupIds.length;
+      await request.save();
+      return success(res, 200, 'Ownership transferred and you have left the group request.', { request });
+    } else {
+      // Non-owner leaves
+      groupIds = groupIds.filter(id => id !== userId);
+      request.groupPassengerIds = groupIds;
+      request.passengerCount = groupIds.length;
+      await request.save();
+      return success(res, 200, 'You have left the group request.', { request });
+    }
   } catch (err) {
     next(err);
   }
@@ -154,8 +261,9 @@ const modifyRideRequest = async (req, res, next) => {
     const request = await RideRequest.findById(req.params.requestId);
     if (!request) return error(res, 404, 'Ride request not found.');
 
+    // Only the original requester can edit
     if (request.passengerId.toString() !== req.user._id.toString()) {
-      return error(res, 403, 'You can only modify your own requests.');
+      return error(res, 403, 'Only the user who created the request can edit it.');
     }
 
     if (request.status !== 'Open') {
@@ -206,10 +314,15 @@ const deleteRideRequest = async (req, res, next) => {
     const request = await RideRequest.findById(req.params.requestId);
     if (!request) return error(res, 404, 'Ride request not found.');
 
+    // Only the owner can delete, and only if it's not a group request with other members
     if (request.passengerId.toString() !== req.user._id.toString()) {
-      return error(res, 403, 'You can only delete your own requests.');
+      return error(res, 403, 'Only the user who created the request can delete it.');
     }
-
+    // If group request and there are other members, must use leave endpoint
+    const groupIds = (request.groupPassengerIds || []).map(id => id.toString()).filter(id => id !== req.user._id.toString());
+    if (groupIds.length > 0) {
+      return error(res, 403, 'You must transfer ownership or leave the group before deleting. Use the leave endpoint.');
+    }
     await RideRequest.findByIdAndDelete(req.params.requestId);
     return success(res, 200, 'Ride request deleted.');
   } catch (err) {
@@ -240,8 +353,11 @@ const getRideRequests = async (req, res, next) => {
       filter._id = { $nin: user.dismissedRideRequests };
     }
 
-    // Exclude requests where the current user is the passenger (driver shouldn't see their own requests)
-    filter.passengerId = { $ne: req.user._id };
+    // Exclude requests where the current user is the passenger or in groupPassengerIds (driver shouldn't see their own requests)
+    filter.$and = [
+      { passengerId: { $ne: req.user._id } },
+      { groupPassengerIds: { $not: { $elemMatch: { $eq: req.user._id } } } },
+    ];
 
     const sortField = sortBy === 'passengers' ? 'passengerCount' : 'travelDateTime';
     const sortOrder = order === 'asc' ? 1 : -1;
@@ -258,8 +374,13 @@ const getRideRequests = async (req, res, next) => {
 
 const getMyRideRequests = async (req, res, next) => {
   try {
-    const requests = await RideRequest.find({ passengerId: req.user._id })
-      .sort({ creationDate: -1 });
+    // Find requests where user is owner or in groupPassengerIds
+    const requests = await RideRequest.find({
+      $or: [
+        { passengerId: req.user._id },
+        { groupPassengerIds: { $in: [req.user._id] } },
+      ],
+    }).sort({ creationDate: -1 });
     return success(res, 200, `${requests.length} request(s).`, { requests });
   } catch (err) {
     next(err);
@@ -274,4 +395,5 @@ module.exports = {
   dismissRideRequest,
   getRideRequests,
   getMyRideRequests,
+  leaveRideRequest,
 };
