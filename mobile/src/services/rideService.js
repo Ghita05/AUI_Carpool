@@ -1,3 +1,29 @@
+// Bulk fetch users by array of IDs (for group ride requests)
+export const getUsersByIds = async (ids) => {
+  const { data } = await api.post('/rides/users/by-ids', { ids });
+  return data;
+};
+// ═══════════════════════════════════════════
+// GROUP RIDE REQUESTS (NEW)
+// ═══════════════════════════════════════════
+
+// Leave group ride request
+export const leaveGroupRideRequest = async (requestId) => {
+  const { data } = await api.put(`/rides/requests/${requestId}/leave`);
+  return data;
+};
+
+// Remove a member from group ride request (owner only)
+export const removeGroupMember = async (requestId, userId) => {
+  const { data } = await api.put(`/rides/requests/${requestId}/remove-member`, { userId });
+  return data;
+};
+
+// Transfer group owner (owner only)
+export const transferGroupOwner = async (requestId, newOwnerId) => {
+  const { data } = await api.put(`/rides/requests/${requestId}/transfer-owner`, { newOwnerId });
+  return data;
+};
 // ═══════════════════════════════════════════
 // USER SEARCH (for group ride requests)
 // ═══════════════════════════════════════════
@@ -71,8 +97,15 @@ export const modifyRideRequest = async (requestId, updates) => {
 };
 
 export const deleteRideRequest = async (requestId) => {
-  const { data } = await api.delete(`/rides/requests/${requestId}`);
-  return data;
+  console.log('[deleteRideRequest] Sending DELETE to:', `/rides/requests/${requestId}`);
+  try {
+    const { data } = await api.delete(`/rides/requests/${requestId}`);
+    console.log('[deleteRideRequest] Success:', data);
+    return data;
+  } catch (err) {
+    console.log('[deleteRideRequest] Error:', err?.response?.data || err?.message || err);
+    throw err;
+  }
 };
 
 export const acceptRideRequest = async (requestId, rideId) => {

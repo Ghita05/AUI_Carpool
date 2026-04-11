@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,19 +10,33 @@ import { useAuth } from '../../context/AuthContext';
 import { getMyRides } from '../../services/rideService';
 import { getCurrentBookings, getBookingHistory } from '../../services/bookingService';
 import CancelBookingModal from '../../components/CancelBookingModal';
+import { getMyRideRequests, modifyRideRequest, deleteRideRequest, leaveGroupRideRequest, transferGroupOwner, getUsersByIds } from '../../services/rideService';
+import EditRideRequestModal from '../../components/EditRideRequestModal';
 
 // Data fetched from API — see useEffect below
 
 const STATUS_STYLES = {
-  upcoming:  { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
-  completed: { bg: Colors.background,  text: Colors.textSecondary,  label: 'Completed' },
-  cancelled: { bg: '#FEF2F2',          text: Colors.error,          label: 'Cancelled' },
+  confirmed:   { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
+  open:        { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Pending' },
+  accepted:    { bg: Colors.background,  text: Colors.textSecondary,  label: 'Accepted' },
+  completed:   { bg: Colors.background,  text: Colors.textSecondary,  label: 'Completed' },
+  cancelled:   { bg: '#FEF2F2',          text: Colors.error,          label: 'Cancelled' },
+  expired:     { bg: '#FEF2F2',          text: Colors.error,          label: 'Expired' },
 };
 
 function StatusBadge({ status }) {
-  const s = STATUS_STYLES[status] || STATUS_STYLES.completed;
+  let normalized = status?.toLowerCase();
+  // Map backend statuses to display
+  if (normalized === 'confirmed') normalized = 'confirmed';
+  else if (normalized === 'open') normalized = 'open';
+  else if (normalized === 'accepted') normalized = 'accepted';
+  else if (normalized === 'completed') normalized = 'completed';
+  else if (normalized === 'cancelled') normalized = 'cancelled';
+  else if (normalized === 'expired') normalized = 'expired';
+  else normalized = 'completed';
+  const s = STATUS_STYLES[normalized] || STATUS_STYLES.completed;
   return (
-    <View style={[styles.badge, { backgroundColor: s.bg }]}>
+    <View style={[styles.badge, { backgroundColor: s.bg }]}> 
       <Text style={[styles.badgeText, { color: s.text }]}>{s.label}</Text>
     </View>
   );
@@ -150,6 +164,65 @@ function DriverRideCard({ ride, navigation }) {
   );
 }
 
+function RideRequestCard({ request, isPast, onEdit, onCancel }) {
+  // Determine status for badge
+  let status = request.status?.toLowerCase();
+  const now = new Date();
+  const travelDate = new Date(request.travelDateTime);
+  if (status === 'open') {
+    if (travelDate < now) status = 'expired';
+    else status = 'pending';
+  }
+  if (status === 'accepted') status = 'completed';
+  return (
+    <View style={styles.rideCard}>
+      <View style={styles.cardTopRow}>
+        <View style={styles.routeBlock}>
+          <View style={styles.routeDotRow}>
+            <View style={[styles.routeDot, { backgroundColor: Colors.primary }]} />
+            <View style={styles.routeLine} />
+            <View style={[styles.routeDot, { backgroundColor: Colors.accent }]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.routeCity}>{request.departureLocation}</Text>
+            <Text style={styles.routeCity}>{request.destination}</Text>
+          </View>
+        </View>
+        <StatusBadge status={status} />
+      </View>
+      <View style={styles.metaRow}>
+        <View style={styles.metaItem}>
+          <Ionicons name="calendar-outline" size={12} color={Colors.textSecondary} />
+          <Text style={styles.metaText}>{travelDate.toLocaleDateString()}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Ionicons name="time-outline" size={12} color={Colors.textSecondary} />
+          <Text style={styles.metaText}>{travelDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Ionicons name="cash-outline" size={12} color={Colors.textSecondary} />
+          <Text style={styles.metaText}>{request.maxPrice} MAD</Text>
+        </View>
+      </View>
+      <View style={styles.cardBottom}>
+        <Text style={styles.driverName}>Requested for {request.passengerCount} {request.passengerCount > 1 ? 'people' : 'person'}</Text>
+        {!isPast && status === 'pending' && (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => onEdit?.(request)}>
+              <Ionicons name="create-outline" size={14} color={Colors.primary} />
+              <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => onCancel?.(request)}>
+              <Ionicons name="trash-outline" size={14} color={Colors.error} />
+              <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function MyRidesScreen({ navigation }) {
   const { user, isDriver } = useAuth();
   const [role, setRole] = useState(isDriver ? 'Driver' : 'Passenger');
@@ -158,6 +231,127 @@ export default function MyRidesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedRideToCancel, setSelectedRideToCancel] = useState(null);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pastRequests, setPastRequests] = useState([]);
+  const [editingRequest, setEditingRequest] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
+  // Edit ride request handler: open modal
+  // Only owner can edit
+  const handleEditRequest = async (request) => {
+    if (user && request.passengerId && user._id === request.passengerId) {
+      let groupUsers = [];
+      if (request.groupPassengerIds && request.groupPassengerIds.length > 0) {
+        try {
+          const res = await getUsersByIds(request.groupPassengerIds);
+          groupUsers = res.users || [];
+        } catch { groupUsers = []; }
+      }
+      // Always include the owner
+      if (request.passenger && !groupUsers.some(u => u && u._id === request.passenger._id)) {
+        groupUsers = [request.passenger, ...groupUsers];
+      }
+      setEditingRequest({ ...request, groupUsers });
+    } else {
+      alert('Only the group owner can edit this request.');
+    }
+  };
+
+  // Save edit
+  const handleSaveEdit = async (updates) => {
+    setEditLoading(true);
+    try {
+      await modifyRideRequest(editingRequest._id, updates);
+      // Update local state for instant feedback
+      setPendingRequests(prev => prev.map(r => r._id === editingRequest._id ? { ...r, ...updates } : r));
+      setEditingRequest(null);
+    } catch {}
+    setEditLoading(false);
+  };
+
+  // Cancel ride request handler
+  // useAuth is already called at the top-level, do not redeclare user here
+  const [showOwnerModal, setShowOwnerModal] = useState(false);
+  const [ownerTransferRequest, setOwnerTransferRequest] = useState(null);
+  const [ownerCandidates, setOwnerCandidates] = useState([]);
+  const handleCancelRequest = async (request) => {
+    alert('Cancel handler called. Request _id: ' + request?._id + ', passengerId: ' + request?.passengerId);
+    console.log('CANCEL REQUEST:', request);
+    setEditLoading(true);
+    try {
+      const isOwner = user && request.passengerId && user._id === request.passengerId;
+      const groupIds = (request.groupPassengerIds || []).filter(id => id !== request.passengerId);
+      console.log('[handleCancelRequest] isOwner:', isOwner, 'groupIds:', groupIds);
+      if (isOwner) {
+        if (groupIds.length === 0) {
+          console.log('[handleCancelRequest] About to call deleteRideRequest for', request._id);
+          await deleteRideRequest(request._id);
+          alert('DELETE endpoint called for ' + request._id);
+          setPendingRequests(prev => prev.filter(r => r._id !== request._id));
+        } else if (groupIds.length === 1) {
+          // Only one other member, transfer automatically
+          await transferGroupOwner(request._id, groupIds[0]);
+          await leaveGroupRideRequest(request._id);
+          setPendingRequests(prev => prev.filter(r => r._id !== request._id));
+        } else {
+          // Multiple candidates, show modal to select new owner
+          setOwnerCandidates(groupIds);
+          setOwnerTransferRequest(request);
+          setShowOwnerModal(true);
+        }
+      } else {
+        await leaveGroupRideRequest(request._id);
+        setPendingRequests(prev => prev.filter(r => r._id !== request._id));
+      }
+    } catch (err) {
+      console.log('[handleCancelRequest] Error:', err);
+      alert('Error: ' + (err?.response?.data?.message || err?.message || 'Failed to cancel request.'));
+    }
+    setEditLoading(false);
+  };
+
+  // Owner transfer modal handler
+  const handleSelectNewOwner = async (newOwnerId) => {
+    if (!ownerTransferRequest) return;
+    setEditLoading(true);
+    try {
+      await transferGroupOwner(ownerTransferRequest._id, newOwnerId);
+      await leaveGroupRideRequest(ownerTransferRequest._id);
+      setPendingRequests(prev => prev.filter(r => r._id !== ownerTransferRequest._id));
+    } catch (err) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to transfer ownership.');
+    }
+    setShowOwnerModal(false);
+    setOwnerTransferRequest(null);
+    setOwnerCandidates([]);
+    setEditLoading(false);
+  };
+      <EditRideRequestModal
+        visible={!!editingRequest}
+        request={editingRequest}
+        onClose={() => setEditingRequest(null)}
+        onSave={handleSaveEdit}
+        currentUser={user}
+        onCancelRequest={handleCancelRequest}
+      />
+
+      {/* Owner transfer modal */}
+      {showOwnerModal && ownerTransferRequest && (
+        <Modal visible transparent animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '80%' }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select New Owner</Text>
+              {(ownerTransferRequest.groupUsers || []).filter(u => ownerCandidates.includes(u._id)).map(u => (
+                <TouchableOpacity key={u._id} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' }} onPress={() => handleSelectNewOwner(u._id)}>
+                  <Text style={{ fontSize: 16 }}>{u.firstName} {u.lastName} <Text style={{ color: '#888', fontSize: 13 }}>({u.email})</Text></Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setShowOwnerModal(false)}>
+                <Text style={{ color: 'red', textAlign: 'center' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
 
   const handleCancelPress = (ride) => {
     setSelectedRideToCancel(ride);
@@ -168,54 +362,74 @@ export default function MyRidesScreen({ navigation }) {
     setLoading(true);
     try {
       if (role === 'Passenger') {
+        // Fetch bookings and ride requests in parallel
+        const [bookingsRes, requestsRes] = await Promise.all([
+          getCurrentBookings(),
+          getMyRideRequests()
+        ]);
+
+        // Bookings (actual rides)
+        const bookings = (bookingsRes.data?.bookings || []).map(b => {
+          const ride = b.rideId || {};
+          const driver = ride.driverId || {};
+          return {
+            id: b._id,
+            rideId: ride._id,
+            from: ride.departureLocation,
+            to: ride.destination,
+            date: new Date(ride.departureDateTime).toLocaleDateString(),
+            time: new Date(ride.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            cost: b.price,
+            driver: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}` : '',
+            driverInitials: driver.firstName ? (driver.firstName[0] + (driver.lastName ? driver.lastName[0] : '')).toUpperCase() : '',
+            driverRating: driver.rating || '',
+            rated: b.rated,
+            status: b.status,
+          };
+        });
+
+        // Ride requests
+        const now = new Date();
+        const requests = requestsRes.data?.requests || [];
+        // Upcoming requests: status 'Open' and future date
+        const upcomingRequests = requests.filter(r => {
+          const travelDate = new Date(r.travelDateTime);
+          return r.status === 'Open' && travelDate >= now;
+        });
+        // Past/expired requests: all others
+        const expiredRequests = requests.filter(r => {
+          const travelDate = new Date(r.travelDateTime);
+          return r.status !== 'Open' || travelDate < now;
+        });
+        setPendingRequests(upcomingRequests);
+        setPastRequests(expiredRequests);
+
         if (tab === 'upcoming') {
-          const res = await getCurrentBookings();
-          // Map bookings to card shape.
-          // Check actual departure time to determine if ride is truly "upcoming" or past
-          setData((res.data?.bookings || []).map(b => {
-            const r = b.rideId || {};
-            const d = r.driverId || {};
-            const departureDateTime = r.departureDateTime ? new Date(r.departureDateTime) : null;
-            const now = new Date();
-            const isPastRide = departureDateTime && departureDateTime < now;
-            const rawStatus = b.status?.toLowerCase() || 'confirmed';
-            const status = isPastRide ? 'completed' : (rawStatus === 'confirmed' ? 'upcoming' : rawStatus);
-            return {
-              id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
-              date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
-              time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
-              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0, status,
-              driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
-              driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
-              driverRating: d.averageRating || 0,
-              rideId: r._id, bookingId: b._id,
-              rideData: r,
-              bookingData: b,
-            };
-          }));
+          // Show bookings with status 'Confirmed' and future ride date
+          setData(bookings.filter(b => b.status === 'Confirmed' && new Date(b.date.split('/').reverse().join('-')) >= now));
         } else {
-          const res = await getBookingHistory();
-          setData((res.data?.bookings || []).map(b => {
-            const r = b.rideId || {};
-            const d = r.driverId || {};
-            const departureDateTime = r.departureDateTime ? new Date(r.departureDateTime) : null;
-            const now = new Date();
-            const isPastRide = departureDateTime && departureDateTime < now;
-            const rawStatus = b.status?.toLowerCase() || 'completed';
-            const status = isPastRide ? 'completed' : (rawStatus === 'confirmed' ? 'upcoming' : rawStatus);
+          // For past tab, fetch booking history
+          const historyRes = await getBookingHistory();
+          const pastBookings = (historyRes.data?.bookings || []).map(b => {
+            const ride = b.rideId || {};
+            const driver = ride.driverId || {};
             return {
-              id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
-              date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
-              time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
-              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0, status,
-              driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
-              driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
-              driverRating: d.averageRating || 0,
-              rated: false, rideId: r._id, bookingId: b._id,
-              rideData: r,
-              bookingData: b,
+              id: b._id,
+              rideId: ride._id,
+              from: ride.departureLocation,
+              to: ride.destination,
+              date: new Date(ride.departureDateTime).toLocaleDateString(),
+              time: new Date(ride.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              cost: b.price,
+              driver: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}` : '',
+              driverInitials: driver.firstName ? (driver.firstName[0] + (driver.lastName ? driver.lastName[0] : '')).toUpperCase() : '',
+              driverRating: driver.rating || '',
+              rated: b.rated,
+              status: b.status,
             };
-          }));
+          });
+          // Show bookings with status 'Completed' or 'Cancelled', or past ride date
+          setData(pastBookings.filter(b => b.status === 'Completed' || b.status === 'Cancelled' || new Date(b.date.split('/').reverse().join('-')) < now));
         }
       } else {
         // Driver view
@@ -232,19 +446,29 @@ export default function MyRidesScreen({ navigation }) {
             rideId: r._id,
           };
         }));
+        setPendingRequests([]);
+        setPastRequests([]);
       }
-    } catch { setData([]); }
+    } catch {
+      setData([]); setPendingRequests([]); setPastRequests([]);
+    }
     finally { setLoading(false); }
   }, [role, tab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Re-fetch whenever this screen regains focus (e.g., returning from RideDetails after cancel)
   useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+      <EditRideRequestModal
+        visible={!!editingRequest}
+        request={editingRequest}
+        onClose={() => setEditingRequest(null)}
+        onSave={handleSaveEdit}
+        currentUser={user}
+        onCancelRequest={handleCancelRequest}
+      />
 
       {/* Header */}
       <View style={styles.header}>
@@ -285,17 +509,85 @@ export default function MyRidesScreen({ navigation }) {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: Spacing.lg }}>
         {loading ? (
           <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 40 }} />
-        ) : data.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="car-outline" size={40} color={Colors.border} />
-            <Text style={styles.emptyText}>No {tab} rides</Text>
-          </View>
-        ) : data.map(ride => (
-          role === 'Passenger'
-            ? <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
-            : <DriverRideCard    key={ride.id} ride={ride} navigation={navigation} />
-        ))}
-        <View style={{ height: 80 }} />
+        ) : (
+          <>
+            {role === 'Passenger' && tab === 'upcoming' && (
+              <>
+                {data.length > 0 && (
+                  <View style={{ marginBottom: Spacing.lg }}>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Upcoming Rides</Text>
+                    {data.map(ride => (
+                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
+                    ))}
+                  </View>
+                )}
+                {pendingRequests.length > 0 && (
+                  <View style={{ marginBottom: Spacing.lg }}>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Pending Ride Requests</Text>
+                    {pendingRequests.map(req => (
+                      <RideRequestCard
+                        key={req._id}
+                        request={req}
+                        isPast={false}
+                        onEdit={handleEditRequest}
+                        onCancel={handleCancelRequest}
+                      />
+                    ))}
+                  </View>
+                )}
+                {data.length === 0 && pendingRequests.length === 0 && (
+                  <View style={styles.empty}>
+                    <Ionicons name="car-outline" size={40} color={Colors.border} />
+                    <Text style={styles.emptyText}>No upcoming rides or requests</Text>
+                  </View>
+                )}
+              </>
+            )}
+            {role === 'Passenger' && tab === 'past' && (
+              <>
+                {data.length > 0 && (
+                  <View style={{ marginBottom: Spacing.lg }}>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Past Rides</Text>
+                    {data.map(ride => (
+                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
+                    ))}
+                  </View>
+                )}
+                {pastRequests.length > 0 && (
+                  <View style={{ marginBottom: Spacing.lg }}>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Expired Ride Requests</Text>
+                    {pastRequests.map(req => (
+                      <RideRequestCard
+                        key={req._id}
+                        request={req}
+                        isPast={true}
+                      />
+                    ))}
+                  </View>
+                )}
+                {data.length === 0 && pastRequests.length === 0 && (
+                  <View style={styles.empty}>
+                    <Ionicons name="car-outline" size={40} color={Colors.border} />
+                    <Text style={styles.emptyText}>No past rides or expired requests</Text>
+                  </View>
+                )}
+              </>
+            )}
+            {role !== 'Passenger' && (
+              <>
+                {data.length === 0 ? (
+                  <View style={styles.empty}>
+                    <Ionicons name="car-outline" size={40} color={Colors.border} />
+                    <Text style={styles.emptyText}>No {tab} rides</Text>
+                  </View>
+                ) : data.map(ride => (
+                  <DriverRideCard key={ride.id} ride={ride} navigation={navigation} />
+                ))}
+              </>
+            )}
+            <View style={{ height: 80 }} />
+          </>
+        )}
       </ScrollView>
 
       {/* Bottom CTA */}
