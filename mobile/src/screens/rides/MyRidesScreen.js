@@ -9,6 +9,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { getMyRides } from '../../services/rideService';
 import { getCurrentBookings, getBookingHistory } from '../../services/bookingService';
+import CancelBookingModal from '../../components/CancelBookingModal';
 
 // Data fetched from API — see useEffect below
 
@@ -27,7 +28,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function PassengerRideCard({ ride, navigation }) {
+function PassengerRideCard({ ride, navigation, onCancel }) {
   const isPast = ride.status !== 'upcoming';
   return (
     <View style={styles.rideCard}>
@@ -71,9 +72,18 @@ function PassengerRideCard({ ride, navigation }) {
           <Text style={styles.driverRating}>{ride.driverRating}</Text>
         </View>
         {!isPast ? (
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
-            <Text style={styles.actionBtnText}>View Details</Text>
-          </TouchableOpacity>
+          <View style={styles.actionBtnGroup}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => onCancel(ride)}
+            >
+              <Ionicons name="close-circle-outline" size={12} color={Colors.error} />
+              <Text style={[styles.actionBtnText, {color: Colors.error}]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
+              <Text style={styles.actionBtnText}>View Details</Text>
+            </TouchableOpacity>
+          </View>
         ) : ride.status === 'completed' && !ride.rated ? (
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnAccent]}
@@ -146,6 +156,13 @@ export default function MyRidesScreen({ navigation }) {
   const [tab, setTab] = useState('upcoming');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedRideToCancel, setSelectedRideToCancel] = useState(null);
+
+  const handleCancelPress = (ride) => {
+    setSelectedRideToCancel(ride);
+    setShowCancelModal(true);
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -154,15 +171,15 @@ export default function MyRidesScreen({ navigation }) {
         if (tab === 'upcoming') {
           const res = await getCurrentBookings();
           // Map bookings to card shape.
-          // Status must be derived from the actual booking status — not hardcoded — because
-          // the driver may have cancelled the ride after the passenger booked, which cascades
-          // all bookings to Cancelled. getCurrentBookings may still return those until the
-          // backend filters them; deriving status here ensures correct badge rendering.
+          // Check actual departure time to determine if ride is truly "upcoming" or past
           setData((res.data?.bookings || []).map(b => {
             const r = b.rideId || {};
             const d = r.driverId || {};
+            const departureDateTime = r.departureDateTime ? new Date(r.departureDateTime) : null;
+            const now = new Date();
+            const isPastRide = departureDateTime && departureDateTime < now;
             const rawStatus = b.status?.toLowerCase() || 'confirmed';
-            const status = rawStatus === 'confirmed' ? 'upcoming' : rawStatus;
+            const status = isPastRide ? 'completed' : (rawStatus === 'confirmed' ? 'upcoming' : rawStatus);
             return {
               id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
               date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
@@ -171,7 +188,9 @@ export default function MyRidesScreen({ navigation }) {
               driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
               driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
               driverRating: d.averageRating || 0,
-              rideId: r._id,
+              rideId: r._id, bookingId: b._id,
+              rideData: r,
+              bookingData: b,
             };
           }));
         } else {
@@ -179,16 +198,22 @@ export default function MyRidesScreen({ navigation }) {
           setData((res.data?.bookings || []).map(b => {
             const r = b.rideId || {};
             const d = r.driverId || {};
+            const departureDateTime = r.departureDateTime ? new Date(r.departureDateTime) : null;
+            const now = new Date();
+            const isPastRide = departureDateTime && departureDateTime < now;
+            const rawStatus = b.status?.toLowerCase() || 'completed';
+            const status = isPastRide ? 'completed' : (rawStatus === 'confirmed' ? 'upcoming' : rawStatus);
             return {
               id: b._id, from: r.departureLocation || '—', to: r.destination || '—',
               date: r.departureDateTime ? new Date(r.departureDateTime).toLocaleDateString() : '—',
               time: r.departureDateTime ? new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
-              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0,
-              status: b.status?.toLowerCase() === 'confirmed' ? 'upcoming' : b.status?.toLowerCase() || 'completed',
+              cost: r.pricePerSeat ? r.pricePerSeat * b.seatsCount : 0, status,
               driver: `${d.firstName || ''} ${(d.lastName || '')[0] || ''}.`,
               driverInitials: ((d.firstName?.[0] || '') + (d.lastName?.[0] || '')).toUpperCase(),
               driverRating: d.averageRating || 0,
-              rated: false, rideId: r._id,
+              rated: false, rideId: r._id, bookingId: b._id,
+              rideData: r,
+              bookingData: b,
             };
           }));
         }
@@ -267,7 +292,7 @@ export default function MyRidesScreen({ navigation }) {
           </View>
         ) : data.map(ride => (
           role === 'Passenger'
-            ? <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} />
+            ? <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
             : <DriverRideCard    key={ride.id} ride={ride} navigation={navigation} />
         ))}
         <View style={{ height: 80 }} />
@@ -287,6 +312,17 @@ export default function MyRidesScreen({ navigation }) {
           </TouchableOpacity>
         )}
       </View>
+
+      <CancelBookingModal
+        visible={showCancelModal}
+        booking={selectedRideToCancel?.bookingData}
+        ride={selectedRideToCancel?.rideData}
+        onClose={() => setShowCancelModal(false)}
+        onCancelled={() => {
+          setShowCancelModal(false);
+          fetchData();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -344,6 +380,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border,
   },
+  actionBtnSecondary: { borderColor: Colors.error, backgroundColor: 'transparent' },
   actionBtnAccent: { borderColor: Colors.accent },
   actionBtnText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary },
   empty: { alignItems: 'center', paddingVertical: 60, gap: Spacing.sm },

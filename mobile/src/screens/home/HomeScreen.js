@@ -11,6 +11,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { getAvailableRides } from '../../services/rideService';
 import { postRideRequest } from '../../services/rideService';
+import DateTimePickerModal from '../../components/DateTimePickerModal';
 
 const { width } = Dimensions.get('window');
 
@@ -130,30 +131,43 @@ function formatTime(raw) {
   return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
 
-/* ── Ride Request Modal ── */
 function RideRequestModal({ visible, destination, onClose }) {
-  const [date,setDate]=useState('');
-  const [time,setTime]=useState('');
-  const [seats,setSeats]=useState(1);
-  const [notes,setNotes]=useState('');
-  const [submitted,setSubmitted]=useState(false);
-  const [loading,setLoading]=useState(false);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [seats, setSeats] = useState(1);
+  const [notes, setNotes] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);   // controls picker modal
 
-  const handleClose = () => { setSubmitted(false);setDate('');setTime('');setSeats(1);setNotes('');onClose(); };
+  // Build a Date object from current date+time for the picker’s initial value
+  const getInitialDateForPicker = () => {
+    if (date && time) {
+      const [year, month, day] = date.split('-').map(Number);
+      const [hours, minutes] = time.split(':').map(Number);
+      const d = new Date(year, month - 1, day, hours, minutes);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date(); // fallback to now
+  };
+
+  const handleClose = () => {
+    setSubmitted(false);
+    setDate('');
+    setTime('');
+    setSeats(1);
+    setNotes('');
+    onClose();
+  };
 
   const handleSubmit = async () => {
-    // Full format check before attempting Date construction
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert('Invalid Date', 'Please enter a date in YYYY-MM-DD format (e.g. 2026-04-20).');
-      return;
-    }
-    if (!/^\d{2}:\d{2}$/.test(time)) {
-      Alert.alert('Invalid Time', 'Please enter a time in HH:MM format (e.g. 14:30).');
+    if (!date || !time) {
+      Alert.alert('Missing Info', 'Please select a date and time.');
       return;
     }
     const travelDateTime = new Date(`${date}T${time}:00`);
     if (isNaN(travelDateTime.getTime())) {
-      Alert.alert('Invalid Date/Time', 'The date or time you entered is not valid.');
+      Alert.alert('Invalid Date/Time', 'The selected date or time is invalid.');
       return;
     }
     setLoading(true);
@@ -168,7 +182,6 @@ function RideRequestModal({ visible, destination, onClose }) {
       });
       setSubmitted(true);
     } catch (err) {
-      // Drill through every shape the backend might use to surface the real error
       const msg =
         err.response?.data?.message ||
         err.response?.data?.error ||
@@ -184,74 +197,78 @@ function RideRequestModal({ visible, destination, onClose }) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={st.modalOverlayCenter}>
           <View style={st.requestModal}>
             {submitted ? (
-              <View style={{alignItems:'center',padding:Spacing.xl}}>
-                <Ionicons name="checkmark-circle" size={48} color={Colors.primary}/>
-                <Text style={[st.requestTitle,{textAlign:'center',marginBottom:Spacing.sm}]}>Request Posted!</Text>
-                <Text style={[st.requestSub,{textAlign:'center'}]}>
-                  Your request to <Text style={{fontFamily:'PlusJakartaSans_700Bold'}}>{destination}</Text> is now visible to drivers. They can choose to accept it — you'll be notified if one does.
+              <View style={{ alignItems: 'center', padding: Spacing.xl }}>
+                <Ionicons name="checkmark-circle" size={48} color={Colors.primary} />
+                <Text style={[st.requestTitle, { textAlign: 'center', marginBottom: Spacing.sm }]}>
+                  Request Posted!
                 </Text>
-                <TouchableOpacity style={st.requestBtn} onPress={handleClose}><Text style={st.requestBtnText}>Done</Text></TouchableOpacity>
+                <Text style={[st.requestSub, { textAlign: 'center' }]}>
+                  Your request to <Text style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{destination}</Text>{' '}
+                  is now visible to drivers. They can choose to accept it — you'll be notified if one does.
+                </Text>
+                <TouchableOpacity style={st.requestBtn} onPress={handleClose}>
+                  <Text style={st.requestBtnText}>Done</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={st.filterHeader}>
                   <Text style={st.requestTitle}>No rides to "{destination}"</Text>
-                  <TouchableOpacity onPress={handleClose}><Ionicons name="close" size={22} color={Colors.textSecondary}/></TouchableOpacity>
+                  <TouchableOpacity onPress={handleClose}>
+                    <Ionicons name="close" size={22} color={Colors.textSecondary} />
+                  </TouchableOpacity>
                 </View>
                 <Text style={st.requestSub}>Submit a request and matching drivers will be notified.</Text>
 
+                {/* Date & Time selection replaced with touchable fields */}
                 <View style={st.reqTwoCol}>
                   <View style={st.reqCol}>
                     <Text style={st.inputLabel}>DATE</Text>
-                    <View style={st.reqFieldInput}>
-                      <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary}/>
-                      <TextInput
-                        style={st.reqFieldText}
-                        value={date}
-                        onChangeText={v => setDate(formatDate(v))}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={Colors.textDisabled}
-                        keyboardType="numeric"
-                      />
-                    </View>
+                    <TouchableOpacity
+                      style={st.reqFieldInput}
+                      onPress={() => setPickerVisible(true)}
+                    >
+                      <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary} />
+                      <Text style={[st.reqFieldText, !date && { color: Colors.textDisabled }]}>
+                        {date || 'YYYY-MM-DD'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                   <View style={st.reqCol}>
                     <Text style={st.inputLabel}>TIME</Text>
-                    <View style={st.reqFieldInput}>
-                      <Ionicons name="time-outline" size={13} color={Colors.textSecondary}/>
-                      <TextInput
-                        style={st.reqFieldText}
-                        value={time}
-                        onChangeText={v => setTime(formatTime(v))}
-                        placeholder="HH:MM"
-                        placeholderTextColor={Colors.textDisabled}
-                        keyboardType="numeric"
-                      />
-                    </View>
+                    <TouchableOpacity
+                      style={st.reqFieldInput}
+                      onPress={() => setPickerVisible(true)}
+                    >
+                      <Ionicons name="time-outline" size={13} color={Colors.textSecondary} />
+                      <Text style={[st.reqFieldText, !time && { color: Colors.textDisabled }]}>
+                        {time || 'HH:MM'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
 
-                <Text style={[st.inputLabel,{marginTop:Spacing.md}]}>NUMBER OF SEATS</Text>
+                <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NUMBER OF SEATS</Text>
                 <View style={st.reqStepperRow}>
                   <TouchableOpacity
                     style={st.reqStepBtn}
                     onPress={() => seats > 1 && setSeats(s => s - 1)}
                   >
-                    <Ionicons name="remove" size={14} color={seats <= 1 ? Colors.textDisabled : Colors.textSecondary}/>
+                    <Ionicons name="remove" size={14} color={seats <= 1 ? Colors.textDisabled : Colors.textSecondary} />
                   </TouchableOpacity>
                   <Text style={st.reqStepVal}>{seats}</Text>
                   <TouchableOpacity style={st.reqStepBtn} onPress={() => setSeats(s => s + 1)}>
-                    <Ionicons name="add" size={14} color={Colors.primary}/>
+                    <Ionicons name="add" size={14} color={Colors.primary} />
                   </TouchableOpacity>
                 </View>
 
-                <Text style={[st.inputLabel,{marginTop:Spacing.md}]}>NOTES (OPTIONAL)</Text>
+                <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NOTES (OPTIONAL)</Text>
                 <TextInput
-                  style={[st.reqInput,{height:72,textAlignVertical:'top',paddingTop:Spacing.sm}]}
+                  style={[st.reqInput, { height: 72, textAlignVertical: 'top', paddingTop: Spacing.sm }]}
                   placeholder="Any preferences..."
                   value={notes}
                   onChangeText={setNotes}
@@ -267,6 +284,21 @@ function RideRequestModal({ visible, destination, onClose }) {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Integrated DateTimePickerModal */}
+      <DateTimePickerModal
+        visible={pickerVisible}
+        date={getInitialDateForPicker()}    // pass a Date object
+        time={time || '14:00'}              // default hour if none selected
+        onClose={() => setPickerVisible(false)}
+        onConfirm={(isoString, timeString) => {
+          // isoString example: "2026-04-20T14:30:00.000Z"
+          const datePart = isoString.split('T')[0]; // "YYYY-MM-DD"
+          setDate(datePart);
+          setTime(timeString);               // "HH:MM"
+          setPickerVisible(false);
+        }}
+      />
     </Modal>
   );
 }

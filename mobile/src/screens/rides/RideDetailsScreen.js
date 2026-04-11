@@ -141,6 +141,7 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   const [saving, setSaving] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [departureDateTime, setDepartureDateTime] = useState(null);
+  const [cancellationReason, setCancellationReason] = useState('');
 
   useEffect(() => {
     if (visible && ride) {
@@ -151,6 +152,22 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   }, [visible, ride]);
 
   const handleCancel = () => {
+    // Check time limit before showing confirm dialog
+    const now = new Date();
+    const departureTime = new Date(ride.departureDateTime);
+    const timeToDeparture = departureTime - now;
+    const twoHoursInMs = 2 * 60 * 60 * 1000;
+
+    if (timeToDeparture < twoHoursInMs) {
+      Alert.alert('Cannot Cancel', 'You cannot cancel a ride within 2 hours of departure.');
+      return;
+    }
+
+    if (!cancellationReason.trim()) {
+      Alert.alert('Reason Required', 'Please tell passengers why you\'re cancelling this ride.');
+      return;
+    }
+
     Alert.alert(
       'Cancel Ride',
       'Are you sure? All confirmed passengers will be notified and their bookings cancelled.',
@@ -160,7 +177,8 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
           text: 'Yes, Cancel Ride', style: 'destructive',
           onPress: async () => {
             try {
-              await cancelRide(ride._id, 'Driver cancelled');
+              await cancelRide(ride._id, cancellationReason);
+              setCancellationReason('');
               onClose();
               Alert.alert(
                 'Ride Cancelled',
@@ -278,6 +296,18 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
             </View>
 
             <View style={st.mngDivider}/>
+
+            <Text style={st.mngSectionLabel}>CANCEL RIDE</Text>
+            <Text style={st.mngLabel}>Cancellation Reason (Required)</Text>
+            <TextInput
+              style={[st.mngInputRow, {height: 80, paddingVertical: Spacing.md}]}
+              value={cancellationReason}
+              onChangeText={setCancellationReason}
+              placeholder="Tell passengers why you're cancelling..."
+              placeholderTextColor={Colors.textDisabled}
+              multiline
+              numberOfLines={3}
+            />
 
             <View style={{flexDirection:'row', gap: 10, marginTop: Spacing.sm}}>
               <TouchableOpacity style={st.cancelRideBtn} onPress={handleCancel}>
