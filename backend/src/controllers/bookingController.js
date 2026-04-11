@@ -206,20 +206,11 @@ const cancelBooking = async (req, res, next) => {
       return error(res, 400, 'Cannot cancel a completed booking.');
     }
 
-    // Get the ride to check departure time
+    // Get the ride to check it exists (but don't enforce time limit for passengers)
     const ride = await Ride.findById(booking.rideId);
     if (!ride) return error(res, 404, 'Associated ride not found.');
 
-    // Enforce cancellation time limit: can't cancel within 2 hours of departure
-    const now = new Date();
-    const departureTime = new Date(ride.departureDateTime);
-    const timeToDeparture = departureTime - now;
-    const twoHoursInMs = 2 * 60 * 60 * 1000;
-
-    if (timeToDeparture < twoHoursInMs) {
-      return error(res, 400, 'Cannot cancel a booking within 2 hours of ride departure.');
-    }
-
+    // Passengers can cancel anytime - no time limit like drivers have
     booking.status = 'Cancelled';
     booking.cancellationDate = new Date();
     booking.cancellationReason = reason;
@@ -241,18 +232,27 @@ const cancelBooking = async (req, res, next) => {
     });
 
     if (ride) {
+      const passenger = await User.findById(req.user._id).select('firstName lastName');
+      const passengerName = `${passenger?.firstName || ''} ${passenger?.lastName || ''}`.trim();
+
+      // Only send a notification to the driver, not a message
+      let notificationContent = `${passengerName} cancelled their booking for your ride to ${ride.destination}.`;
+      if (reason && reason.trim() && reason !== 'Cancelled by passenger') {
+        notificationContent += `\nReason: ${reason.trim()}`;
+      }
       await Notification.create({
         userId: ride.driverId,
         title: 'Booking Cancelled',
-        content: `${req.user.firstName} ${req.user.lastName} cancelled their booking on your ride to ${ride.destination}.`,
+        content: notificationContent,
         type: 'Cancellation',
       });
     }
 
-    return success(res, 200, 'Booking cancelled.');
+    return success(res, 200, 'Booking cancelled successfully.', { bookingId: booking._id });
   } catch (err) {
     next(err);
   }
+
 };
 
 const getCurrentBookings = async (req, res, next) => {

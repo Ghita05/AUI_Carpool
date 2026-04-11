@@ -1,4 +1,4 @@
-const { Ride, Booking, Notification, User } = require('../models');
+const { Ride, Booking, Notification, User, Message } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const postRideOffer = async (req, res, next) => {
@@ -166,12 +166,23 @@ const cancelRide = async (req, res, next) => {
     });
 
     const reason = req.body.reason || 'Ride cancelled by driver';
+    const driver = await User.findById(ride.driverId).select('firstName lastName');
+    const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''.trim()}`.trim();
 
     for (const booking of confirmedBookings) {
       booking.status = 'Cancelled';
       booking.cancellationDate = new Date();
       booking.cancellationReason = `Ride cancelled by driver: ${reason}`;
       await booking.save({ validateModifiedOnly: true });
+
+      // Create automated cancellation message from driver to passenger
+      const messageContent = `Your ride to ${ride.destination} on ${new Date(ride.departureDateTime).toLocaleDateString()} has been cancelled by ${driverName}.\n\nCancellation reason: ${reason}\n\n Apologies for any inconvenience.`;
+      await Message.create({
+        senderId: ride.driverId,
+        receiverId: booking.passengerId,
+        rideId: ride._id,
+        content: messageContent,
+      });
 
       await Notification.create({
         userId: booking.passengerId,
