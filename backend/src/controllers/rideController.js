@@ -96,14 +96,19 @@ const modifyRide = async (req, res, next) => {
 
     const allowedFields = [
       'departureLocation', 'destination', 'stops', 'departureDateTime',
-      'totalSeats', 'pricePerSeat', 'genderPreference',
-    ];
+      'totalSeats', 'genderPreference',
+    ]; // pricePerSeat is NOT editable
 
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates[field] = req.body[field];
       }
+    }
+
+    // Explicitly prevent pricePerSeat from being updated
+    if (req.body.pricePerSeat !== undefined) {
+      return error(res, 400, 'Ride price cannot be edited after creation.');
     }
 
     if (updates.totalSeats) {
@@ -253,7 +258,10 @@ const getAvailableRides = async (req, res, next) => {
       page = 1, limit = 20,
     } = req.query;
 
-    const filter = { status: { $in: ['Active', 'Full'] } };
+    const filter = {
+      status: 'Active',
+      departureDateTime: { $gte: new Date() },
+    };
 
     if (destination) filter.destination = { $regex: destination, $options: 'i' };
     if (departureLocation) filter.departureLocation = { $regex: departureLocation, $options: 'i' };

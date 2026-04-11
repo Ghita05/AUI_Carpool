@@ -4,6 +4,31 @@ const ride = require('../controllers/rideController');
 const booking = require('../controllers/bookingController');
 const rideRequest = require('../controllers/rideRequestController');
 const { authenticate, authorize } = require('../middleware/auth');
+// ═══════════════════════════════════════════
+// USER SEARCH (for group ride requests)
+// ═══════════════════════════════════════════
+const User = require('../models/User');
+router.get('/users/search', authenticate, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json({ users: [] });
+    const regex = new RegExp(q, 'i');
+    const users = await User.find({
+      $or: [
+        { firstName: regex },
+        { lastName: regex },
+        { email: regex },
+        { auiId: regex },
+      ],
+      accountStatus: 'Active',
+    })
+      .limit(10)
+      .select('firstName lastName email auiId profilePicture _id');
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: 'User search failed.' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // RIDE OFFERS (Building Block 2.1)
@@ -30,7 +55,18 @@ router.put(
   authorize('Driver'),
   rideRequest.acceptRideRequest
 );
-
+router.put(
+  '/requests/:requestId/dismiss',
+  authenticate,
+  authorize('Driver'),
+  rideRequest.dismissRideRequest
+);
+router.put(
+  '/requests/:requestId/dismiss',
+  authenticate,
+  authorize('Driver'),
+  rideRequest.dismissRideRequest
+);
 // ═══════════════════════════════════════════
 // BOOKINGS (Building Block 2.4)
 // ═══════════════════════════════════════════

@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -73,6 +74,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['Calm', 'Moderate', 'Fast', ''],
       default: '',
+    },
+    // Dismissed ride requests (for drivers)
+    dismissedRideRequests: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: [],
     },
     // ── Computed fields (updated by their owning services) ──
     averageRating: {

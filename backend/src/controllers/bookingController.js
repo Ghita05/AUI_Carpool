@@ -5,7 +5,7 @@ const { success, error } = require('../utils/responses');
 const bookRide = async (req, res, next) => {
   try {
     const { rideId } = req.params;
-    const { seatsCount = 1, pickupLocation = '', luggageDeclaration = '' } = req.body;
+    const { pickupLocation = '', luggageDeclaration = '' } = req.body;
 
     const ride = await Ride.findById(rideId);
     if (!ride) return error(res, 404, 'Ride not found.');
@@ -18,6 +18,8 @@ const bookRide = async (req, res, next) => {
       return error(res, 400, 'You cannot book your own ride.');
     }
 
+    // Always book 1 seat only
+    const seatsCount = 1;
     if (ride.availableSeats < seatsCount) {
       return error(res, 400, `Only ${ride.availableSeats} seat(s) available.`);
     }
@@ -28,7 +30,7 @@ const bookRide = async (req, res, next) => {
       status: { $in: ['Confirmed', 'Pending'] },
     });
     if (existingBooking) {
-      return error(res, 409, 'You already have a booking on this ride.');
+      return error(res, 409, 'You already have a seat in this ride. You cannot book more than one.');
     }
 
     const booking = await Booking.create({
@@ -61,7 +63,7 @@ const bookRide = async (req, res, next) => {
     await Notification.create({
       userId: ride.driverId,
       title: 'New Booking',
-      content: `${req.user.firstName} ${req.user.lastName} booked ${seatsCount} seat(s) on your ride to ${ride.destination}.`,
+      content: `${req.user.firstName} ${req.user.lastName} booked a seat on your ride to ${ride.destination}.`,
       type: 'Booking',
     });
 
