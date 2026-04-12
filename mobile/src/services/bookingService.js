@@ -38,3 +38,13 @@ export const getBookingHistory = async () => {
   const { data } = await api.get('/rides/bookings/history');
   return data;
 };
+
+export const respondToStopRequest = async (bookingId, approved) => {
+  const { data } = await api.put(`/rides/bookings/${bookingId}/stop/respond`, { approved });
+  return data;
+};
+
+export const getStopRequests = async (rideId) => {
+  const { data } = await api.get(`/rides/${rideId}/stops`);
+  return data;
+};

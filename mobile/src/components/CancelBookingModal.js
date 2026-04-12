@@ -57,7 +57,7 @@ export default function CancelBookingModal({ visible, booking, ride, onClose, on
   const formattedTime = departureTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <SafeAreaView style={styles.overlay}>
         <View style={styles.container}>
           {/* Header */}
@@ -172,7 +172,7 @@ export default function CancelBookingModal({ visible, booking, ride, onClose, on
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   container: {

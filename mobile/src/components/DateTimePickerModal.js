@@ -226,7 +226,7 @@ export default function DateTimePickerModal({ visible, date, time, onClose, onCo
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -258,7 +258,7 @@ export default function DateTimePickerModal({ visible, date, time, onClose, onCo
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   modalContent: {

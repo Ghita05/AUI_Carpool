@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { getRideDetails } from '../../services/rideService';
-import { bookRide } from '../../services/bookingService';
+import { bookRide, requestAdditionalStop } from '../../services/bookingService';
 
 const LUGGAGE = ['No luggage','1 small bag','1 suitcase','2+ bags'];
 function Card({children,style}){return <View style={[st.card,style]}>{children}</View>;}
@@ -18,13 +18,14 @@ export default function BookRideScreen({ navigation, route }) {
   const [selectedStop,setSelectedStop]=useState('');
   const [luggage,setLuggage]=useState('1 suitcase');
   const [suggestedStop,setSuggestedStop]=useState('');
+  const suggestedStopRef = useRef('');
 
   useEffect(()=>{
     if(!rideId) return;
     getRideDetails(rideId).then(r=>{
       const rd=r.data?.ride;
       setRide(rd);
-      if(rd?.stops?.length) setSelectedStop(rd.departureLocation);
+      if(rd?.stops?.length) setSelectedStop(rd.stops[0]);
     }).catch(()=>{}).finally(()=>setLoading(false));
   },[rideId]);
 
@@ -34,19 +35,38 @@ export default function BookRideScreen({ navigation, route }) {
   const driver = ride.driverId||{};
   const vehicle = ride.vehicleId||{};
   const total = seats * ride.pricePerSeat;
-  const allStops = [ride.departureLocation,...(ride.stops||[])];
+  const allStops = ride.stops || [];
 
   const handleConfirm = async () => {
     setBooking(true);
     try {
+      const stopValue = suggestedStop || suggestedStopRef.current;
       const res = await bookRide(rideId, {
         seatsCount: seats,
-        pickupLocation: suggestedStop || selectedStop,
+        pickupLocation: stopValue || selectedStop || ride.departureLocation,
         luggageDeclaration: luggage,
       });
+      
+      const bookingId = res.data?.bookingId;
+      
+      if (!bookingId) {
+        Alert.alert('Error', 'Booking created but ID missing. Please try again.');
+        setBooking(false);
+        return;
+      }
+      
+      // If passenger suggested a custom stop, submit it after booking
+      if (stopValue && stopValue.trim()) {
+        try {
+          await requestAdditionalStop(bookingId, stopValue.trim());
+        } catch (stopErr) {
+          Alert.alert('Stop Request Failed', stopErr?.response?.data?.message || 'Could not submit stop request');
+        }
+      }
+      
       navigation.navigate('BookingConfirmation', {
-        bookingId: res.data?.bookingId,
-        seats, stop: suggestedStop||selectedStop, luggage, total,
+        bookingId,
+        seats, stop: stopValue||selectedStop, luggage, total,
         ride: { departure: ride.departureLocation, destination: ride.destination, departureTime: ride.departureDateTime, driver: `${driver.firstName} ${driver.lastName}`, vehicle: `${vehicle.brand} ${vehicle.model}` },
       });
     } catch (err) {
@@ -73,22 +93,32 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
 
           <Card>
-            <View style={st.rowBetween}><Text style={st.cardLabel}>Number of Seats</Text><Text style={st.subLabel}>{ride.availableSeats} available</Text></View>
-            <View style={st.stepperRow}>
-              <TouchableOpacity style={[st.stepBtn,seats<=1&&st.stepBtnDisabled]} onPress={()=>seats>1&&setSeats(s=>s-1)}><Ionicons name="remove" size={16} color={seats<=1?Colors.textDisabled:Colors.textPrimary}/></TouchableOpacity>
-              <Text style={st.stepperVal}>{seats}</Text>
-              <TouchableOpacity style={[st.stepBtn,seats>=ride.availableSeats&&st.stepBtnDisabled]} onPress={()=>seats<ride.availableSeats&&setSeats(s=>s+1)}><Ionicons name="add" size={16} color={seats>=ride.availableSeats?Colors.textDisabled:Colors.textPrimary}/></TouchableOpacity>
+            <View style={st.rowBetween}><Text style={st.cardLabel}>Number of Seats</Text><Text style={st.subLabel}>1 available</Text></View>
+            <View style={{alignItems: 'center', paddingVertical: 16}}>
+              <Text style={st.stepperVal}>1</Text>
+              <Text style={[st.stopsHint, {marginTop: 12}]}>Only 1 seat per passenger</Text>
             </View>
           </Card>
 
           <Card>
-            <View style={st.rowBetween}><Text style={st.cardLabel}>Your Stop</Text><Text style={st.subLabel}>{allStops.length} stops</Text></View>
-            <Text style={st.stopsHint}>Select where you want to board</Text>
-            <View style={st.pillRow}>
-              {allStops.map(stop=>(<TouchableOpacity key={stop} style={[st.pill,selectedStop===stop&&st.pillActive]} onPress={()=>setSelectedStop(stop)}><Text style={[st.pillText,selectedStop===stop&&st.pillTextActive]}>{stop}</Text></TouchableOpacity>))}
-            </View>
-            <Text style={[st.stopsHint,{marginTop:12}]}>Or suggest a new stop</Text>
-            <TextInput style={st.stopInput} placeholder="e.g. Ifrane Hay Riad" value={suggestedStop} onChangeText={setSuggestedStop} placeholderTextColor={Colors.textDisabled}/>
+            <View style={st.rowBetween}><Text style={st.cardLabel}>Your Stop</Text>{allStops.length > 0 && <Text style={st.subLabel}>{allStops.length} stops</Text>}</View>
+            {allStops.length > 0 && (
+              <>
+                <Text style={st.stopsHint}>Select where you want to board</Text>
+                <View style={st.pillRow}>
+                  {allStops.map(stop=>(<TouchableOpacity key={stop} style={[st.pill,selectedStop===stop&&st.pillActive]} onPress={()=>setSelectedStop(stop)}><Text style={[st.pillText,selectedStop===stop&&st.pillTextActive]}>{stop}</Text></TouchableOpacity>))}
+                </View>
+                <Text style={[st.stopsHint,{marginTop:12}]}>Or suggest a new stop</Text>
+              </>
+            )}
+            {allStops.length === 0 && <Text style={st.stopsHint}>Suggest a stop where you want to board</Text>}
+            <TextInput 
+              style={st.stopInput} 
+              placeholder="e.g. Ifrane Hay Riad" 
+              value={suggestedStop} 
+              onChangeText={(text) => { setSuggestedStop(text); suggestedStopRef.current = text; }}
+              placeholderTextColor={Colors.textDisabled}
+            />
           </Card>
 
           <Card>

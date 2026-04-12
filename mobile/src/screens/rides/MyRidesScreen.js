@@ -17,6 +17,7 @@ import EditRideRequestModal from '../../components/EditRideRequestModal';
 
 const STATUS_STYLES = {
   confirmed:   { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
+  upcoming:    { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
   open:        { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Pending' },
   accepted:    { bg: Colors.background,  text: Colors.textSecondary,  label: 'Accepted' },
   completed:   { bg: Colors.background,  text: Colors.textSecondary,  label: 'Completed' },
@@ -33,6 +34,7 @@ function StatusBadge({ status }) {
   else if (normalized === 'completed') normalized = 'completed';
   else if (normalized === 'cancelled') normalized = 'cancelled';
   else if (normalized === 'expired') normalized = 'expired';
+  else if (normalized === 'upcoming') normalized = 'upcoming';
   else normalized = 'completed';
   const s = STATUS_STYLES[normalized] || STATUS_STYLES.completed;
   return (
@@ -43,7 +45,7 @@ function StatusBadge({ status }) {
 }
 
 function PassengerRideCard({ ride, navigation, onCancel }) {
-  const isPast = ride.status !== 'upcoming';
+  const isPast = ride.status !== 'Confirmed';
   return (
     <View style={styles.rideCard}>
       <View style={styles.cardTopRow}>
@@ -87,15 +89,16 @@ function PassengerRideCard({ ride, navigation, onCancel }) {
         </View>
         {!isPast ? (
           <View style={styles.actionBtnGroup}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
+              <Ionicons name="information-circle-outline" size={12} color={Colors.primary} />
+              <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Details</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={() => onCancel(ride)}
             >
               <Ionicons name="close-circle-outline" size={12} color={Colors.error} />
               <Text style={[styles.actionBtnText, {color: Colors.error}]}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
-              <Text style={styles.actionBtnText}>View Details</Text>
             </TouchableOpacity>
           </View>
         ) : ride.status === 'completed' && !ride.rated ? (
@@ -151,14 +154,24 @@ function DriverRideCard({ ride, navigation }) {
           <Ionicons name="people-outline" size={13} color={Colors.textSecondary} />
           <Text style={styles.passengerText}>{ride.passengers}/{ride.totalSeats} passengers · Booked</Text>
         </View>
-        {!isPast && (
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}
-          >
-            <Text style={styles.actionBtnText}>Details</Text>
-          </TouchableOpacity>
-        )}
+        {!isPast ? (
+          <View style={styles.actionBtnGroup}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}
+            >
+              <Ionicons name="information-circle-outline" size={12} color={Colors.primary} />
+              <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Details</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id, openManage: true })}
+            >
+              <Ionicons name="close-circle-outline" size={12} color={Colors.error} />
+              <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -341,8 +354,8 @@ export default function MyRidesScreen({ navigation }) {
     setShowCancelModal(true);
   };
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (role === 'Passenger') {
         // Fetch bookings and ride requests in parallel
@@ -368,6 +381,8 @@ export default function MyRidesScreen({ navigation }) {
             driverRating: driver.rating || '',
             rated: b.rated,
             status: b.status,
+            _booking: b,
+            _ride: ride,
           };
         });
 
@@ -439,7 +454,7 @@ export default function MyRidesScreen({ navigation }) {
   }, [role, tab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
+  useFocusEffect(useCallback(() => { fetchData(true); }, [fetchData]));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -454,7 +469,7 @@ export default function MyRidesScreen({ navigation }) {
       />
 
       <Modal visible={showOwnerModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.xl }}>
             <Text style={{ fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: Spacing.sm }}>Transfer Ownership</Text>
             <Text style={{ fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginBottom: Spacing.lg }}>Select who will take over this group request:</Text>
@@ -690,8 +705,8 @@ export default function MyRidesScreen({ navigation }) {
 
       <CancelBookingModal
         visible={showCancelModal}
-        booking={selectedRideToCancel?.bookingData}
-        ride={selectedRideToCancel?.rideData}
+        booking={selectedRideToCancel?._booking}
+        ride={selectedRideToCancel?._ride}
         onClose={() => setShowCancelModal(false)}
         onCancelled={() => {
           setShowCancelModal(false);

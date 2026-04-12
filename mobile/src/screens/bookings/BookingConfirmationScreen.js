@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -38,6 +38,7 @@ export default function BookingConfirmationScreen({ navigation, route }) {
           <View style={st.divider}/>
           <View style={st.totalRow}><Text style={st.totalLabel}>Total</Text><Text style={st.totalVal}>{total} MAD</Text></View>
         </View>
+
         {/* What's Next */}
         <View style={st.card}>
           <Text style={st.sectionLabel}>WHAT'S NEXT?</Text>

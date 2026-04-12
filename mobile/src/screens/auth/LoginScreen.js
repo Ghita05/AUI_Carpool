@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   signupText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   signupLink: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primaryLight, textDecorationLine: 'underline' },
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
   modalContent: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.xl, width: '100%', maxWidth: 400 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
   modalTitle: { fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: Spacing.sm },

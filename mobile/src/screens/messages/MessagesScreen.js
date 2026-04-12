@@ -42,7 +42,7 @@ function ConversationItem({ conv, onPress }) {
   );
 }
 
-function ChatView({ conv, onBack }) {
+function ChatView({ conv, onBack, navigation }) {
   const { user } = useAuth();
   const [msg, setMsg] = useState('');
   const [messages, setMessages] = useState([]);
@@ -97,10 +97,25 @@ function ChatView({ conv, onBack }) {
           contentContainerStyle={s.messagesList}
           renderItem={({ item }) => {
             const isMe = item.senderId === user?._id || item.senderId?._id === user?._id;
+            const hasAction = item.action?.type === 'stop_request';
             return (
               <View style={[s.bubbleRow, isMe && s.bubbleRowMe]}>
-                <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+                <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem, hasAction && s.bubbleWithAction]}>
                   <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>{item.content}</Text>
+                  {hasAction && !isMe && (
+                    <TouchableOpacity 
+                      style={s.actionButton}
+                      onPress={() => {
+                        if (item.action?.rideId) {
+                          const rideId = item.action.rideId;
+                          navigation.navigate('RideDetails', { rideId, openStops: true });
+                        }
+                      }}
+                    >
+                      <Ionicons name="flag-outline" size={14} color="#fff" />
+                      <Text style={s.actionButtonText}>View Stop Requests</Text>
+                    </TouchableOpacity>
+                  )}
                   <Text style={[s.bubbleTime, isMe && { color: 'rgba(255,255,255,0.7)' }]}>
                     {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
@@ -121,11 +136,13 @@ function ChatView({ conv, onBack }) {
   );
 }
 
-export default function MessagesScreen({ navigation }) {
+export default function MessagesScreen({ navigation, route }) {
   const [search, setSearch] = useState('');
   const [activeConv, setActiveConv] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const driverId = route?.params?.driverId;
+  const driverName = route?.params?.driverName;
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -135,7 +152,16 @@ export default function MessagesScreen({ navigation }) {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchConversations(); }, [fetchConversations]);
+  useEffect(() => { 
+    fetchConversations();
+    // If driverId is passed, set up direct conversation
+    if (driverId) {
+      setActiveConv({
+        _id: driverId,
+        otherUser: { _id: driverId, firstName: driverName?.split(' ')[0] || 'Driver', lastName: driverName?.split(' ')[1] || '' }
+      });
+    }
+  }, [fetchConversations, driverId, driverName]);
 
   const filtered = conversations.filter(c => {
     if (!search) return true;
@@ -147,7 +173,7 @@ export default function MessagesScreen({ navigation }) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-        <ChatView conv={activeConv} onBack={() => { setActiveConv(null); fetchConversations(); }} />
+        <ChatView conv={activeConv} onBack={() => { setActiveConv(null); fetchConversations(); }} navigation={navigation} />
       </SafeAreaView>
     );
   }
@@ -209,6 +235,9 @@ const s = StyleSheet.create({
   bubbleText: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary, lineHeight: 20 },
   bubbleTextMe: { color: '#fff' },
   bubbleTime: { fontSize: 10, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginTop: 4, textAlign: 'right' },
+  bubbleWithAction: { paddingBottom: 8 },
+  actionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, marginTop: 10 },
+  actionButtonText: { fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', padding: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border, gap: 8 },
   chatInput: { flex: 1, minHeight: 40, maxHeight: 100, backgroundColor: Colors.background, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },

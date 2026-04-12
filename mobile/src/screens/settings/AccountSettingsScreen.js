@@ -12,7 +12,7 @@ function Pills({options,selected,onSelect,disabled}){return(<View style={st.pill
 function ChangePasswordModal({visible,onClose}){
   const [cur,setCur]=useState('');const [nw,setNw]=useState('');const [conf,setConf]=useState('');const [loading,setLoading]=useState(false);
   const handleSave=async()=>{if(!cur||!nw||nw!==conf){Alert.alert('Error','Please fill all fields and make sure passwords match');return;}if(nw.length<8){Alert.alert('Error','Password must be at least 8 characters');return;}setLoading(true);try{await changePasswordAPI(cur,nw);onClose();Alert.alert('Success','Password updated');}catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to change password');}finally{setLoading(false);}};
-  return(<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
+  return(<Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
     <View style={st.modalH}><Text style={st.modalTitle}>Change Password</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
     {[{label:'Current Password',val:cur,set:setCur},{label:'New Password',val:nw,set:setNw},{label:'Confirm New Password',val:conf,set:setConf}].map((f,i)=>(
       <View key={i} style={{marginBottom:12}}><Text style={st.mLabel}>{f.label}</Text><TextInput style={st.mInput} secureTextEntry value={f.val} onChangeText={f.set} placeholder={f.label} placeholderTextColor={Colors.textDisabled}/></View>
@@ -23,7 +23,7 @@ function ChangePasswordModal({visible,onClose}){
 
 function DeactivateModal({visible,onClose}){
   const [confirmed,setConfirmed]=useState(false);
-  return(<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
+  return(<Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
     <View style={st.modalH}><Text style={[st.modalTitle,{color:Colors.error}]}>Deactivate Account</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
     <Text style={{fontSize:13,color:Colors.textSecondary,marginBottom:16,lineHeight:20}}>This action cannot be undone. Your account and all data will be permanently deleted.</Text>
     <TouchableOpacity style={{flexDirection:'row',alignItems:'center',gap:8,marginBottom:16}} onPress={()=>setConfirmed(c=>!c)}>
@@ -166,7 +166,7 @@ const st = StyleSheet.create({
   saveFab:{backgroundColor:Colors.primary,borderRadius:Radius.md,paddingVertical:14,alignItems:'center',marginBottom:Spacing.md},
   saveFabText:{fontSize:14,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
   saveMsg:{textAlign:'center',fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.success,marginBottom:Spacing.md},
-  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'center',padding:Spacing.lg},
+  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'center',padding:Spacing.lg},
   modalContent:{backgroundColor:Colors.surface,borderRadius:Radius.lg,padding:Spacing.xl},
   modalH:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.lg},
   modalTitle:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},

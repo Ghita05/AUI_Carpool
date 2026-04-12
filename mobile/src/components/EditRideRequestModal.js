@@ -53,7 +53,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
   const isGroupRequest = (request?.groupPassengerIds?.length || 0) > 1;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="fade" transparent>
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <Text style={styles.title}>Edit Ride Request</Text>
@@ -194,7 +194,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -203,10 +203,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     padding: Spacing.xl,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 10,
+    elevation: 4,
   },
   title: {
     fontFamily: 'PlusJakartaSans_700Bold',

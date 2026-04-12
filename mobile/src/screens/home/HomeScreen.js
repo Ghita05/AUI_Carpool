@@ -49,7 +49,7 @@ function FilterModal({ visible, onClose, onApply }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={st.modalOverlay}><View style={st.filterModal}>
         <View style={st.filterHeader}><Text style={st.filterTitle}>Filters</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -73,7 +73,7 @@ function CommunityModal({ visible, onClose }) {
   const members = [{label:'Top Driver',name:'Ghita Nafa',stat:'4.8 avg · 23 rides',initials:'GN'},{label:'Top Passenger',name:'Ahmed Benali',stat:'4.9 avg · 15 trips',initials:'AB'},{label:'Most Active',name:'Kenza Nouri',stat:'5.0 avg · 31 rides',initials:'KN'}];
   const routes = [{route:'AUI → Fez',count:142,pct:100},{route:'AUI → Rabat',count:98,pct:69},{route:'AUI → Meknes',count:76,pct:54}];
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={st.modalOverlay}><View style={st.communityModal}>
         <View style={st.filterHeader}><Text style={st.filterTitle}>Community</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -231,7 +231,7 @@ function RideRequestModal({ visible, destination, onClose }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={st.modalOverlayCenter}>
           <View style={st.requestModal}>
@@ -429,8 +429,8 @@ export default function HomeScreen({ navigation }) {
   const [highlightedPin, setHighlightedPin] = useState(null);
   const [filters, setFilters] = useState({});
 
-  const fetchRides = useCallback(async (params = {}) => {
-    setLoading(true);
+  const fetchRides = useCallback(async (params = {}, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await getAvailableRides({ ...filters, ...params });
       setRides(res.data?.rides || []);
@@ -445,7 +445,7 @@ export default function HomeScreen({ navigation }) {
 
   // Re-fetch when screen regains focus — ensures rides cancelled by drivers
   // are removed from the available list without requiring a manual pull-to-refresh
-  useFocusEffect(useCallback(() => { fetchRides(); }, [fetchRides]));
+  useFocusEffect(useCallback(() => { fetchRides({}, true); }, [fetchRides]));
 
   const handleFilterApply = (newFilters) => {
     setFilters(newFilters);
@@ -574,8 +574,8 @@ const st = StyleSheet.create({
   driverAvatarText:{fontSize:9,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
   driverName:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary},
   ratingText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,marginLeft:2},
-  modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end'},
-  modalOverlayCenter:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'center',padding:Spacing.lg},
+  modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'flex-end'},
+  modalOverlayCenter:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'center',padding:Spacing.lg},
   filterModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'80%'},
   communityModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},
   requestModal:{backgroundColor:Colors.surface,borderRadius:Radius.lg,padding:Spacing.xl,maxHeight:'90%'},

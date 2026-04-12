@@ -7,7 +7,9 @@ import { useAuth } from '../../context/AuthContext';
 import { getRideDetails, cancelRide, modifyRide } from '../../services/rideService';
 import { getPassengerList } from '../../services/rideService';
 import { getUserReviews } from '../../services/reviewService';
+import { getCurrentBookings } from '../../services/bookingService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
+import StopRequestsModal from '../../components/StopRequestsModal';
 
 // Better time formatter that allows natural editing
 function formatTime(raw) {
@@ -77,7 +79,7 @@ function DriverProfileModal({visible,ride,driver,onClose}){
 
   if(!driver)return null;
   return(
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={st.modalOv}><View style={st.profileModal}>
         <View style={st.modalH}><Text style={st.modalTitle}>Driver Profile</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -117,7 +119,7 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
   },[visible,rideId]);
 
   return(
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={st.modalOv}><View style={st.manageModal}>
         <View style={st.modalH}><Text style={st.modalTitle}>Manage Passengers</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
         <Text style={{fontSize:Typography.sm,color:Colors.textSecondary,marginBottom:Spacing.md}}>{passengers.length} of {totalSeats||4} seats booked</Text>
@@ -227,7 +229,7 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
 
   if (!ride) return null;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={st.modalOv} behavior="padding" keyboardVerticalOffset={50}>
         <View style={st.manageModal}>
           <View style={st.modalH}>
@@ -352,6 +354,8 @@ export default function RideDetailsScreen({ navigation, route }) {
   const [showProfile,setShowProfile]=useState(false);
   const [showManagePax,setShowManagePax]=useState(false);
   const [showManageRide,setShowManageRide]=useState(false);
+  const [showStopRequests,setShowStopRequests]=useState(false);
+  const [hasBooking, setHasBooking] = useState(false);
 
   const fetchRide = async () => {
     try {
@@ -361,7 +365,31 @@ export default function RideDetailsScreen({ navigation, route }) {
     finally { setLoading(false); }
   };
 
-  useEffect(()=>{ if(rideId) fetchRide(); },[rideId]);
+  const checkExistingBooking = async () => {
+    try {
+      const res = await getCurrentBookings();
+      const bookings = res.data?.bookings || [];
+      const alreadyBooked = bookings.some(b => b.rideId?._id === rideId && b.status === 'Confirmed');
+      setHasBooking(alreadyBooked);
+    } catch {
+      setHasBooking(false);
+    }
+  };
+
+  useEffect(()=>{ 
+    if(rideId) {
+      fetchRide(); 
+      checkExistingBooking();
+    }
+  },[rideId]);
+
+  // Auto-open modals when navigated with params
+  useEffect(() => {
+    if (!loading && ride) {
+      if (route?.params?.openManage) setShowManageRide(true);
+      if (route?.params?.openStops) setShowStopRequests(true);
+    }
+  }, [loading, ride]);
 
   if(loading) return <SafeAreaView style={st.safe} edges={['top']}><ActivityIndicator color={Colors.primary} style={{flex:1}}/></SafeAreaView>;
   if(!ride) return <SafeAreaView style={st.safe} edges={['top']}><Text style={{textAlign:'center',marginTop:40,color:Colors.textSecondary}}>Ride not found</Text></SafeAreaView>;
@@ -445,18 +473,26 @@ export default function RideDetailsScreen({ navigation, route }) {
         {isOwner ? (
           <>
             <TouchableOpacity style={st.outlineBtn} onPress={()=>setShowManagePax(true)}><Ionicons name="people-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Passengers</Text></TouchableOpacity>
+            <TouchableOpacity style={st.outlineBtn} onPress={()=>setShowStopRequests(true)}><Ionicons name="flag-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Stops</Text></TouchableOpacity>
             <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowManageRide(true)}><Text style={st.primaryBtnText}>Manage Ride</Text></TouchableOpacity>
           </>
         ) : (
           <>
-            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages')}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message</Text></TouchableOpacity>
-            <TouchableOpacity style={st.primaryBtn} onPress={()=>navigation.navigate('BookRide',{rideId:ride._id})}><Text style={st.primaryBtnText}>Book Now · {ride.pricePerSeat} MAD</Text></TouchableOpacity>
+            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages', {driverId: driver._id, driverName: `${driver.firstName} ${driver.lastName}`})}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message</Text></TouchableOpacity>
+            {hasBooking ? (
+              <View style={[st.primaryBtn, {backgroundColor: Colors.textDisabled}]}>
+                <Text style={st.primaryBtnText}>Already Booked</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={st.primaryBtn} onPress={()=>navigation.navigate('BookRide',{rideId:ride._id})}><Text style={st.primaryBtnText}>Book Now · {ride.pricePerSeat} MAD</Text></TouchableOpacity>
+            )}
           </>
         )}
       </View>
 
       <DriverProfileModal visible={showProfile} ride={ride} driver={driver} onClose={()=>setShowProfile(false)}/>
       <ManagePassengersModal visible={showManagePax} rideId={ride._id} totalSeats={ride.totalSeats} onClose={()=>setShowManagePax(false)}/>
+      <StopRequestsModal visible={showStopRequests} rideId={ride._id} onClose={()=>setShowStopRequests(false)}/>
       <ManageRideModal
         visible={showManageRide}
         ride={ride}
@@ -486,7 +522,7 @@ const st = StyleSheet.create({
   bottomBar:{flexDirection:'row',gap:Spacing.sm,padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border},
   outlineBtn:{flex:0.45,height:50,borderRadius:Radius.md,borderWidth:1.5,borderColor:Colors.primary,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},outlineBtnText:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
   primaryBtn:{flex:0.55,height:50,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},primaryBtnText:{fontSize:Typography.base,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
-  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end'},profileModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},manageModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'50%'},
+  modalOv:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'flex-end'},profileModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},manageModal:{backgroundColor:Colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:Spacing.xl,maxHeight:'85%'},
   modalH:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.lg},modalTitle:{fontSize:Typography['2xl'],fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
   sectionLabel:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5,marginBottom:8},
   profHeader:{flexDirection:'row',alignItems:'center',gap:14,marginBottom:Spacing.lg},profAvatar:{width:56,height:56,borderRadius:28,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center'},profAvatarText:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},profName:{fontSize:18,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},profRole:{fontSize:13,color:Colors.textSecondary},
