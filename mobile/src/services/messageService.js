@@ -24,3 +24,18 @@ export const deleteConversation = async (otherUserId) => {
   const { data } = await api.delete(`/messages/conversation/${otherUserId}`);
   return data;
 };
+
+export const getChannels = async () => {
+  const { data } = await api.get('/messages/channels');
+  return data;
+};
+
+export const getChannelMessages = async (rideId) => {
+  const { data } = await api.get(`/messages/channels/${rideId}`);
+  return data;
+};
+
+export const sendChannelMessage = async (rideId, content) => {
+  const { data } = await api.post(`/messages/channels/${rideId}`, { content });
+  return data;
+};

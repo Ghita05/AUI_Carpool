@@ -136,44 +136,175 @@ function ChatView({ conv, onBack, navigation }) {
   );
 }
 
+function ChannelItem({ channel, onPress }) {
+  const name = channel.name || 'Group';
+  const memberCount = channel.members?.length || 0;
+  return (
+    <TouchableOpacity style={s.convItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={[s.convAvatar, { backgroundColor: Colors.primary }]}>
+        <Ionicons name="people" size={20} color="#fff" />
+      </View>
+      <View style={s.convContent}>
+        <View style={s.convTopRow}>
+          <Text style={s.convName}>{name}</Text>
+          <Text style={s.convTime}>{timeLabel(channel.lastDate)}</Text>
+        </View>
+        <View style={s.convBottomRow}>
+          <Text style={s.convPreview} numberOfLines={1}>
+            {channel.lastMessage || `${memberCount} members`}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function ChannelChatView({ channel, onBack }) {
+  const { user } = useAuth();
+  const [msg, setMsg] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const res = await msgService.getChannelMessages(channel._id);
+        setMessages(res.data?.messages || []);
+      } catch {}
+      finally { setLoading(false); }
+    };
+    fetchMessages();
+  }, [channel._id]);
+
+  const send = async () => {
+    if (!msg.trim()) return;
+    try {
+      const res = await msgService.sendChannelMessage(channel._id, msg.trim());
+      if (res.data?.message) {
+        setMessages(prev => [...prev, res.data.message]);
+      }
+      setMsg('');
+    } catch {}
+  };
+
+  const memberCount = channel.members?.length || 0;
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+      <View style={s.chatHeader}>
+        <TouchableOpacity onPress={onBack} style={s.headerBtn}>
+          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={[s.chatAvatar, { backgroundColor: Colors.primary }]}>
+          <Ionicons name="people" size={16} color="#fff" />
+        </View>
+        <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+          <Text style={s.chatName}>{channel.name || 'Group'}</Text>
+          <Text style={{ fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary }}>{memberCount} members</Text>
+        </View>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={Colors.primary} style={{ flex: 1 }} />
+      ) : (
+        <FlatList
+          data={messages}
+          keyExtractor={item => item._id}
+          contentContainerStyle={s.messagesList}
+          renderItem={({ item }) => {
+            const senderId = item.senderId?._id || item.senderId;
+            const isMe = senderId === user?._id;
+            const senderName = item.senderId?.firstName
+              ? `${item.senderId.firstName} ${item.senderId.lastName || ''}`.trim()
+              : '';
+            return (
+              <View style={[s.bubbleRow, isMe && s.bubbleRowMe]}>
+                <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+                  {!isMe && senderName ? (
+                    <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary, marginBottom: 2 }}>{senderName}</Text>
+                  ) : null}
+                  <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>{item.content}</Text>
+                  <Text style={[s.bubbleTime, isMe && { color: 'rgba(255,255,255,0.7)' }]}>
+                    {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
+
+      <View style={s.inputBar}>
+        <TextInput style={s.chatInput} placeholder="Type a message..." placeholderTextColor={Colors.textDisabled} value={msg} onChangeText={setMsg} multiline />
+        <TouchableOpacity style={[s.sendBtn, !msg.trim() && s.sendBtnDisabled]} onPress={send}>
+          <Ionicons name="send" size={16} color={Colors.textWhite} />
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
 export default function MessagesScreen({ navigation, route }) {
   const [search, setSearch] = useState('');
   const [activeConv, setActiveConv] = useState(null);
+  const [activeChannel, setActiveChannel] = useState(null);
   const [conversations, setConversations] = useState([]);
+  const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const driverId = route?.params?.driverId;
   const driverName = route?.params?.driverName;
 
-  const fetchConversations = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await msgService.getConversations();
-      setConversations(res.data?.conversations || []);
+      const [convRes, chRes] = await Promise.all([
+        msgService.getConversations(),
+        msgService.getChannels(),
+      ]);
+      setConversations(convRes.data?.conversations || []);
+      setChannels(chRes.data?.channels || []);
     } catch {}
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { 
-    fetchConversations();
-    // If driverId is passed, set up direct conversation
+    fetchAll();
     if (driverId) {
       setActiveConv({
         _id: driverId,
         otherUser: { _id: driverId, firstName: driverName?.split(' ')[0] || 'Driver', lastName: driverName?.split(' ')[1] || '' }
       });
     }
-  }, [fetchConversations, driverId, driverName]);
+  }, [fetchAll, driverId, driverName]);
 
-  const filtered = conversations.filter(c => {
+  // Merge conversations and channels into a unified list sorted by lastDate
+  const unified = [
+    ...conversations.map(c => ({ ...c, _type: 'conv' })),
+    ...channels.map(c => ({ ...c, _type: 'channel' })),
+  ].sort((a, b) => new Date(b.lastDate) - new Date(a.lastDate));
+
+  const filtered = unified.filter(item => {
     if (!search) return true;
-    const name = `${c.otherUser?.firstName || ''} ${c.otherUser?.lastName || ''}`.toLowerCase();
+    if (item._type === 'channel') {
+      return (item.name || '').toLowerCase().includes(search.toLowerCase());
+    }
+    const name = `${item.otherUser?.firstName || ''} ${item.otherUser?.lastName || ''}`.toLowerCase();
     return name.includes(search.toLowerCase());
   });
+
+  if (activeChannel) {
+    return (
+      <SafeAreaView style={s.safe} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+        <ChannelChatView channel={activeChannel} onBack={() => { setActiveChannel(null); fetchAll(); }} />
+      </SafeAreaView>
+    );
+  }
 
   if (activeConv) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-        <ChatView conv={activeConv} onBack={() => { setActiveConv(null); fetchConversations(); }} navigation={navigation} />
+        <ChatView conv={activeConv} onBack={() => { setActiveConv(null); fetchAll(); }} navigation={navigation} />
       </SafeAreaView>
     );
   }
@@ -196,7 +327,9 @@ export default function MessagesScreen({ navigation, route }) {
         <Text style={{ textAlign: 'center', padding: 40, color: Colors.textSecondary }}>No conversations yet</Text>
       ) : (
         <FlatList data={filtered} keyExtractor={item => item._id} renderItem={({ item }) => (
-          <ConversationItem conv={item} onPress={() => setActiveConv(item)} />
+          item._type === 'channel'
+            ? <ChannelItem channel={item} onPress={() => setActiveChannel(item)} />
+            : <ConversationItem conv={item} onPress={() => setActiveConv(item)} />
         )} />
       )}
     </SafeAreaView>

@@ -137,14 +137,15 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
   );
 }
 
-function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
+function ManageRideModal({visible,ride,onClose,onUpdated}){
   const [price, setPrice] = useState('');
   const [seats, setSeats] = useState('');
   const [gender, setGender] = useState('All');
   const [saving, setSaving] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [departureDateTime, setDepartureDateTime] = useState(null);
-  const [cancellationReason, setCancellationReason] = useState('');
+  const [rideStops, setRideStops] = useState([]);
+  const [newStop, setNewStop] = useState('');
 
   useEffect(() => {
     if (visible && ride) {
@@ -152,51 +153,10 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
       setSeats(String(ride.totalSeats));
       setGender(ride.genderPreference || 'All');
       setDepartureDateTime(ride.departureDateTime);
+      setRideStops(ride.stops || []);
+      setNewStop('');
     }
   }, [visible, ride]);
-
-  const handleCancel = () => {
-    // Check time limit before showing confirm dialog
-    const now = new Date();
-    const departureTime = new Date(ride.departureDateTime);
-    const timeToDeparture = departureTime - now;
-    const twoHoursInMs = 2 * 60 * 60 * 1000;
-
-    if (timeToDeparture < twoHoursInMs) {
-      Alert.alert('Cannot Cancel', 'You cannot cancel a ride within 2 hours of departure.');
-      return;
-    }
-
-    if (!cancellationReason.trim()) {
-      Alert.alert('Reason Required', 'Please tell passengers why you\'re cancelling this ride.');
-      return;
-    }
-
-    Alert.alert(
-      'Cancel Ride',
-      'Are you sure? All confirmed passengers will be notified and their bookings cancelled.',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel Ride', style: 'destructive',
-          onPress: async () => {
-            try {
-              await cancelRide(ride._id, cancellationReason);
-              setCancellationReason('');
-              onClose();
-              Alert.alert(
-                'Ride Cancelled',
-                'All passengers have been notified.',
-                [{ text: 'OK', onPress: onCancelledAndBack }]
-              );
-            } catch (e) {
-              Alert.alert('Error', e.response?.data?.message || 'Failed to cancel ride');
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -210,6 +170,10 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
       if (gender !== (ride.genderPreference || 'All')) updates.genderPreference = gender;
       if (departureDateTime && departureDateTime !== ride.departureDateTime) {
         updates.departureDateTime = departureDateTime;
+      }
+      const origStops = ride.stops || [];
+      if (JSON.stringify(rideStops) !== JSON.stringify(origStops)) {
+        updates.stops = rideStops;
       }
       if (Object.keys(updates).length === 0) {
         Alert.alert('No Changes', 'Nothing was changed.');
@@ -241,7 +205,7 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingBottom: Spacing.xl}}>
             {/* Read-only route — immutable post-posting */}
-            <Text style={st.mngSectionLabel}>ROUTE · READ-ONLY</Text>
+            <Text style={st.mngSectionLabel}>ROUTE</Text>
             <Text style={st.mngHint}>Route cannot be changed after posting</Text>
             <View style={st.mngReadonlyRow}>
               <View style={[st.routeDotSm, {backgroundColor: Colors.primary}]}/>
@@ -309,25 +273,39 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
               ))}
             </View>
 
-            <View style={st.mngDivider}/>
-
-            <Text style={st.mngSectionLabel}>CANCEL RIDE</Text>
-            <Text style={st.mngLabel}>Cancellation Reason (Required)</Text>
-            <TextInput
-              style={[st.mngInputRow, {height: 80, paddingVertical: Spacing.md}]}
-              value={cancellationReason}
-              onChangeText={setCancellationReason}
-              placeholder="Tell passengers why you're cancelling..."
-              placeholderTextColor={Colors.textDisabled}
-              multiline
-              numberOfLines={3}
-            />
+            <Text style={st.mngLabel}>Stops</Text>
+            <View style={{flexDirection:'row', gap: 8, marginBottom: rideStops.length ? 8 : Spacing.lg}}>
+              <TextInput
+                style={[st.mngInputRow, {flex:1}]}
+                value={newStop}
+                onChangeText={setNewStop}
+                placeholder="Add a stop"
+                placeholderTextColor={Colors.textDisabled}
+              />
+              <TouchableOpacity
+                style={{height:46,width:46,backgroundColor:Colors.primary,borderRadius:Radius.sm,alignItems:'center',justifyContent:'center'}}
+                onPress={()=>{
+                  const s=newStop.trim();
+                  if(s&&!rideStops.includes(s)){setRideStops([...rideStops,s]);setNewStop('');}
+                }}
+              >
+                <Ionicons name="add" size={20} color={Colors.textWhite}/>
+              </TouchableOpacity>
+            </View>
+            {rideStops.length>0&&(
+              <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:Spacing.lg}}>
+                {rideStops.map((s,i)=>(
+                  <View key={i} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
+                    <Text style={{color:Colors.primary,fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold'}}>{s}</Text>
+                    <TouchableOpacity onPress={()=>setRideStops(rideStops.filter((_,j)=>j!==i))} style={{marginLeft:6}}>
+                      <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <View style={{flexDirection:'row', gap: 10, marginTop: Spacing.sm}}>
-              <TouchableOpacity style={st.cancelRideBtn} onPress={handleCancel}>
-                <Ionicons name="close-circle-outline" size={14} color={Colors.error}/>
-                <Text style={st.cancelRideBtnText}>Cancel Ride</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={st.saveRideBtn} onPress={handleSave} disabled={saving}>
                 <Text style={st.saveRideBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
               </TouchableOpacity>
@@ -346,6 +324,94 @@ function ManageRideModal({visible,ride,onClose,onCancelledAndBack,onUpdated}){
   );
 }
 
+function CancelRideModal({visible, ride, onClose, onCancelledAndBack}) {
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (visible) setCancellationReason('');
+  }, [visible]);
+
+  const handleCancel = async () => {
+    const now = new Date();
+    const departureTime = new Date(ride.departureDateTime);
+    const timeToDeparture = departureTime - now;
+    const twoHoursInMs = 2 * 60 * 60 * 1000;
+
+    if (timeToDeparture < twoHoursInMs) {
+      Alert.alert('Cannot Cancel', 'You cannot cancel a ride within 2 hours of departure.');
+      return;
+    }
+    if (!cancellationReason.trim()) {
+      Alert.alert('Reason Required', "Please tell passengers why you're cancelling this ride.");
+      return;
+    }
+
+    Alert.alert(
+      'Cancel Ride',
+      'Are you sure? All confirmed passengers will be notified and their bookings cancelled.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Ride', style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await cancelRide(ride._id, cancellationReason);
+              onClose();
+              Alert.alert('Ride Cancelled', 'All passengers have been notified.', [
+                { text: 'OK', onPress: onCancelledAndBack },
+              ]);
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Failed to cancel ride');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (!ride) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={st.modalOv}>
+        <View style={[st.manageModal, {maxHeight: '50%'}]}>
+          <View style={st.modalH}>
+            <Text style={st.modalTitle}>Cancel Ride</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={Colors.textSecondary}/>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{fontSize:13,color:Colors.textSecondary,marginBottom:Spacing.md,lineHeight:18}}>
+            Cancelling will notify all confirmed passengers and refund their bookings.
+          </Text>
+
+          <Text style={st.mngLabel}>Cancellation Reason</Text>
+          <TextInput
+            style={[st.mngInputRow, {height: 90, paddingVertical: Spacing.md, textAlignVertical: 'top'}]}
+            value={cancellationReason}
+            onChangeText={setCancellationReason}
+            placeholder="Tell passengers why you're cancelling..."
+            placeholderTextColor={Colors.textDisabled}
+            multiline
+            numberOfLines={4}
+          />
+
+          <View style={{flexDirection:'row', gap: 10, marginTop: Spacing.lg}}>
+            <TouchableOpacity style={[st.cancelRideBtn, {flex:1}]} onPress={handleCancel} disabled={loading}>
+              <Ionicons name="close-circle-outline" size={14} color={Colors.error}/>
+              <Text style={st.cancelRideBtnText}>{loading ? 'Cancelling…' : 'Cancel Ride'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function RideDetailsScreen({ navigation, route }) {
   const { isDriver, user } = useAuth();
   const rideId = route?.params?.rideId;
@@ -354,6 +420,7 @@ export default function RideDetailsScreen({ navigation, route }) {
   const [showProfile,setShowProfile]=useState(false);
   const [showManagePax,setShowManagePax]=useState(false);
   const [showManageRide,setShowManageRide]=useState(false);
+  const [showCancelRide,setShowCancelRide]=useState(false);
   const [showStopRequests,setShowStopRequests]=useState(false);
   const [hasBooking, setHasBooking] = useState(false);
 
@@ -387,6 +454,7 @@ export default function RideDetailsScreen({ navigation, route }) {
   useEffect(() => {
     if (!loading && ride) {
       if (route?.params?.openManage) setShowManageRide(true);
+      if (route?.params?.openCancel) setShowCancelRide(true);
       if (route?.params?.openStops) setShowStopRequests(true);
     }
   }, [loading, ride]);
@@ -478,7 +546,7 @@ export default function RideDetailsScreen({ navigation, route }) {
           </>
         ) : (
           <>
-            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages', {driverId: driver._id, driverName: `${driver.firstName} ${driver.lastName}`})}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message</Text></TouchableOpacity>
+            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages', {driverId: driver._id, driverName: `${driver.firstName} ${driver.lastName}`})}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message Driver</Text></TouchableOpacity>
             {hasBooking ? (
               <View style={[st.primaryBtn, {backgroundColor: Colors.textDisabled}]}>
                 <Text style={st.primaryBtnText}>Already Booked</Text>
@@ -497,8 +565,13 @@ export default function RideDetailsScreen({ navigation, route }) {
         visible={showManageRide}
         ride={ride}
         onClose={() => setShowManageRide(false)}
-        onCancelledAndBack={() => navigation.goBack()}
         onUpdated={fetchRide}
+      />
+      <CancelRideModal
+        visible={showCancelRide}
+        ride={ride}
+        onClose={() => setShowCancelRide(false)}
+        onCancelledAndBack={() => navigation.goBack()}
       />
     </SafeAreaView>
   );
@@ -547,4 +620,5 @@ const st = StyleSheet.create({
   saveRideBtn:{flex:1,height:46,backgroundColor:Colors.primary,borderRadius:8,alignItems:'center',justifyContent:'center'},saveRideBtnText:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
   mngDateTimeButton:{flexDirection:'row',alignItems:'center',height:44,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,backgroundColor:Colors.background,marginBottom:4},
   mngDateTimeValue:{fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
+  cancelIconBtn:{width:42,height:42,borderWidth:1.5,borderColor:Colors.error,borderRadius:8,alignItems:'center',justifyContent:'center'},
 });

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../theme';
 import { postRideRequest, searchUsers } from '../../services/rideService';
+import { useAuth } from '../../context/AuthContext';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
 import RequestConfirmationModal from '../../components/RequestConfirmationModal';
 
@@ -20,6 +21,7 @@ function SectionCard({ title, children }) {
 
 
 export default function PostRideRequestScreen({ navigation }) {
+  const { user } = useAuth();
   const [from, setFrom] = useState('AUI Campus');
   const [to, setTo] = useState('');
   const [departureDateTime, setDepartureDateTime] = useState(null);
@@ -31,6 +33,8 @@ export default function PostRideRequestScreen({ navigation }) {
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [maxPrice, setMaxPrice] = useState('');
   const [notes, setNotes] = useState('');
+  const [stops, setStops] = useState([]);
+  const [newStop, setNewStop] = useState('');
   const [posting, setPosting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [lastRequest, setLastRequest] = useState(null);
@@ -40,7 +44,7 @@ export default function PostRideRequestScreen({ navigation }) {
     if (!to.trim())   { alert('Please enter a destination.'); return; }
     if (!departureDateTime) { alert('Please select a date and time.'); return; }
     if (!maxPrice)    { alert('Please enter a max budget.'); return; }
-    if (groupMode && groupUsers.length < 2) { alert('Select at least 2 users for a group request.'); return; }
+    if (groupMode && groupUsers.length < 2) { alert('Add at least 1 other person for a group request.'); return; }
 
     setPosting(true);
     try {
@@ -54,6 +58,7 @@ export default function PostRideRequestScreen({ navigation }) {
           maxPrice: parseInt(maxPrice) || 100,
           notes,
           groupPassengerIds: groupUsers.map(u => u._id),
+          stops,
         };
       } else {
         reqObj = {
@@ -63,6 +68,7 @@ export default function PostRideRequestScreen({ navigation }) {
           passengerCount: 1,
           maxPrice: parseInt(maxPrice) || 100,
           notes,
+          stops,
         };
       }
       await postRideRequest(reqObj);
@@ -131,6 +137,40 @@ export default function PostRideRequestScreen({ navigation }) {
           </View>
         </SectionCard>
 
+        {/* Stops */}
+        <SectionCard title="Stops (Optional)">
+          <View style={{flexDirection:'row',gap:8,marginBottom:stops.length?8:0}}>
+            <TextInput
+              style={[styles.input,{flex:1}]}
+              value={newStop}
+              onChangeText={setNewStop}
+              placeholder="Add a stop along the way"
+              placeholderTextColor={Colors.textDisabled}
+            />
+            <TouchableOpacity
+              style={{height:46,width:46,backgroundColor:Colors.primary,borderRadius:Radius.sm,alignItems:'center',justifyContent:'center'}}
+              onPress={()=>{
+                const s=newStop.trim();
+                if(s&&!stops.includes(s)){setStops([...stops,s]);setNewStop('');}
+              }}
+            >
+              <Ionicons name="add" size={20} color={Colors.textWhite}/>
+            </TouchableOpacity>
+          </View>
+          {stops.length>0&&(
+            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
+              {stops.map((s,i)=>(
+                <View key={i} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
+                  <Text style={{color:Colors.primary,fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold'}}>{s}</Text>
+                  <TouchableOpacity onPress={()=>setStops(stops.filter((_,j)=>j!==i))} style={{marginLeft:6}}>
+                    <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </SectionCard>
+
         {/* Date & Time */}
         <SectionCard title="Date & Time">
           <TouchableOpacity style={styles.dateTimePickerButton} onPress={() => setShowDateTimePicker(true)}>
@@ -151,12 +191,22 @@ export default function PostRideRequestScreen({ navigation }) {
           <View style={{flexDirection:'row',alignItems:'center',marginBottom:10}}>
             <TouchableOpacity
               style={{flexDirection:'row',alignItems:'center',gap:6,padding:6,borderRadius:8,borderWidth:1,borderColor:groupMode?Colors.primary:Colors.border,backgroundColor:groupMode?Colors.primaryBg:Colors.background,marginRight:10}}
-              onPress={()=>setGroupMode(g=>!g)}
+              onPress={()=>{
+                setGroupMode(g => {
+                  const next = !g;
+                  if (next && user) {
+                    setGroupUsers(prev => prev.some(u => u._id === user._id) ? prev : [{ _id: user._id, firstName: user.firstName, lastName: user.lastName }, ...prev]);
+                  } else if (!next) {
+                    setGroupUsers([]);
+                  }
+                  return next;
+                });
+              }}
             >
               <Ionicons name={groupMode?"checkbox-outline":"square-outline"} size={18} color={groupMode?Colors.primary:Colors.textSecondary}/>
               <Text style={{color:groupMode?Colors.primary:Colors.textSecondary,fontFamily:'PlusJakartaSans_600SemiBold',fontSize:13}}>Group Request</Text>
             </TouchableOpacity>
-            <Text style={{color:Colors.textSecondary,fontSize:12}}>Request for multiple users</Text>
+              <Text style={{color:Colors.textSecondary,fontSize:12}}>Request for multiple users</Text>
           </View>
           {groupMode && (
             <>
@@ -170,7 +220,7 @@ export default function PostRideRequestScreen({ navigation }) {
                     setUserSearchLoading(true);
                     try {
                       const res = await searchUsers(txt);
-                      setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id)));
+                      setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id) && u._id !== user?._id));
                     } catch { setUserSearchResults([]); }
                     setUserSearchLoading(false);
                   } else {
@@ -199,10 +249,12 @@ export default function PostRideRequestScreen({ navigation }) {
                 <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:8}}>
                   {groupUsers.map(u => (
                     <View key={u._id} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
-                      <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}</Text>
-                      <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
-                        <Ionicons name="close-circle" size={14} color={Colors.error}/>
-                      </TouchableOpacity>
+                      <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}{u._id === user?._id ? ' (You)' : ''}</Text>
+                      {u._id !== user?._id && (
+                        <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
+                          <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))}
                 </View>

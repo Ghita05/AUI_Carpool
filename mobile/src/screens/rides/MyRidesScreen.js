@@ -165,7 +165,7 @@ function DriverRideCard({ ride, navigation }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSecondary]}
-              onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id, openManage: true })}
+              onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id, openCancel: true })}
             >
               <Ionicons name="close-circle-outline" size={12} color={Colors.error} />
               <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>

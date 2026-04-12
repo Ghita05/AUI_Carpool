@@ -135,6 +135,7 @@ function formatTime(raw) {
 import { searchUsers } from '../../services/rideService';
 
 function RideRequestModal({ visible, destination, onClose }) {
+  const { user: currentUser } = useAuth();
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [seats, setSeats] = useState(1);
@@ -148,6 +149,8 @@ function RideRequestModal({ visible, destination, onClose }) {
   const [userSearch, setUserSearch] = useState('');
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [stops, setStops] = useState([]);
+  const [newStop, setNewStop] = useState('');
 
   // Build a Date object from current date+time for the picker’s initial value
   const getInitialDateForPicker = () => {
@@ -171,6 +174,8 @@ function RideRequestModal({ visible, destination, onClose }) {
     setUserSearch('');
     setUserSearchResults([]);
     setUserSearchLoading(false);
+    setStops([]);
+    setNewStop('');
     onClose();
   };
 
@@ -180,7 +185,7 @@ function RideRequestModal({ visible, destination, onClose }) {
       return;
     }
     if (groupMode && groupUsers.length < 2) {
-      Alert.alert('Group Request', 'Select at least 2 users for a group request.');
+      Alert.alert('Group Request', 'Add at least 1 other person for a group request.');
       return;
     }
     const travelDateTime = new Date(`${date}T${time}:00`);
@@ -200,6 +205,7 @@ function RideRequestModal({ visible, destination, onClose }) {
           maxPrice: 200,
           notes,
           groupPassengerIds: groupUsers.map(u => u._id),
+          stops,
         };
       } else {
         reqObj = {
@@ -209,6 +215,7 @@ function RideRequestModal({ visible, destination, onClose }) {
           passengerCount: seats,
           maxPrice: 200,
           notes,
+          stops,
         };
       }
       await postRideRequest(reqObj);
@@ -292,7 +299,17 @@ function RideRequestModal({ visible, destination, onClose }) {
                 <View style={{flexDirection:'row',alignItems:'center',marginTop:Spacing.md,marginBottom:10}}>
                   <TouchableOpacity
                     style={{flexDirection:'row',alignItems:'center',gap:6,padding:6,borderRadius:8,borderWidth:1,borderColor:groupMode?Colors.primary:Colors.border,backgroundColor:groupMode?Colors.primaryBg:Colors.background,marginRight:10}}
-                    onPress={()=>setGroupMode(g=>!g)}
+                    onPress={()=>{
+                      setGroupMode(g => {
+                        const next = !g;
+                        if (next && currentUser) {
+                          setGroupUsers(prev => prev.some(u => u._id === currentUser._id) ? prev : [{ _id: currentUser._id, firstName: currentUser.firstName, lastName: currentUser.lastName }, ...prev]);
+                        } else if (!next) {
+                          setGroupUsers([]);
+                        }
+                        return next;
+                      });
+                    }}
                   >
                     <Ionicons name={groupMode?"checkbox-outline":"square-outline"} size={18} color={groupMode?Colors.primary:Colors.textSecondary}/>
                     <Text style={{color:groupMode?Colors.primary:Colors.textSecondary,fontFamily:'PlusJakartaSans_600SemiBold',fontSize:13}}>Group Request</Text>
@@ -311,7 +328,7 @@ function RideRequestModal({ visible, destination, onClose }) {
                           setUserSearchLoading(true);
                           try {
                             const res = await searchUsers(txt);
-                            setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id)));
+                            setUserSearchResults(res.users.filter(u => !groupUsers.some(g => g._id === u._id) && u._id !== currentUser?._id));
                           } catch { setUserSearchResults([]); }
                           setUserSearchLoading(false);
                         } else {
@@ -340,10 +357,12 @@ function RideRequestModal({ visible, destination, onClose }) {
                       <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:8}}>
                         {groupUsers.map(u => (
                           <View key={u._id} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
-                            <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}</Text>
-                            <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
-                              <Ionicons name="close-circle" size={14} color={Colors.error}/>
-                            </TouchableOpacity>
+                            <Text style={{color:Colors.primary,fontSize:13}}>{u.firstName} {u.lastName}{u._id === currentUser?._id ? ' (You)' : ''}</Text>
+                            {u._id !== currentUser?._id && (
+                              <TouchableOpacity onPress={()=>setGroupUsers(groupUsers.filter(g=>g._id!==u._id))} style={{marginLeft:6}}>
+                                <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                              </TouchableOpacity>
+                            )}
                           </View>
                         ))}
                       </View>
@@ -365,6 +384,29 @@ function RideRequestModal({ visible, destination, onClose }) {
                       </TouchableOpacity>
                     </View>
                   </>
+                )}
+
+                <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>STOPS (OPTIONAL)</Text>
+                <View style={{flexDirection:'row',gap:8,marginBottom:stops.length?8:0}}>
+                  <TextInput style={[st.reqInput,{flex:1}]} value={newStop} onChangeText={setNewStop} placeholder="Add a stop along the way" placeholderTextColor={Colors.textDisabled} />
+                  <TouchableOpacity
+                    style={{height:42,width:42,backgroundColor:Colors.primary,borderRadius:Radius.sm,alignItems:'center',justifyContent:'center'}}
+                    onPress={()=>{ const s=newStop.trim(); if(s&&!stops.includes(s)){setStops([...stops,s]);setNewStop('');} }}
+                  >
+                    <Ionicons name="add" size={20} color="#fff"/>
+                  </TouchableOpacity>
+                </View>
+                {stops.length>0&&(
+                  <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:4}}>
+                    {stops.map((s,i)=>(
+                      <View key={i} style={{flexDirection:'row',alignItems:'center',backgroundColor:Colors.primaryBg,paddingHorizontal:10,paddingVertical:4,borderRadius:16}}>
+                        <Text style={{color:Colors.primary,fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold'}}>{s}</Text>
+                        <TouchableOpacity onPress={()=>setStops(stops.filter((_,j)=>j!==i))} style={{marginLeft:6}}>
+                          <Ionicons name="close-circle" size={14} color={Colors.error}/>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
                 )}
 
                 <Text style={[st.inputLabel, { marginTop: Spacing.md }]}>NOTES (OPTIONAL)</Text>

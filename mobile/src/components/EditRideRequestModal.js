@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Input from './common/Input';
 import { Colors, Spacing, Radius, Typography } from '../theme';
 import DateTimePickerModal from './DateTimePickerModal';
@@ -11,6 +12,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
   const [loading, setLoading] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [travelDateTime, setTravelDateTime] = useState(request?.travelDateTime ? new Date(request.travelDateTime) : null);
+  const [dateTimeChanged, setDateTimeChanged] = useState(false);
   const [groupPassengerIds, setGroupPassengerIds] = useState(request?.groupPassengerIds || []);
   // Always include the owner in groupUsers
   const initialGroupUsers = React.useMemo(() => {
@@ -24,27 +26,40 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
   const [userSearch, setUserSearch] = useState('');
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [stops, setStops] = useState(request?.stops || []);
+  const [newStop, setNewStop] = useState('');
 
   // Reset modal state when request changes
   React.useEffect(() => {
     setMaxPrice(request?.maxPrice?.toString() || '');
     setNotes(request?.notes || '');
     setTravelDateTime(request?.travelDateTime ? new Date(request.travelDateTime) : null);
+    setDateTimeChanged(false);
     setGroupPassengerIds(request?.groupPassengerIds || []);
     setGroupUsers(request?.groupUsers || []);
     setUserSearch('');
     setUserSearchResults([]);
+    setStops(request?.stops || []);
+    setNewStop('');
   }, [request]);
 
   const handleSave = async () => {
     setLoading(true);
-    await onSave({
+    const payload = {
       maxPrice: Number(maxPrice),
       notes,
-      travelDateTime: travelDateTime ? travelDateTime.toISOString() : undefined,
-      groupPassengerIds: groupUsers.map(u => u._id),
-      passengerCount: groupUsers.length,
-    });
+      stops,
+    };
+    // Only send travelDateTime if the user explicitly changed it
+    if (dateTimeChanged && travelDateTime) {
+      payload.travelDateTime = travelDateTime.toISOString();
+    }
+    // Only send group fields for group requests
+    if (groupUsers.length > 0) {
+      payload.groupPassengerIds = groupUsers.map(u => u._id);
+      payload.passengerCount = groupUsers.length;
+    }
+    await onSave(payload);
     setLoading(false);
   };
 
@@ -57,6 +72,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <Text style={styles.title}>Edit Ride Request</Text>
+          <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
           {/* Date & Time Picker */}
           <TouchableOpacity
@@ -76,6 +92,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             onClose={() => setShowDateTimePicker(false)}
             onConfirm={(selectedDate, selectedTime) => {
               setTravelDateTime(new Date(selectedDate));
+              setDateTimeChanged(true);
               setShowDateTimePicker(false);
             }}
           />
@@ -144,6 +161,36 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             <Text style={{ color: Colors.textSecondary, fontSize: 13, marginBottom: 8 }}>To add group members, this must be a group request (more than 1 member).</Text>
           )}
 
+          {/* Stops Section */}
+          <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.md, marginBottom: 6, color: Colors.textPrimary }}>Stops (Optional)</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: stops.length ? 8 : 0 }}>
+            <TextInput
+              style={{ flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, padding: 8, fontSize: 15, color: Colors.textPrimary }}
+              value={newStop}
+              onChangeText={setNewStop}
+              placeholder="Add a stop along the way"
+              placeholderTextColor={Colors.textDisabled}
+            />
+            <TouchableOpacity
+              style={{ height: 42, width: 42, backgroundColor: Colors.primary, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' }}
+              onPress={() => { const s = newStop.trim(); if (s && !stops.includes(s)) { setStops([...stops, s]); setNewStop(''); } }}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          {stops.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {stops.map((s, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
+                  <Text style={{ color: Colors.primary, fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s}</Text>
+                  <TouchableOpacity onPress={() => setStops(stops.filter((_, j) => j !== i))} style={{ marginLeft: 6 }}>
+                    <Ionicons name="close-circle" size={14} color={Colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
           <Input
             label="Max Price (MAD)"
             keyboardType="numeric"
@@ -158,7 +205,8 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             multiline
             style={{ marginBottom: Spacing.md }}
           />
-          <View style={{ flexDirection: 'row', gap: 12 }}>
+          </ScrollView>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: Spacing.md }}>
             {/* Robust owner check for cancel button: allow if currentUser is the owner (by _id or passenger._id) */}
             {onCancelRequest && currentUser && (
               ((request?.passengerId && request.passengerId === currentUser._id) ||
