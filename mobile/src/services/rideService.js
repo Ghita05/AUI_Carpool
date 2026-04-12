@@ -108,6 +108,19 @@ export const deleteRideRequest = async (requestId) => {
   }
 };
 
+// Cancel entire group ride request (owner only, assumes all members agreed)
+export const cancelGroupRideRequest = async (requestId) => {
+  console.log('[cancelGroupRideRequest] Sending PUT to:', `/rides/requests/${requestId}/cancel-group`);
+  try {
+    const { data } = await api.put(`/rides/requests/${requestId}/cancel-group`);
+    console.log('[cancelGroupRideRequest] Success:', data);
+    return data;
+  } catch (err) {
+    console.log('[cancelGroupRideRequest] Error:', err?.response?.data || err?.message || err);
+    throw err;
+  }
+};
+
 export const acceptRideRequest = async (requestId, rideId) => {
   const { data } = await api.put(`/rides/requests/${requestId}/accept`, { rideId });
   return data;

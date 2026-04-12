@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getMyRides } from '../../services/rideService';
 import { getCurrentBookings, getBookingHistory } from '../../services/bookingService';
 import CancelBookingModal from '../../components/CancelBookingModal';
-import { getMyRideRequests, modifyRideRequest, deleteRideRequest, leaveGroupRideRequest, transferGroupOwner, getUsersByIds } from '../../services/rideService';
+import { getMyRideRequests, modifyRideRequest, deleteRideRequest, leaveGroupRideRequest, transferGroupOwner, getUsersByIds, cancelGroupRideRequest } from '../../services/rideService';
 import EditRideRequestModal from '../../components/EditRideRequestModal';
 
 // Data fetched from API — see useEffect below
@@ -164,16 +164,13 @@ function DriverRideCard({ ride, navigation }) {
   );
 }
 
-function RideRequestCard({ request, isPast, onEdit, onCancel }) {
-  // Determine status for badge
-  let status = request.status?.toLowerCase();
-  const now = new Date();
+function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
+  // Always show Cancel for owner
+  const userIsOwner = currentUser && (
+    (request.passengerId && request.passengerId === currentUser._id) ||
+    (request.passenger && request.passenger._id === currentUser._id)
+  );
   const travelDate = new Date(request.travelDateTime);
-  if (status === 'open') {
-    if (travelDate < now) status = 'expired';
-    else status = 'pending';
-  }
-  if (status === 'accepted') status = 'completed';
   return (
     <View style={styles.rideCard}>
       <View style={styles.cardTopRow}>
@@ -188,7 +185,7 @@ function RideRequestCard({ request, isPast, onEdit, onCancel }) {
             <Text style={styles.routeCity}>{request.destination}</Text>
           </View>
         </View>
-        <StatusBadge status={status} />
+        <StatusBadge status={request.status} />
       </View>
       <View style={styles.metaRow}>
         <View style={styles.metaItem}>
@@ -206,7 +203,7 @@ function RideRequestCard({ request, isPast, onEdit, onCancel }) {
       </View>
       <View style={styles.cardBottom}>
         <Text style={styles.driverName}>Requested for {request.passengerCount} {request.passengerCount > 1 ? 'people' : 'person'}</Text>
-        {!isPast && status === 'pending' && (
+        {userIsOwner && (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => onEdit?.(request)}>
               <Ionicons name="create-outline" size={14} color={Colors.primary} />
@@ -235,6 +232,10 @@ export default function MyRidesScreen({ navigation }) {
   const [pastRequests, setPastRequests] = useState([]);
   const [editingRequest, setEditingRequest] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
+  const [showOwnerModal, setShowOwnerModal] = useState(false);
+  const [ownerTransferRequest, setOwnerTransferRequest] = useState(null);
+  const [ownerCandidates, setOwnerCandidates] = useState([]);
+  const [selectedNewOwner, setSelectedNewOwner] = useState(null);
   // Edit ride request handler: open modal
   // Only owner can edit
   const handleEditRequest = async (request) => {
@@ -269,32 +270,27 @@ export default function MyRidesScreen({ navigation }) {
   };
 
   // Cancel ride request handler
-  // useAuth is already called at the top-level, do not redeclare user here
-  const [showOwnerModal, setShowOwnerModal] = useState(false);
-  const [ownerTransferRequest, setOwnerTransferRequest] = useState(null);
-  const [ownerCandidates, setOwnerCandidates] = useState([]);
   const handleCancelRequest = async (request) => {
-    alert('Cancel handler called. Request _id: ' + request?._id + ', passengerId: ' + request?.passengerId);
-    console.log('CANCEL REQUEST:', request);
     setEditLoading(true);
     try {
       const isOwner = user && request.passengerId && user._id === request.passengerId;
       const groupIds = (request.groupPassengerIds || []).filter(id => id !== request.passengerId);
-      console.log('[handleCancelRequest] isOwner:', isOwner, 'groupIds:', groupIds);
       if (isOwner) {
         if (groupIds.length === 0) {
-          console.log('[handleCancelRequest] About to call deleteRideRequest for', request._id);
           await deleteRideRequest(request._id);
-          alert('DELETE endpoint called for ' + request._id);
           setPendingRequests(prev => prev.filter(r => r._id !== request._id));
         } else if (groupIds.length === 1) {
-          // Only one other member, transfer automatically
           await transferGroupOwner(request._id, groupIds[0]);
           await leaveGroupRideRequest(request._id);
           setPendingRequests(prev => prev.filter(r => r._id !== request._id));
         } else {
-          // Multiple candidates, show modal to select new owner
-          setOwnerCandidates(groupIds);
+          // Multiple candidates, fetch user objects and show modal
+          let candidates = [];
+          try {
+            const res = await getUsersByIds(groupIds);
+            candidates = res.users || [];
+          } catch { candidates = []; }
+          setOwnerCandidates(candidates);
           setOwnerTransferRequest(request);
           setShowOwnerModal(true);
         }
@@ -303,7 +299,6 @@ export default function MyRidesScreen({ navigation }) {
         setPendingRequests(prev => prev.filter(r => r._id !== request._id));
       }
     } catch (err) {
-      console.log('[handleCancelRequest] Error:', err);
       alert('Error: ' + (err?.response?.data?.message || err?.message || 'Failed to cancel request.'));
     }
     setEditLoading(false);
@@ -323,35 +318,23 @@ export default function MyRidesScreen({ navigation }) {
     setShowOwnerModal(false);
     setOwnerTransferRequest(null);
     setOwnerCandidates([]);
+    setSelectedNewOwner(null);
     setEditLoading(false);
   };
-      <EditRideRequestModal
-        visible={!!editingRequest}
-        request={editingRequest}
-        onClose={() => setEditingRequest(null)}
-        onSave={handleSaveEdit}
-        currentUser={user}
-        onCancelRequest={handleCancelRequest}
-      />
 
-      {/* Owner transfer modal */}
-      {showOwnerModal && ownerTransferRequest && (
-        <Modal visible transparent animationType="fade">
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '80%' }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select New Owner</Text>
-              {(ownerTransferRequest.groupUsers || []).filter(u => ownerCandidates.includes(u._id)).map(u => (
-                <TouchableOpacity key={u._id} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' }} onPress={() => handleSelectNewOwner(u._id)}>
-                  <Text style={{ fontSize: 16 }}>{u.firstName} {u.lastName} <Text style={{ color: '#888', fontSize: 13 }}>({u.email})</Text></Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setShowOwnerModal(false)}>
-                <Text style={{ color: 'red', textAlign: 'center' }}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+  // Simple cancel: cancel entire request (group or solo) and notify all passengers
+  const handleSimpleCancelRequest = async (request) => {
+    setEditLoading(true);
+    try {
+      // Use the group cancel endpoint which handles both group and solo requests
+      await cancelGroupRideRequest(request._id);
+      setPendingRequests(prev => prev.filter(r => r._id !== request._id));
+      alert('Ride request cancelled. All members have been notified.');
+    } catch (err) {
+      alert('Error: ' + (err?.response?.data?.message || err?.message || 'Failed to cancel request.'));
+    }
+    setEditLoading(false);
+  };
 
   const handleCancelPress = (ride) => {
     setSelectedRideToCancel(ride);
@@ -467,8 +450,102 @@ export default function MyRidesScreen({ navigation }) {
         onClose={() => setEditingRequest(null)}
         onSave={handleSaveEdit}
         currentUser={user}
-        onCancelRequest={handleCancelRequest}
+        onCancelRequest={handleSimpleCancelRequest}
       />
+
+      <Modal visible={showOwnerModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.xl }}>
+            <Text style={{ fontSize: Typography['2xl'], fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: Spacing.sm }}>Transfer Ownership</Text>
+            <Text style={{ fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginBottom: Spacing.lg }}>Select who will take over this group request:</Text>
+            
+            <View style={{ maxHeight: 300, marginBottom: Spacing.lg }}>
+              {ownerCandidates.length === 0 && (
+                <Text style={{ color: Colors.textSecondary, textAlign: 'center', paddingVertical: Spacing.lg }}>No candidates found.</Text>
+              )}
+              {ownerCandidates.map(u => (
+                <TouchableOpacity
+                  key={u._id}
+                  style={{
+                    paddingHorizontal: Spacing.md,
+                    paddingVertical: Spacing.md,
+                    marginBottom: Spacing.sm,
+                    borderRadius: Radius.md,
+                    borderWidth: 2,
+                    borderColor: selectedNewOwner === u._id ? Colors.primary : Colors.border,
+                    backgroundColor: selectedNewOwner === u._id ? Colors.primaryBg : Colors.background,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                  onPress={() => setSelectedNewOwner(u._id)}
+                >
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      borderWidth: 2,
+                      borderColor: selectedNewOwner === u._id ? Colors.primary : Colors.border,
+                      backgroundColor: selectedNewOwner === u._id ? Colors.primary : 'transparent',
+                      marginRight: Spacing.md,
+                    }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: Typography.md, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary }}>
+                      {u.firstName} {u.lastName}
+                    </Text>
+                    <Text style={{ fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary }}>
+                      {u.email}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: Spacing.md,
+                  borderRadius: Radius.md,
+                  borderWidth: 1,
+                  borderColor: Colors.border,
+                  backgroundColor: Colors.background,
+                }}
+                onPress={() => {
+                  setShowOwnerModal(false);
+                  setSelectedNewOwner(null);
+                  setOwnerTransferRequest(null);
+                  setOwnerCandidates([]);
+                }}
+                disabled={editLoading}
+              >
+                <Text style={{ textAlign: 'center', fontSize: Typography.md, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: Spacing.md,
+                  borderRadius: Radius.md,
+                  backgroundColor: selectedNewOwner ? Colors.primary : Colors.border,
+                }}
+                onPress={() => {
+                  if (selectedNewOwner) {
+                    handleSelectNewOwner(selectedNewOwner);
+                  }
+                }}
+                disabled={!selectedNewOwner || editLoading}
+              >
+                <Text style={{ textAlign: 'center', fontSize: Typography.md, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textWhite }}>
+                  {editLoading ? 'Transferring...' : 'Confirm'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Header */}
       <View style={styles.header}>
@@ -528,7 +605,7 @@ export default function MyRidesScreen({ navigation }) {
                       <RideRequestCard
                         key={req._id}
                         request={req}
-                        isPast={false}
+                        currentUser={user}
                         onEdit={handleEditRequest}
                         onCancel={handleCancelRequest}
                       />

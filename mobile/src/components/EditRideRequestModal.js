@@ -43,6 +43,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
       notes,
       travelDateTime: travelDateTime ? travelDateTime.toISOString() : undefined,
       groupPassengerIds: groupUsers.map(u => u._id),
+      passengerCount: groupUsers.length,
     });
     setLoading(false);
   };
@@ -157,16 +158,13 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             multiline
             style={{ marginBottom: Spacing.md }}
           />
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={loading}>
-              <Text style={styles.cancelText}>Close</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
             {/* Robust owner check for cancel button: allow if currentUser is the owner (by _id or passenger._id) */}
             {onCancelRequest && currentUser && (
               ((request?.passengerId && request.passengerId === currentUser._id) ||
                (request?.passenger && request.passenger._id === currentUser._id)) && (
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: Colors.error, opacity: loading ? 0.7 : 1 }]} 
+                  style={[styles.saveBtn, { flex: 1, backgroundColor: Colors.error, opacity: loading ? 0.7 : 1 }]} 
                   onPress={async () => {
                     setLoading(true);
                     try {
@@ -183,8 +181,8 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
                 </TouchableOpacity>
               )
             )}
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
-              <Text style={styles.saveText}>{loading ? 'Saving...' : 'Save'}</Text>
+            <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSave} disabled={loading}>
+              <Text style={styles.saveText}>{loading ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
           </View>
         </View>
