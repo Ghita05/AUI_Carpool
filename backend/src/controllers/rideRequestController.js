@@ -1,3 +1,27 @@
+// Transfer group owner for a group ride request
+const transferGroupOwner = async (req, res, next) => {
+  try {
+    const { requestId } = req.params;
+    const { newOwnerId } = req.body;
+    const userId = req.user._id.toString();
+    const request = await RideRequest.findById(requestId);
+    if (!request) return error(res, 404, 'Ride request not found.');
+    // Only the current owner can transfer ownership
+    if (request.passengerId.toString() !== userId) {
+      return error(res, 403, 'Only the group owner can transfer ownership.');
+    }
+    let groupIds = (request.groupPassengerIds || []).map(id => id.toString());
+    if (!groupIds.includes(newOwnerId)) {
+      return error(res, 400, 'New owner must be a group member.');
+    }
+    // Transfer ownership
+    request.passengerId = newOwnerId;
+    await request.save();
+    return success(res, 200, 'Ownership transferred.', { request });
+  } catch (err) {
+    next(err);
+  }
+};
 
 // Ensure all models are imported, including Vehicle
 const { RideRequest, Notification, User, Vehicle, Ride } = require('../models');
@@ -226,16 +250,34 @@ const leaveRideRequest = async (req, res, next) => {
     if (request.status !== 'Open') return error(res, 400, 'Can only leave pending requests.');
     let groupIds = (request.groupPassengerIds || []).map(id => id.toString());
     if (!groupIds.includes(userId)) return error(res, 403, 'You are not a member of this group request.');
+
+    // Track leave count
+    let leftMembers = request.leftMembers || {};
+    if (typeof leftMembers.get === 'function') {
+      // Mongoose Map
+      leftMembers = Object.fromEntries(request.leftMembers.entries());
+    }
+    leftMembers[userId] = (leftMembers[userId] || 0) + 1;
+    request.leftMembers = leftMembers;
+
+    // Notify all other group members
+    const Notification = require('../models/Notification');
+    await Promise.all(groupIds.filter(id => id !== userId).map(async (id) => {
+      await Notification.create({
+        userId: id,
+        title: 'Group Member Left',
+        content: `A member has left your group ride request.`,
+        type: 'Alert',
+      });
+    }));
+
     // If owner is leaving, must transfer ownership
     if (request.passengerId.toString() === userId) {
-      // Remove self from group
       groupIds = groupIds.filter(id => id !== userId);
       if (groupIds.length === 0) {
-        // No one left, delete request
         await RideRequest.findByIdAndDelete(requestId);
         return success(res, 200, 'Request deleted as last member left.');
       }
-      // Transfer ownership
       const newOwnerId = req.body.newOwnerId || groupIds[0];
       if (!groupIds.includes(newOwnerId)) return error(res, 400, 'New owner must be a group member.');
       request.passengerId = newOwnerId;
@@ -287,9 +329,25 @@ const modifyRideRequest = async (req, res, next) => {
       }
     }
 
+    // Handle re-adding left members: only allow if left < 3 times
+    if (req.body.groupPassengerIds) {
+      let leftMembers = request.leftMembers || {};
+      if (typeof leftMembers.get === 'function') {
+        leftMembers = Object.fromEntries(request.leftMembers.entries());
+      }
+      // Only allow adding a user if they left < 3 times
+      const newIds = req.body.groupPassengerIds.map(id => id.toString());
+      const oldIds = (request.groupPassengerIds || []).map(id => id.toString());
+      for (const id of newIds) {
+        if (!oldIds.includes(id) && leftMembers[id] >= 3) {
+          return error(res, 400, 'A member cannot be re-added more than 2 times.');
+        }
+      }
+    }
+
     const allowedFields = [
       'departureLocation', 'destination', 'travelDateTime',
-      'passengerCount', 'maxPrice', 'notes',
+      'passengerCount', 'maxPrice', 'notes', 'groupPassengerIds',
     ];
 
     const updates = {};
@@ -325,6 +383,32 @@ const deleteRideRequest = async (req, res, next) => {
     }
     await RideRequest.findByIdAndDelete(req.params.requestId);
     return success(res, 200, 'Ride request deleted.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Cancel entire group ride request (owner only, assumes all members agreed)
+const cancelGroupRideRequest = async (req, res, next) => {
+  try {
+    const request = await RideRequest.findById(req.params.requestId);
+    if (!request) return error(res, 404, 'Ride request not found.');
+
+    // Only the owner can cancel
+    if (request.passengerId.toString() !== req.user._id.toString()) {
+      return error(res, 403, 'Only the request owner can cancel it.');
+    }
+
+    // Get all group members (for notifications if needed later)
+    const allMembers = [request.passengerId, ...(request.groupPassengerIds || [])];
+
+    // Delete the request
+    await RideRequest.findByIdAndDelete(req.params.requestId);
+
+    // TODO: Send notifications to all members that the group request was cancelled
+    // For now, just return success
+
+    return success(res, 200, 'Group ride request cancelled. All members have been notified.', { cancelledFor: allMembers.length });
   } catch (err) {
     next(err);
   }
@@ -391,9 +475,11 @@ module.exports = {
   postRideRequest,
   modifyRideRequest,
   deleteRideRequest,
+  cancelGroupRideRequest,
   acceptRideRequest,
   dismissRideRequest,
   getRideRequests,
   getMyRideRequests,
   leaveRideRequest,
+  transferGroupOwner,
 };

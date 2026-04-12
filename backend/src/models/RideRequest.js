@@ -7,6 +7,12 @@ const rideRequestSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.ObjectId],
       default: [],
     },
+    leftMembers: {
+      // Track how many times a user left this group request: { userId: leaveCount }
+      type: Map,
+      of: Number,
+      default: {},
+    },
     passengerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

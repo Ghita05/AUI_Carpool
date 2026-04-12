@@ -1,9 +1,13 @@
+// ...existing code...
 const express = require('express');
 const router = express.Router();
 const ride = require('../controllers/rideController');
 const booking = require('../controllers/bookingController');
 const rideRequest = require('../controllers/rideRequestController');
 const { authenticate, authorize } = require('../middleware/auth');
+
+// Transfer group owner (NEW)
+router.put('/requests/:requestId/transfer-owner', authenticate, rideRequest.transferGroupOwner);
 
 // ═══════════════════════════════════════════
 // BULK USER FETCH (for group ride requests)
@@ -66,6 +70,8 @@ router.get('/requests/my', authenticate, rideRequest.getMyRideRequests);
 router.post('/requests', authenticate, rideRequest.postRideRequest);
 router.put('/requests/:requestId', authenticate, rideRequest.modifyRideRequest);
 router.delete('/requests/:requestId', authenticate, rideRequest.deleteRideRequest);
+// Cancel entire group ride request (owner only, assumes all members agreed)
+router.put('/requests/:requestId/cancel-group', authenticate, rideRequest.cancelGroupRideRequest);
 router.put(
   '/requests/:requestId/accept',
   authenticate,
