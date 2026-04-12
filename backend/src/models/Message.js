@@ -10,7 +10,12 @@ const messageSchema = new mongoose.Schema(
     receiverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Receiver ID is required'],
+      default: null,
+    },
+    groupRideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ride',
+      default: null,
     },
     rideId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -42,6 +47,7 @@ const messageSchema = new mongoose.Schema(
 
 // Conversation queries: all messages between two users
 messageSchema.index({ senderId: 1, receiverId: 1, date: -1 });
+messageSchema.index({ groupRideId: 1, date: -1 });
 messageSchema.index({ receiverId: 1, readStatus: 1 });
 messageSchema.index({ content: 'text' });
 

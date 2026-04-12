@@ -28,6 +28,10 @@ const rideRequestSchema = new mongoose.Schema(
       required: [true, 'Destination is required'],
       trim: true,
     },
+    stops: {
+      type: [String],
+      default: [],
+    },
     travelDateTime: {
       type: Date,
       required: [true, 'Travel date and time is required'],

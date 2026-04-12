@@ -53,6 +53,24 @@ const configureSocket = (io) => {
       });
     });
 
+    // ── Channel (group) messaging — identified by rideId ──
+    socket.on('join-channel', (rideId) => {
+      socket.join(`channel:${rideId}`);
+    });
+
+    socket.on('leave-channel', (rideId) => {
+      socket.leave(`channel:${rideId}`);
+    });
+
+    socket.on('send-channel-message', (data) => {
+      socket.to(`channel:${data.rideId}`).emit('new-channel-message', {
+        rideId: data.rideId,
+        senderId: socket.userId,
+        content: data.content,
+        date: new Date(),
+      });
+    });
+
     socket.on('typing', (data) => {
       io.to(`user:${data.receiverId}`).emit('user-typing', {
         userId: socket.userId,

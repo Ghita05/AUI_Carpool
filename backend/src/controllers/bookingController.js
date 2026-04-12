@@ -293,6 +293,7 @@ const cancelBooking = async (req, res, next) => {
 
 };
 
+
 const getCurrentBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({

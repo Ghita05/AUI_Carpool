@@ -52,7 +52,7 @@ const transferGroupOwner = async (req, res, next) => {
 };
 
 // Ensure all models are imported, including Vehicle
-const { RideRequest, Notification, User, Vehicle, Ride } = require('../models');
+const { RideRequest, Notification, User, Vehicle, Ride, Message } = require('../models');
 
 // Accept a ride request: create a ride for the driver, create booking(s) for passenger(s), notify, mark request as accepted
 const acceptRideRequest = async (req, res, next) => {
@@ -80,17 +80,18 @@ const acceptRideRequest = async (req, res, next) => {
       availableSeats: 0, // All seats are booked by the requester
       pricePerSeat: request.maxPrice,
       genderPreference: 'All',
-      stops: [],
+      stops: request.stops || [],
     });
 
     // Create booking(s) for the passenger(s)
     const Booking = require('../models/Booking');
     const Notification = require('../models/Notification');
     const Message = require('../models/Message');
-    let groupIds = request.groupPassengerIds || [];
+    let groupIds = (request.groupPassengerIds || []).map(id => id.toString());
     // Always include the owner
-    if (!groupIds.includes(request.passengerId?.toString())) {
-      groupIds = [request.passengerId?.toString(), ...groupIds.map(id => id.toString())];
+    const ownerId = request.passengerId.toString();
+    if (!groupIds.includes(ownerId)) {
+      groupIds = [ownerId, ...groupIds];
     }
     // Remove duplicates
     groupIds = [...new Set(groupIds)];
@@ -110,14 +111,18 @@ const acceptRideRequest = async (req, res, next) => {
           content: `Your group ride request to ${request.destination} was accepted. A ride has been created and you have been booked.`,
           type: 'Alert',
         });
-        // Automated message from driver
-        await Message.create({
-          senderId: driverId,
-          receiverId: userId,
-          rideId: ride._id,
-          content: `Hi! I have accepted your group ride request to ${request.destination}. See you soon!`,
-        });
       }));
+
+      // Send welcome message in the group channel (identified by groupRideId)
+      const driver = await User.findById(driverId).select('firstName lastName');
+      const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim();
+      const memberUsers = await User.find({ _id: { $in: groupIds } }).select('firstName lastName');
+      const memberNames = memberUsers.map(u => `${u.firstName} ${u.lastName}`).join(', ');
+      await Message.create({
+        senderId: driverId,
+        groupRideId: ride._id,
+        content: `${driverName} accepted the group ride request to ${request.destination}.\n\nGroup members: ${memberNames}\nDriver: ${driverName}\n\nUse this channel to coordinate your trip!`,
+      });
     } else {
       // Solo request
       await Booking.create({
@@ -177,7 +182,7 @@ const postRideRequest = async (req, res, next) => {
   try {
     const {
       departureLocation, destination, travelDateTime,
-      passengerCount, maxPrice, notes, groupPassengerIds
+      passengerCount, maxPrice, notes, groupPassengerIds, stops
     } = req.body;
 
     // Validate travel time is in the future (at least 1 hour from now)
@@ -220,6 +225,7 @@ const postRideRequest = async (req, res, next) => {
         passengerCount: groupIds.length,
         maxPrice, notes: notes || '',
         groupPassengerIds: groupIds,
+        stops: stops || [],
       });
       // Notify all group members (including requester)
       const Notification = require('../models/Notification');
@@ -232,6 +238,7 @@ const postRideRequest = async (req, res, next) => {
           type: 'Alert',
         });
       }));
+
       return success(res, 201, 'Group ride request posted.', { requestId: request._id, request });
     }
 
@@ -254,6 +261,7 @@ const postRideRequest = async (req, res, next) => {
       departureLocation, destination, travelDateTime,
       passengerCount: 1,
       maxPrice, notes: notes || '',
+      stops: stops || [],
     });
     // Notify requester
     const Notification = require('../models/Notification');
@@ -380,7 +388,7 @@ const modifyRideRequest = async (req, res, next) => {
 
     const allowedFields = [
       'departureLocation', 'destination', 'travelDateTime',
-      'passengerCount', 'maxPrice', 'notes', 'groupPassengerIds',
+      'passengerCount', 'maxPrice', 'notes', 'groupPassengerIds', 'stops',
     ];
 
     const updates = {};
@@ -393,6 +401,22 @@ const modifyRideRequest = async (req, res, next) => {
       { $set: updates },
       { new: true, runValidators: true }
     );
+
+    // Notify other group members about the edit
+    const groupIds = (updated.groupPassengerIds || []).map(id => id.toString());
+    if (groupIds.length > 1) {
+      const owner = await User.findById(req.user._id).select('firstName lastName');
+      const ownerName = owner ? `${owner.firstName} ${owner.lastName}` : 'The group owner';
+      const otherMembers = groupIds.filter(id => id !== req.user._id.toString());
+      await Promise.all(otherMembers.map(memberId =>
+        Notification.create({
+          userId: memberId,
+          title: 'Ride Request Updated',
+          content: `${ownerName} updated the group ride request to ${updated.destination}.`,
+          type: 'Alert',
+        })
+      ));
+    }
 
     return success(res, 200, 'Ride request updated.', { request: updated });
   } catch (err) {
