@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Ride, Booking, Notification, User } = require('../models');
+const { Ride, Booking, Notification, User, Message } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const bookRide = async (req, res, next) => {
@@ -39,6 +39,7 @@ const bookRide = async (req, res, next) => {
       seatsCount,
       pickupLocation,
       luggageDeclaration,
+      price: seatsCount * ride.pricePerSeat,
       status: 'Confirmed',
     });
 
@@ -100,7 +101,7 @@ const bookGroupRide = async (req, res, next) => {
     for (const passengerId of passengerIds) {
       const booking = await Booking.create({
         rideId, passengerId, groupId, seatsCount: 1,
-        pickupLocation, luggageDeclaration, status: 'Confirmed',
+        pickupLocation, luggageDeclaration, price: ride.pricePerSeat, status: 'Confirmed',
       });
       bookingIds.push(booking._id);
 
@@ -162,28 +163,63 @@ const requestAdditionalStop = async (req, res, next) => {
     const { bookingId } = req.params;
     const { stopLocation } = req.body;
 
+    console.log('Stop request received:', { bookingId, stopLocation });
+
+    if (!stopLocation || stopLocation.trim().length === 0) {
+      return error(res, 400, 'Stop location is required.');
+    }
+
     const booking = await Booking.findById(bookingId);
+    console.log('Booking found:', booking);
     if (!booking) return error(res, 404, 'Booking not found.');
 
     if (booking.passengerId.toString() !== req.user._id.toString()) {
       return error(res, 403, 'You can only modify your own bookings.');
     }
 
-    booking.pickupLocation = stopLocation;
+    if (booking.status !== 'Confirmed') {
+      return error(res, 400, 'Can only request stops for confirmed bookings.');
+    }
+
+    // Set the requested stop with pending status
+    booking.requestedStop = stopLocation;
+    booking.stopStatus = 'Pending';
+    booking.stopDecisionDate = null;
     await booking.save({ validateModifiedOnly: true });
 
     const ride = await Ride.findById(booking.rideId);
+    console.log('Ride found:', ride?._id);
+
     if (ride) {
-      await Notification.create({
+      const passengerName = `${req.user.firstName} ${req.user.lastName}`;
+      
+      // Send notification
+      const notif = await Notification.create({
         userId: ride.driverId,
         title: 'Stop Request',
-        content: `${req.user.firstName} requested a pickup at ${stopLocation}.`,
+        content: `${passengerName} requested a stop at ${stopLocation} on your ride to ${ride.destination}.`,
         type: 'Alert',
       });
+      console.log('Notification created:', notif._id);
+      
+      // Send automated message to driver with action button
+      const msg = await Message.create({
+        senderId: req.user._id,
+        receiverId: ride.driverId,
+        rideId: booking.rideId,
+        content: `Hi! I'd like to request a stop at **${stopLocation}**. Please review and let me know!`,
+        action: {
+          type: 'stop_request',
+          rideId: booking.rideId,
+          bookingId: booking._id,
+        },
+      });
+      console.log('Message created:', msg._id);
     }
 
     return success(res, 200, 'Stop request submitted.', { booking });
   } catch (err) {
+    console.error('requestAdditionalStop error:', err);
     next(err);
   }
 };
@@ -327,11 +363,100 @@ const getPassengerList = async (req, res, next) => {
   }
 };
 
+const respondToStopRequest = async (req, res, next) => {
+  try {
+    const { bookingId } = req.params;
+    const { approved } = req.body;
+
+    if (typeof approved !== 'boolean') {
+      return error(res, 400, 'Approved field must be a boolean.');
+    }
+
+    const booking = await Booking.findById(bookingId).populate('rideId', 'driverId destination');
+    if (!booking) return error(res, 404, 'Booking not found.');
+
+    // Only the driver of the associated ride can respond
+    if (booking.rideId.driverId.toString() !== req.user._id.toString()) {
+      return error(res, 403, 'Only the driver can respond to stop requests.');
+    }
+
+    if (!booking.requestedStop || booking.stopStatus !== 'Pending') {
+      return error(res, 400, 'No pending stop request for this booking.');
+    }
+
+    // Set the stop status and decision date
+    booking.stopStatus = approved ? 'Accepted' : 'Rejected';
+    booking.stopDecisionDate = new Date();
+    await booking.save({ validateModifiedOnly: true });
+
+    // If accepted, add the stop to the ride's stops array
+    if (approved) {
+      const ride = await Ride.findById(booking.rideId._id || booking.rideId);
+      if (ride && !ride.stops.includes(booking.requestedStop)) {
+        ride.stops.push(booking.requestedStop);
+        await ride.save({ validateModifiedOnly: true });
+      }
+    }
+
+    // Notify the passenger of the decision
+    const passenger = await User.findById(booking.passengerId).select('firstName lastName');
+    const passengerName = `${passenger?.firstName || ''} ${passenger?.lastName || ''}`.trim();
+    const driverName = `${req.user.firstName} ${req.user.lastName}`;
+
+    const decision = approved ? 'accepted' : 'rejected';
+    await Notification.create({
+      userId: booking.passengerId,
+      title: `Stop Request ${approved ? 'Accepted' : 'Rejected'}`,
+      content: `${driverName} ${decision} your stop request at ${booking.requestedStop} for the ride to ${booking.rideId.destination}.`,
+      type: approved ? 'Booking' : 'Alert',
+    });
+
+    return success(res, 200, `Stop request ${decision}.`, { booking });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getStopRequests = async (req, res, next) => {
+  try {
+    const { rideId } = req.params;
+    console.log('getStopRequests called for rideId:', rideId);
+
+    const ride = await Ride.findById(rideId);
+    console.log('Ride found:', ride?._id);
+    if (!ride) return error(res, 404, 'Ride not found.');
+
+    console.log('Driver check - req.user._id:', req.user._id, 'ride.driverId:', ride.driverId);
+    if (ride.driverId.toString() !== req.user._id.toString()) {
+      return error(res, 403, 'You can only view stop requests for your own rides.');
+    }
+
+    const bookings = await Booking.find({
+      rideId: new mongoose.Types.ObjectId(rideId),
+      requestedStop: { $ne: null },
+    })
+      .populate('passengerId', 'firstName lastName profilePicture email')
+      .sort({ stopStatus: 1, createdAt: -1 });
+    
+    console.log('Found bookings with stop requests:', bookings.length);
+    bookings.forEach(b => {
+      console.log('- Booking:', b._id, 'Stop:', b.requestedStop, 'Status:', b.stopStatus);
+    });
+
+    return success(res, 200, `${bookings.length} stop request(s) found.`, { bookings });
+  } catch (err) {
+    console.error('getStopRequests error:', err);
+    next(err);
+  }
+};
+
 module.exports = {
   bookRide,
   bookGroupRide,
   declareLuggage,
   requestAdditionalStop,
+  respondToStopRequest,
+  getStopRequests,
   cancelBooking,
   getCurrentBookings,
   getBookingHistory,

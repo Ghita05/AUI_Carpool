@@ -42,6 +42,27 @@ const bookingSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    price: {
+      type: Number,
+      default: 0,
+    },
+    requestedStop: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    stopStatus: {
+      type: String,
+      enum: {
+        values: ['Pending', 'Accepted', 'Rejected'],
+        message: '{VALUE} is not a valid stop status',
+      },
+      default: null, // null if no stop requested
+    },
+    stopDecisionDate: {
+      type: Date,
+      default: null,
+    },
     cancellationDate: {
       type: Date,
       default: null,
@@ -60,5 +81,6 @@ bookingSchema.index({ rideId: 1, passengerId: 1 });
 bookingSchema.index({ passengerId: 1, date: -1 });
 bookingSchema.index({ rideId: 1, status: 1 });
 bookingSchema.index({ groupId: 1 });
+bookingSchema.index({ rideId: 1, stopStatus: 1 }); // For finding pending stop requests for a ride
 
 module.exports = mongoose.model('Booking', bookingSchema);

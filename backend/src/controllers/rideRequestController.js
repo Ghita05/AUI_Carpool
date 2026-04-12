@@ -14,9 +14,37 @@ const transferGroupOwner = async (req, res, next) => {
     if (!groupIds.includes(newOwnerId)) {
       return error(res, 400, 'New owner must be a group member.');
     }
+    
+    // Get names for notification
+    const { User, Notification } = require('../models');
+    const oldOwner = await User.findById(userId);
+    const newOwner = await User.findById(newOwnerId);
+    const oldOwnerName = oldOwner ? `${oldOwner.firstName} ${oldOwner.lastName}` : 'Someone';
+    const newOwnerName = newOwner ? `${newOwner.firstName} ${newOwner.lastName}` : 'The new owner';
+
     // Transfer ownership
     request.passengerId = newOwnerId;
     await request.save();
+
+    // Notify new owner
+    await Notification.create({
+      userId: newOwnerId,
+      title: 'You are now the group owner',
+      content: `${oldOwnerName} transferred ownership of the group ride request to ${request.destination} to you.`,
+      type: 'Alert',
+    });
+
+    // Notify other group members about the ownership change
+    const otherMembers = groupIds.filter(id => id !== userId && id !== newOwnerId);
+    for (const memberId of otherMembers) {
+      await Notification.create({
+        userId: memberId,
+        title: 'Group Ownership Changed',
+        content: `${newOwnerName} is now the owner of your group ride request to ${request.destination}.`,
+        type: 'Alert',
+      });
+    }
+
     return success(res, 200, 'Ownership transferred.', { request });
   } catch (err) {
     next(err);
@@ -260,13 +288,18 @@ const leaveRideRequest = async (req, res, next) => {
     leftMembers[userId] = (leftMembers[userId] || 0) + 1;
     request.leftMembers = leftMembers;
 
-    // Notify all other group members
+    // Get the leaving member's name for notifications
+    const { User } = require('../models');
+    const leavingUser = await User.findById(userId);
+    const leavingUserName = leavingUser ? `${leavingUser.firstName} ${leavingUser.lastName}` : 'A member';
+
+    // Notify all other group members with the member's name
     const Notification = require('../models/Notification');
     await Promise.all(groupIds.filter(id => id !== userId).map(async (id) => {
       await Notification.create({
         userId: id,
         title: 'Group Member Left',
-        content: `A member has left your group ride request.`,
+        content: `${leavingUserName} has left your group ride request to ${request.destination}.`,
         type: 'Alert',
       });
     }));
@@ -399,16 +432,34 @@ const cancelGroupRideRequest = async (req, res, next) => {
       return error(res, 403, 'Only the request owner can cancel it.');
     }
 
-    // Get all group members (for notifications if needed later)
-    const allMembers = [request.passengerId, ...(request.groupPassengerIds || [])];
+    // Get all group members including owner
+    const allMemberIds = [request.passengerId, ...(request.groupPassengerIds || [])];
+    const { User } = require('../models');
+    const owner = await User.findById(request.passengerId);
+    const ownerName = owner ? `${owner.firstName} ${owner.lastName}` : 'Someone';
 
     // Delete the request
     await RideRequest.findByIdAndDelete(req.params.requestId);
 
-    // TODO: Send notifications to all members that the group request was cancelled
-    // For now, just return success
+    // Send notifications to all members (except owner) with owner's name
+    if (allMemberIds.length > 1) {
+      const { Notification } = require('../models');
+      const otherMembers = allMemberIds.filter(id => id.toString() !== req.user._id.toString());
+      
+      for (const memberId of otherMembers) {
+        await Notification.create({
+          userId: memberId,
+          title: 'Ride Request Cancelled',
+          content: `${ownerName} cancelled the group ride request to ${request.destination} on ${new Date(request.travelDateTime).toLocaleDateString()}.`,
+          type: 'Cancellation',
+        });
+      }
+    }
 
-    return success(res, 200, 'Group ride request cancelled. All members have been notified.', { cancelledFor: allMembers.length });
+    return success(res, 200, 'Group ride request cancelled. All members have been notified.', { 
+      cancelledFor: allMemberIds.length,
+      cancellerName: ownerName 
+    });
   } catch (err) {
     next(err);
   }

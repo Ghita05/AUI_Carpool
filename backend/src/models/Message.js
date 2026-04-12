@@ -30,6 +30,10 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    action: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     timestamps: true,

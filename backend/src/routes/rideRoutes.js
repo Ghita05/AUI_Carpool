@@ -100,6 +100,8 @@ router.post('/:rideId/bookings', authenticate, booking.bookRide);
 router.post('/:rideId/bookings/group', authenticate, booking.bookGroupRide);
 router.put('/bookings/:bookingId/luggage', authenticate, booking.declareLuggage);
 router.put('/bookings/:bookingId/stop', authenticate, booking.requestAdditionalStop);
+router.put('/bookings/:bookingId/stop/respond', authenticate, booking.respondToStopRequest);
+router.get('/:rideId/stops', authenticate, booking.getStopRequests);
 router.delete('/bookings/:bookingId', authenticate, booking.cancelBooking);
 
 module.exports = router;
