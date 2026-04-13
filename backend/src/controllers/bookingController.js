@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Ride, Booking, Notification, User, Message } = require('../models');
 const { success, error } = require('../utils/responses');
+const { isStopOnRoute } = require('../utils/maps');
 
 const bookRide = async (req, res, next) => {
   try {
@@ -181,13 +182,40 @@ const requestAdditionalStop = async (req, res, next) => {
       return error(res, 400, 'Can only request stops for confirmed bookings.');
     }
 
-    // Set the requested stop with pending status
+    // ── Route validation via Google Maps ─────────────────────────────────────
+    // Before accepting the stop request, verify the requested location is
+    // reasonably on the existing route (within MAX_DETOUR_KM tolerance).
+    // This enforces the domain requirement server-side — the mobile also
+    // shows a warning, but server enforcement is the authoritative check.
+    //
+    // We fetch the ride first so we have origin + destination for the check.
+    const ride = await Ride.findById(booking.rideId);
+    if (!ride) return error(res, 404, 'Associated ride not found.');
+
+    try {
+      const { onRoute, deviationKM } = await isStopOnRoute(
+        ride.departureLocation,
+        ride.destination,
+        stopLocation
+      );
+
+      if (!onRoute) {
+        return error(
+          res,
+          400,
+          `The requested stop "${stopLocation}" is not on the route (adds ${deviationKM} km detour). Please choose a location closer to the route.`
+        );
+      }
+    } catch (mapsErr) {
+      // Maps API failure: log and continue (fail open — driver still reviews it)
+      console.warn('[requestAdditionalStop] Maps validation failed, proceeding:', mapsErr.message);
+    }
+
     booking.requestedStop = stopLocation;
     booking.stopStatus = 'Pending';
     booking.stopDecisionDate = null;
     await booking.save({ validateModifiedOnly: true });
 
-    const ride = await Ride.findById(booking.rideId);
     console.log('Ride found:', ride?._id);
 
     if (ride) {

@@ -71,6 +71,20 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // ── Attendance (Building Block 2.4 — during-ride phase) ──────────────────
+    // The driver marks each confirmed passenger as present or absent before
+    // completing the ride. Default null = not yet checked in.
+    // 'Present'  → passenger showed up  → booking completes normally
+    // 'Absent'   → no-show              → booking still completes but
+    //              cancellationCount is incremented for the passenger
+    attendanceStatus: {
+      type: String,
+      enum: {
+        values: ['Present', 'Absent'],
+        message: '{VALUE} is not a valid attendance status',
+      },
+      default: null,
+    },
   },
   {
     timestamps: true,

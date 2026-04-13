@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -24,10 +25,31 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
 const app = express();
-const server = http.createServer(app);
 
-// ── Socket.IO setup ──
-const io = new Server(server, {
+// ── SSL setup (self-signed cert for dev) ──
+const certPath = path.join(__dirname, '../certs/cert.pem');
+const keyPath = path.join(__dirname, '../certs/key.pem');
+const hasSSL = fs.existsSync(certPath) && fs.existsSync(keyPath);
+
+let server;
+let httpServer; // secondary HTTP server for mobile dev (Expo Go can't trust self-signed certs)
+if (hasSSL) {
+  const sslOptions = {
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath),
+  };
+  server = https.createServer(sslOptions, app);
+  httpServer = http.createServer(app);
+} else {
+  console.warn('⚠  SSL certs not found in certs/ — falling back to HTTP');
+  server = http.createServer(app);
+}
+
+// ── Socket.IO setup (attach to all active servers) ──
+const ioServers = [server];
+if (httpServer) ioServers.push(httpServer);
+
+const io = new Server({
   cors: {
     origin: [
       process.env.CLIENT_WEB_URL || 'http://localhost:3000',
@@ -36,6 +58,7 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
   },
 });
+ioServers.forEach((s) => io.attach(s));
 configureSocket(io);
 
 // Make io accessible in controllers (for push notifications)
@@ -118,12 +141,26 @@ const startServer = async () => {
     await connectDB();
 
     const PORT = process.env.PORT || 5000;
+    const HTTP_PORT = Number(PORT) + 1; // 5001 — HTTP fallback for Expo Go
+
     server.listen(PORT, () => {
+      const protocol = hasSSL ? 'https' : 'http';
       console.log(`\n══════════════════════════════════════`);
-      console.log(`  AUI Carpool API — Port ${PORT}`);
+      console.log(`  AUI Carpool API — ${protocol}://localhost:${PORT}`);
+      if (hasSSL && httpServer) {
+        console.log(`  HTTP fallback — http://localhost:${HTTP_PORT}`);
+      }
       console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`  SSL: ${hasSSL ? 'enabled ✓' : 'disabled (no certs)'}`);
       console.log(`  Socket.IO: enabled`);
       console.log(`══════════════════════════════════════\n`);
+
+      // Start HTTP fallback if SSL enabled (for Expo Go mobile dev)
+      if (hasSSL && httpServer) {
+        httpServer.listen(HTTP_PORT, () => {
+          console.log(`  HTTP fallback listening on port ${HTTP_PORT}`);
+        });
+      }
 
       // Start scheduled jobs after DB is connected
       initScheduledJobs();
@@ -137,6 +174,7 @@ const startServer = async () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Shutting down...');
+  if (httpServer) httpServer.close();
   server.close(() => process.exit(0));
 });
 

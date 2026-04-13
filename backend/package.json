@@ -10,6 +10,7 @@
   "author": "Ghita Nafa",
   "license": "ISC",
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -23,6 +24,7 @@
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.15",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.0",
     "tesseract.js": "^5.1.1"
   },

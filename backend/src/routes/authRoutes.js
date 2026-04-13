@@ -12,8 +12,12 @@ router.get('/verify-email', auth.verifyEmail);
 router.post('/resend-verification', auth.resendVerification);
 router.post('/login', auth.login);
 router.post('/recover-password', auth.recoverPassword);
+router.get('/reset-password-page', auth.resetPasswordPage);
 router.post('/reset-password', auth.resetPassword);
 router.post('/refresh-token', auth.refreshAccessToken);
+
+// Pre-auth OCR preview (used during signup to verify cashwallet before registration)
+router.post('/ocr-preview', upload.single('image'), auth.previewOCR);
 
 // Protected routes (JWT required)
 router.get('/me', authenticate, auth.getMe);

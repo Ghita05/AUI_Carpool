@@ -62,6 +62,13 @@ router.put('/:rideId', authenticate, authorize('Driver'), ride.modifyRide);
 router.delete('/:rideId', authenticate, authorize('Driver'), ride.cancelRide);
 router.put('/:rideId/complete', authenticate, authorize('Driver'), ride.completeRide);
 
+// ─── Attendance (Building Block 2.4 — during-ride phase) ──────────────────
+// GET returns the passenger list with their attendanceStatus for the check-in panel.
+// PUT accepts { attendance: [{bookingId, status}] } from the driver.
+// Both are Driver-only — need-to-know principle: passengers cannot see each other's status.
+router.get('/:rideId/attendance', authenticate, authorize('Driver'), ride.getAttendance);
+router.put('/:rideId/attendance', authenticate, authorize('Driver'), ride.markAttendance);
+
 // ═══════════════════════════════════════════
 // RIDE REQUESTS (Building Block 2.2)
 // ═══════════════════════════════════════════

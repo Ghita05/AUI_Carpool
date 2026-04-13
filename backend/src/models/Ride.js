@@ -9,6 +9,11 @@ const routeSchema = new mongoose.Schema(
     destinationLongitude: { type: Number },
     distanceKM: { type: Number },
     durationMinutes: { type: Number },
+    // Encoded overview polyline from the Directions API response.
+    // Stored here so the mobile can draw the route on MapView without a
+    // second API call from the client. Decoded on the mobile using
+    // @mapbox/polyline or similar.
+    polyline: { type: String, default: null },
   },
   { _id: false }
 );

@@ -31,6 +31,11 @@ const userSchema = new mongoose.Schema(
       minlength: [8, 'Password must be at least 8 characters'],
       select: false, // never returned in queries by default
     },
+    gender: {
+      type: String,
+      enum: ['Male', 'Female', ''],
+      default: '',
+    },
     phoneNumber: {
       type: String,
       default: '',
@@ -38,6 +43,14 @@ const userSchema = new mongoose.Schema(
     },
     cashWalletImage: {
       type: String, // URL to uploaded CashWallet photo
+      default: null,
+    },
+    cashWalletVerified: {
+      type: Boolean,
+      default: false,
+    },
+    cashWalletExtracted: {
+      type: mongoose.Schema.Types.Mixed,
       default: null,
     },
     auiId: {
@@ -108,6 +121,10 @@ const userSchema = new mongoose.Schema(
     driverLicenseVerified: {
       type: Boolean,
       default: false,
+    },
+    driverLicenseExtracted: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     reviewSummary: {
       type: String,

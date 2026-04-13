@@ -42,7 +42,7 @@ const sendVerificationEmail = async (email, token) => {
  * Send password reset link
  */
 const sendPasswordResetEmail = async (email, token) => {
-  const resetUrl = `${process.env.CLIENT_WEB_URL}/reset-password?token=${token}`;
+  const resetUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/reset-password-page?token=${token}`;
 
   await transporter.sendMail({
     from: `"AUI Carpool" <${process.env.SMTP_USER}>`,
