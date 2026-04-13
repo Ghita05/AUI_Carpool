@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { selectVehicle } from '../../services/vehicleService';
 import { postRideOffer } from '../../services/rideService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
+import { autocompleteLocation } from '../../utils/mapsService';
 
 // ── Input formatters ──────────────────────────────────────────────────────
 // User types only digits. Formatter auto-inserts '-' / ':' and clamps each
@@ -159,6 +160,17 @@ export default function CreateRideScreen({ navigation }) {
   const [drivStyle, setDrivStyle] = useState('Calm');
   const [publishing, setPublishing] = useState(false);
 
+  // ── Places autocomplete state ────────────────────────────────────────────
+  // Two separate suggestion lists — one per field — so typing in one doesn't
+  // affect the other. activeField tracks which input is focused.
+  const [departureSuggestions, setDepartureSuggestions] = useState([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState([]);
+  const [activeField, setActiveField] = useState(null); // 'departure' | 'destination' | null
+  // Session token groups autocomplete + geocode calls for billing efficiency.
+  // Reset each time the user selects a suggestion (starts a new session).
+  const sessionToken = useRef(Math.random().toString(36).substring(2));
+  const debounceTimer = useRef(null);
+
   useEffect(() => {
     selectVehicle().then(res => {
       const v = res.data?.vehicles || [];
@@ -171,10 +183,50 @@ export default function CreateRideScreen({ navigation }) {
     ? `${vehicle.brand} ${vehicle.model} (${vehicle.color})`
     : 'No vehicle — add one in settings';
 
+  // ── Autocomplete handlers ────────────────────────────────────────────────
+  // Debounced so we don't fire an API call on every single keystroke.
+  // 300ms is the standard UX threshold — fast enough to feel live, slow enough
+  // to avoid hammering the API while the user is still typing.
+  const handleLocationChange = useCallback((text, field) => {
+    if (field === 'departure') setDeparture(text);
+    else setDestination(text);
+
+    clearTimeout(debounceTimer.current);
+    if (text.trim().length < 2) {
+      if (field === 'departure') setDepartureSuggestions([]);
+      else setDestinationSuggestions([]);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(async () => {
+      const results = await autocompleteLocation(text, sessionToken.current);
+      if (field === 'departure') setDepartureSuggestions(results);
+      else setDestinationSuggestions(results);
+    }, 300);
+  }, []);
+
+  const handleSuggestionSelect = (suggestion, field) => {
+    // Use the mainText (e.g. "Fez Airport") as the field value — concise and
+    // human-readable, which is what gets sent to the Directions API.
+    const value = suggestion.mainText;
+    if (field === 'departure') {
+      setDeparture(value);
+      setDepartureSuggestions([]);
+    } else {
+      setDestination(value);
+      setDestinationSuggestions([]);
+    }
+    setActiveField(null);
+    // Reset session token — a new autocomplete session starts next time
+    sessionToken.current = Math.random().toString(36).substring(2);
+  };
+
   const handleSwap = () => {
     const tmp = departure;
     setDeparture(destination);
     setDestination(tmp);
+    setDepartureSuggestions([]);
+    setDestinationSuggestions([]);
   };
 
   const handleConfirmStop = () => {
@@ -230,32 +282,95 @@ export default function CreateRideScreen({ navigation }) {
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-        {/* Route */}
+        {/* Route — Places autocomplete on both fields.
+            The suggestion list renders as an absolutely-positioned overlay
+            so it floats above other content without pushing the layout down.
+            keyboardShouldPersistTaps="handled" on the parent ScrollView
+            ensures tapping a suggestion dismisses the keyboard AND registers
+            the tap (without it, the first tap just dismisses the keyboard). */}
         <SectionCard>
-          <View style={styles.routeFieldWrap}>
-            <Ionicons name="location" size={14} color={Colors.primary} />
-            <TextInput
-              style={styles.routeInput}
-              value={departure}
-              onChangeText={setDeparture}
-              placeholder="Departure location"
-              placeholderTextColor={Colors.textDisabled}
-            />
+          <View>
+            <View style={styles.routeFieldWrap}>
+              <Ionicons name="location" size={14} color={Colors.primary} />
+              <TextInput
+                style={styles.routeInput}
+                value={departure}
+                onChangeText={(text) => handleLocationChange(text, 'departure')}
+                onFocus={() => setActiveField('departure')}
+                placeholder="Departure location"
+                placeholderTextColor={Colors.textDisabled}
+              />
+              {departure.length > 0 && (
+                <TouchableOpacity onPress={() => { setDeparture(''); setDepartureSuggestions([]); }}>
+                  <Ionicons name="close-circle" size={16} color={Colors.textDisabled} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Departure suggestions dropdown */}
+            {activeField === 'departure' && departureSuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {departureSuggestions.map((s) => (
+                  <TouchableOpacity
+                    key={s.placeId}
+                    style={styles.suggestionRow}
+                    onPress={() => handleSuggestionSelect(s, 'departure')}
+                  >
+                    <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.suggestionMain}>{s.mainText}</Text>
+                      {s.secondaryText ? (
+                        <Text style={styles.suggestionSub}>{s.secondaryText}</Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           <TouchableOpacity style={styles.swapBtn} onPress={handleSwap}>
             <Ionicons name="swap-vertical" size={16} color={Colors.textSecondary} />
           </TouchableOpacity>
 
-          <View style={styles.routeFieldWrap}>
-            <Ionicons name="location" size={14} color={Colors.error} />
-            <TextInput
-              style={styles.routeInput}
-              value={destination}
-              onChangeText={setDestination}
-              placeholder="Destination"
-              placeholderTextColor={Colors.textDisabled}
-            />
+          <View>
+            <View style={styles.routeFieldWrap}>
+              <Ionicons name="location" size={14} color={Colors.error} />
+              <TextInput
+                style={styles.routeInput}
+                value={destination}
+                onChangeText={(text) => handleLocationChange(text, 'destination')}
+                onFocus={() => setActiveField('destination')}
+                placeholder="Destination"
+                placeholderTextColor={Colors.textDisabled}
+              />
+              {destination.length > 0 && (
+                <TouchableOpacity onPress={() => { setDestination(''); setDestinationSuggestions([]); }}>
+                  <Ionicons name="close-circle" size={16} color={Colors.textDisabled} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Destination suggestions dropdown */}
+            {activeField === 'destination' && destinationSuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {destinationSuggestions.map((s) => (
+                  <TouchableOpacity
+                    key={s.placeId}
+                    style={styles.suggestionRow}
+                    onPress={() => handleSuggestionSelect(s, 'destination')}
+                  >
+                    <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.suggestionMain}>{s.mainText}</Text>
+                      {s.secondaryText ? (
+                        <Text style={styles.suggestionSub}>{s.secondaryText}</Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {stops.length > 0 && (
@@ -410,6 +525,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, height: 48, backgroundColor: Colors.background,
   },
   routeInput: { flex: 1, fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary },
+  // Autocomplete dropdown — positioned below the input field.
+  // zIndex:999 ensures it renders above all sibling cards.
+  suggestionsBox: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1, borderColor: Colors.border,
+    borderRadius: Radius.sm,
+    marginTop: 2,
+    zIndex: 999,
+    elevation: 8, // Android shadow
+    ...Shadows.md,
+  },
+  suggestionRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.divider,
+  },
+  suggestionMain: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary },
+  suggestionSub: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginTop: 1 },
   swapBtn: {
     alignSelf: 'center', width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,

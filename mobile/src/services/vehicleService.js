@@ -15,13 +15,39 @@ export const selectVehicle = async () => {
   return data;
 };
 
-export const addVehicle = async (vehicleData) => {
-  const { data } = await api.post('/vehicles', vehicleData);
+export const addVehicle = async (vehicleData, registrationCardUri) => {
+  const formData = new FormData();
+  for (const [key, val] of Object.entries(vehicleData)) {
+    if (val !== undefined && val !== null) formData.append(key, val);
+  }
+  if (registrationCardUri) {
+    formData.append('registrationCardImage', {
+      uri: registrationCardUri,
+      type: 'image/jpeg',
+      name: 'registration_card.jpg',
+    });
+  }
+  const { data } = await api.post('/vehicles', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 };
 
-export const modifyVehicle = async (vehicleId, updates) => {
-  const { data } = await api.put(`/vehicles/${vehicleId}`, updates);
+export const modifyVehicle = async (vehicleId, updates, registrationCardUri) => {
+  const formData = new FormData();
+  for (const [key, val] of Object.entries(updates)) {
+    if (val !== undefined && val !== null) formData.append(key, val);
+  }
+  if (registrationCardUri) {
+    formData.append('registrationCardImage', {
+      uri: registrationCardUri,
+      type: 'image/jpeg',
+      name: 'registration_card.jpg',
+    });
+  }
+  const { data } = await api.put(`/vehicles/${vehicleId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 };
 

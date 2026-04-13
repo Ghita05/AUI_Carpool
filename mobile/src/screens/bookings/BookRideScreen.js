@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 import { getRideDetails } from '../../services/rideService';
 import { bookRide, requestAdditionalStop } from '../../services/bookingService';
 
@@ -10,6 +11,7 @@ const LUGGAGE = ['No luggage','1 small bag','1 suitcase','2+ bags'];
 function Card({children,style}){return <View style={[st.card,style]}>{children}</View>;}
 
 export default function BookRideScreen({ navigation, route }) {
+  const { user } = useAuth();
   const rideId = route?.params?.rideId;
   const [ride,setRide]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -36,6 +38,33 @@ export default function BookRideScreen({ navigation, route }) {
   const vehicle = ride.vehicleId||{};
   const total = seats * ride.pricePerSeat;
   const allStops = ride.stops || [];
+
+  // ── Compatibility warnings ──
+  const warnings = [];
+
+  // Gender check
+  if (ride.genderPreference === 'Women-Only' && user?.gender && user.gender !== 'Female') {
+    warnings.push({ icon: 'female-outline', color: '#E91E63', text: 'This ride is Women-Only. Your gender may not match this preference.' });
+  }
+
+  // Smoking preference check
+  if (user?.smokingPreference && vehicle?.smokingPolicy) {
+    if (user.smokingPreference === 'Non-smoker' && vehicle.smokingPolicy === 'Allowed') {
+      warnings.push({ icon: 'ban-outline', color: '#FF9800', text: 'You prefer non-smoking, but smoking is allowed in this vehicle.' });
+    }
+    if (user.smokingPreference === 'Smoker' && vehicle.smokingPolicy === 'Not Allowed') {
+      warnings.push({ icon: 'ban-outline', color: '#FF9800', text: 'You are a smoker, but smoking is not allowed in this vehicle.' });
+    }
+  }
+
+  // Driving style check
+  if (user?.drivingStyle && driver?.drivingStyle && user.drivingStyle !== driver.drivingStyle) {
+    const styleMap = { Calm: 1, Moderate: 2, Fast: 3 };
+    const diff = Math.abs((styleMap[user.drivingStyle]||0) - (styleMap[driver.drivingStyle]||0));
+    if (diff >= 2) {
+      warnings.push({ icon: 'speedometer-outline', color: '#FF9800', text: `Your driving style preference is "${user.drivingStyle}" but the driver's style is "${driver.drivingStyle}".` });
+    }
+  }
 
   const handleConfirm = async () => {
     setBooking(true);
@@ -91,6 +120,23 @@ export default function BookRideScreen({ navigation, route }) {
               <View style={st.summaryItem}><Text style={st.summaryLabel}>Vehicle</Text><Text style={st.summaryVal}>{vehicle.brand} {vehicle.model}</Text></View>
             </View>
           </Card>
+
+          {/* Compatibility Warnings */}
+          {warnings.length > 0 && (
+            <View style={st.warningsCard}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:6,marginBottom:8}}>
+                <Ionicons name="information-circle" size={16} color="#FF9800"/>
+                <Text style={st.warningsTitle}>Compatibility Notice</Text>
+              </View>
+              {warnings.map((w, i) => (
+                <View key={i} style={st.warningRow}>
+                  <Ionicons name={w.icon} size={14} color={w.color}/>
+                  <Text style={st.warningText}>{w.text}</Text>
+                </View>
+              ))}
+              <Text style={st.warningsNote}>These are informational only — you can still book this ride.</Text>
+            </View>
+          )}
 
           <Card>
             <View style={st.rowBetween}><Text style={st.cardLabel}>Number of Seats</Text><Text style={st.subLabel}>1 available</Text></View>
@@ -158,5 +204,10 @@ const st = StyleSheet.create({
   stopsHint:{fontSize:11,color:Colors.textSecondary,marginBottom:8},pillRow:{flexDirection:'row',flexWrap:'wrap',gap:8},pill:{paddingHorizontal:14,paddingVertical:8,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.background},pillActive:{backgroundColor:Colors.primaryBg,borderColor:Colors.primary},pillText:{fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},pillTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
   stopInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary,marginTop:4},
   totalRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},totalLabel:{fontSize:14,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},totalVal:{fontSize:16,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
+  warningsCard:{backgroundColor:'#FFF8E1',borderRadius:Radius.md,padding:Spacing.lg,marginBottom:Spacing.md,borderWidth:1,borderColor:'#FFE082'},
+  warningsTitle:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#F57F17'},
+  warningRow:{flexDirection:'row',alignItems:'flex-start',gap:8,marginBottom:6},
+  warningText:{flex:1,fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:'#795548',lineHeight:17},
+  warningsNote:{fontSize:10,fontFamily:'PlusJakartaSans_400Regular',color:'#9E9E9E',marginTop:6,fontStyle:'italic'},
   bottomBar:{padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border,alignItems:'center'},confirmBtn:{width:'100%',height:52,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},confirmBtnText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},disclaimer:{fontSize:11,color:Colors.textSecondary,marginTop:8},
 });

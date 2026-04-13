@@ -19,9 +19,9 @@ export const checkVerification = async (email) => {
 /**
  * POST /api/users/register  (Step 3 — complete profile)
  */
-export const register = async ({ firstName, lastName, email, password, phoneNumber, auiId, role }) => {
+export const register = async ({ firstName, lastName, email, password, phoneNumber, auiId, role, gender }) => {
   const { data } = await api.post('/users/register', {
-    firstName, lastName, email, password, phoneNumber, auiId, role,
+    firstName, lastName, email, password, phoneNumber, auiId, role, gender,
   });
   return data;
 };
@@ -127,5 +127,83 @@ export const deactivateAccount = async () => {
  */
 export const changePassword = async (currentPassword, newPassword) => {
   const { data } = await api.put('/users/change-password', { currentPassword, newPassword });
+  return data;
+};
+
+/**
+ * POST /api/users/upload/cashwallet  (with OCR processing)
+ */
+export const uploadCashWallet = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('cashWalletImage', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'cashwallet.jpg',
+  });
+  const { data } = await api.post('/users/upload/cashwallet', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+/**
+ * POST /api/users/upload/license  (with OCR processing)
+ */
+export const uploadDriverLicense = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('driverLicenseImage', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'license.jpg',
+  });
+  const { data } = await api.post('/users/upload/license', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+/**
+ * POST /api/users/ocr-preview  (pre-auth, no JWT needed)
+ * Runs OCR on an image during signup and returns extracted data without storing.
+ */
+export const previewCashWalletOCR = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'cashwallet_preview.jpg',
+  });
+  formData.append('docType', 'cashwallet');
+  const { data } = await api.post('/users/ocr-preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+export const previewDriverLicenseOCR = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'license_preview.jpg',
+  });
+  formData.append('docType', 'license');
+  const { data } = await api.post('/users/ocr-preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+export const previewRegCardOCR = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'regcard_preview.jpg',
+  });
+  formData.append('docType', 'regcard');
+  const { data } = await api.post('/users/ocr-preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 };

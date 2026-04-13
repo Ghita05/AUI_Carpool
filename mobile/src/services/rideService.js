@@ -72,6 +72,21 @@ export const completeRide = async (rideId) => {
   return data;
 };
 
+// ── Attendance (Building Block 2.4 — during-ride phase) ──────────────────────
+// GET fetches the passenger list with their current attendanceStatus
+// for the driver's check-in panel.
+export const getAttendance = async (rideId) => {
+  const { data } = await api.get(`/rides/${rideId}/attendance`);
+  return data;
+};
+
+// PUT submits the driver's attendance marks.
+// attendance: Array<{ bookingId: string, status: 'Present' | 'Absent' }>
+export const markAttendance = async (rideId, attendance) => {
+  const { data } = await api.put(`/rides/${rideId}/attendance`, { attendance });
+  return data;
+};
+
 // ═══════════════════════════════════════════
 // RIDE REQUESTS
 // ═══════════════════════════════════════════

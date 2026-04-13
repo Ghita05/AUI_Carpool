@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, StatusBar, TextInput, Platform, Modal,
   KeyboardAvoidingView, ActivityIndicator, Alert
 } from 'react-native';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +16,26 @@ import DateTimePickerModal from '../../components/DateTimePickerModal';
 
 const { width } = Dimensions.get('window');
 
-const PIN_POS = { Fez:{ top:'22%', right:'12%' }, Rabat:{ top:'48%', left:'8%' }, Meknes:{ bottom:'32%', left:'32%' }, Casablanca:{ bottom:'48%', left:'5%' } };
+// Real coordinates for the fixed destinations the AUI community travels to.
+// These are used to place Marker components on the real MapView.
+// Hardcoded because destinations are a known, bounded set — no geocoding needed.
+const CITY_COORDS = {
+  Fez:        { latitude: 34.0181, longitude: -5.0078 },
+  Rabat:      { latitude: 33.9716, longitude: -6.8498 },
+  Meknes:     { latitude: 33.8955, longitude: -5.5473 },
+  Casablanca: { latitude: 33.5731, longitude: -7.5898 },
+};
+
+// AUI Main Gate — center of the map
+const AUI_COORDS = { latitude: 33.5046, longitude: -5.1069 };
+
+// Initial region shows all 4 destinations plus AUI in frame
+const INITIAL_REGION = {
+  latitude: 33.75,
+  longitude: -5.9,
+  latitudeDelta: 1.8,
+  longitudeDelta: 2.2,
+};
 
 /* ── helpers ── */
 const getDestColor = (ride) => {
@@ -519,38 +539,118 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={st.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background}/>
 
-      {/* Map Area */}
+      {/* Map Area — real Google Maps via react-native-maps
+          Strategy: MapView fills the top section. Ride pins are real Markers
+          placed at the city coordinates matching ride.destination. Tapping a
+          Marker's Callout navigates directly to RideDetails. The AUI campus
+          pin is always visible as a fixed reference point.
+          The map is scrollable and zoomable — no interactions blocked. */}
       <View style={st.mapArea}>
-        <View style={st.mapBg}>
-          {[0.2,0.4,0.6,0.8].map(p=><View key={`h${p}`} style={[st.gridH,{top:`${p*100}%`}]}/>)}
-          {[0.25,0.5,0.75].map(p=><View key={`v${p}`} style={[st.gridV,{left:`${p*100}%`}]}/>)}
+        <MapView
+          style={st.map}
+          provider={PROVIDER_GOOGLE}
+          initialRegion={INITIAL_REGION}
+          showsUserLocation={false}
+          showsMyLocationButton={false}
+          showsCompass={false}
+          toolbarEnabled={false}
+        >
+          {/* AUI Campus — fixed anchor marker */}
+          <Marker
+            coordinate={AUI_COORDS}
+            title="AUI Campus"
+            description="Al Akhawayn University"
+            pinColor={Colors.primary}
+          />
 
-          <Text style={[st.cityLabel,{top:'15%',right:'8%'}]}>FEZ</Text>
-          <Text style={[st.cityLabel,{top:'42%',left:'5%'}]}>RABAT</Text>
-          <Text style={[st.cityLabel,{bottom:'25%',left:'28%'}]}>MEKNES</Text>
-          <Text style={[st.cityLabel,{bottom:'10%',right:'10%'}]}>IFRANE</Text>
+          {/* One marker per unique destination that has active rides.
+              We group rides by destination so multiple rides to Fez produce
+              one marker showing the count, not overlapping pins. */}
+          {Object.entries(
+            rides.reduce((acc, ride) => {
+              // Match to a known city key (supports partial match: "Fez Airport" → Fez)
+              const cityKey = Object.keys(CITY_COORDS).find(k =>
+                ride.destination.toLowerCase().includes(k.toLowerCase())
+              );
+              if (!cityKey) return acc;
+              if (!acc[cityKey]) acc[cityKey] = [];
+              acc[cityKey].push(ride);
+              return acc;
+            }, {})
+          ).map(([cityKey, cityRides]) => {
+            // Pick the cheapest ride as the headline price shown on the pin
+            const cheapest = cityRides.reduce((min, r) =>
+              r.pricePerSeat < min.pricePerSeat ? r : min, cityRides[0]
+            );
+            const color = getDestColor(cheapest);
+            const isHL = highlightedPin === cityKey || cityRides.some(r => r.destination === highlightedPin);
 
-          <View style={[st.auiMarker,{bottom:'12%',right:'15%'}]}><Text style={st.auiText}>AUI</Text></View>
-
-          {/* Dynamic ride pins */}
-          {rides.map(ride => {
-            const pos = PIN_POS[ride.destination] || PIN_POS[Object.keys(PIN_POS).find(k => ride.destination.includes(k))] || {};
-            if (!Object.keys(pos).length) return null;
-            const color = getDestColor(ride);
-            const isHL = highlightedPin === ride.destination;
             return (
-              <TouchableOpacity key={ride._id} style={[st.ridePin,pos,{borderColor:color},isHL&&st.ridePinHL]} onPress={()=>navigation.navigate('RideDetails',{rideId:ride._id})} activeOpacity={0.7}>
-                <View style={[st.pinDot,{backgroundColor:color}]}/>
-                <View><Text style={st.pinLabel}>{ride.destination}</Text><Text style={st.pinPrice}>{ride.pricePerSeat} MAD</Text></View>
-              </TouchableOpacity>
+              <Marker
+                key={cityKey}
+                coordinate={CITY_COORDS[cityKey]}
+                tracksViewChanges={false}
+              >
+                {/* Custom callout bubble rendered as a native view overlay.
+                    tracksViewChanges=false avoids the "marker flicker" issue
+                    that occurs when state updates cause re-renders. */}
+                <View style={[st.mapPin, { borderColor: color }, isHL && st.mapPinHL]}>
+                  <View style={[st.mapPinDot, { backgroundColor: color }]} />
+                  <View>
+                    <Text style={st.mapPinLabel}>{cityKey}</Text>
+                    <Text style={[st.mapPinPrice, { color }]}>
+                      {cityRides.length > 1
+                        ? `${cityRides.length} rides · from ${cheapest.pricePerSeat} MAD`
+                        : `${cheapest.pricePerSeat} MAD`}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Callout appears when the marker is tapped.
+                    If there's only one ride, go directly to RideDetails.
+                    If multiple, filter the bottom sheet list instead. */}
+                <Callout
+                  tooltip
+                  onPress={() => {
+                    if (cityRides.length === 1) {
+                      navigation.navigate('RideDetails', { rideId: cityRides[0]._id });
+                    } else {
+                      // Highlight this city and scroll bottom sheet
+                      setHighlightedPin(cityKey);
+                      setSearchText(cityKey);
+                    }
+                  }}
+                >
+                  <View style={st.callout}>
+                    <Text style={st.calloutTitle}>{cityKey}</Text>
+                    <Text style={st.calloutSub}>
+                      {cityRides.length} ride{cityRides.length > 1 ? 's' : ''} available
+                    </Text>
+                    <Text style={[st.calloutAction, { color: Colors.primary }]}>
+                      {cityRides.length === 1 ? 'Tap to view →' : 'Tap to filter →'}
+                    </Text>
+                  </View>
+                </Callout>
+              </Marker>
             );
           })}
-        </View>
+        </MapView>
 
+        {/* Search bar floats above the map */}
         <View style={st.searchBar}>
           <Ionicons name="search-outline" size={18} color={Colors.textSecondary} style={{marginRight:Spacing.sm}}/>
-          <TextInput style={st.searchInput} placeholder="Where are you going?" placeholderTextColor={Colors.textDisabled} value={searchText} onChangeText={handleSearchChange} onSubmitEditing={handleSearch} returnKeyType="search"/>
-          <TouchableOpacity onPress={()=>setShowFilter(true)}><Ionicons name="options-outline" size={18} color={Colors.textSecondary}/></TouchableOpacity>
+          <TextInput
+            style={st.searchInput}
+            placeholder="Where are you going?"
+            placeholderTextColor={Colors.textDisabled}
+            value={searchText}
+            onChangeText={handleSearchChange}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+          <TouchableOpacity onPress={()=>setShowFilter(true)}>
+            <Ionicons name="options-outline" size={18} color={Colors.textSecondary}/>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={st.communityBadge} onPress={()=>setShowCommunity(true)}>
@@ -583,18 +683,20 @@ export default function HomeScreen({ navigation }) {
 
 const st = StyleSheet.create({
   container:{flex:1,backgroundColor:Colors.background},
-  mapArea:{flex:1,position:'relative',overflow:'hidden'},
-  mapBg:{flex:1,backgroundColor:'#E8F5E9',position:'relative'},
-  gridH:{position:'absolute',left:0,right:0,height:1,backgroundColor:'rgba(27,94,32,0.06)'},
-  gridV:{position:'absolute',top:0,bottom:0,width:1,backgroundColor:'rgba(27,94,32,0.06)'},
-  cityLabel:{position:'absolute',fontSize:10,fontFamily:'PlusJakartaSans_700Bold',color:'rgba(27,94,32,0.2)',letterSpacing:2},
-  auiMarker:{position:'absolute',backgroundColor:Colors.primary,paddingHorizontal:12,paddingVertical:5,borderRadius:14,...Shadows.md},
-  auiText:{fontSize:11,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
-  ridePin:{position:'absolute',flexDirection:'row',alignItems:'center',gap:Spacing.xs,backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.sm,borderWidth:2,...Shadows.card},
-  ridePinHL:{transform:[{scale:1.1}],...Shadows.lg},
-  pinDot:{width:10,height:10,borderRadius:5},
-  pinLabel:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
-  pinPrice:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary,marginTop:1},
+  mapArea:{flex:1,position:'relative'},
+  // map fills the entire mapArea — react-native-maps requires an explicit size
+  map:{...StyleSheet.absoluteFillObject},
+  // Custom marker bubble rendered as a native view over the map
+  mapPin:{flexDirection:'row',alignItems:'center',gap:Spacing.xs,backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.sm,borderWidth:2,...Shadows.card},
+  mapPinHL:{transform:[{scale:1.1}],...Shadows.lg},
+  mapPinDot:{width:10,height:10,borderRadius:5},
+  mapPinLabel:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  mapPinPrice:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',marginTop:1},
+  // Callout tooltip shown when marker is tapped
+  callout:{backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.md,...Shadows.card,minWidth:140},
+  calloutTitle:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  calloutSub:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,marginTop:2},
+  calloutAction:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',marginTop:4},
   searchBar:{position:'absolute',top:Platform.OS==='ios'?12:16,left:Spacing.lg,right:Spacing.lg,flexDirection:'row',alignItems:'center',backgroundColor:Colors.surface,borderRadius:Radius.full,paddingHorizontal:Spacing.md,paddingVertical:10,...Shadows.card},
   searchInput:{flex:1,fontSize:Typography.base,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
   communityBadge:{position:'absolute',top:Platform.OS==='ios'?62:66,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:6,backgroundColor:Colors.surface,paddingHorizontal:14,paddingVertical:7,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,...Shadows.sm},

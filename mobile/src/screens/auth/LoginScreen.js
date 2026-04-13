@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: Typography['3xl'], fontFamily: 'PlusJakartaSans_700Bold', color: '#fff', marginBottom: Spacing.xs },
   headerSubtitle: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_400Regular', color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
   card: { backgroundColor: Colors.surface, marginHorizontal: Spacing.lg, marginTop: -24, borderRadius: Radius.lg, padding: Spacing.xl, ...Shadows.card },
-  forgotRow: { alignSelf: 'flex-end', marginTop: -Spacing.sm, marginBottom: Spacing.xl },
+  forgotRow: { alignSelf: 'flex-end', marginTop: Spacing.xs, marginBottom: Spacing.xl, padding: 4 },
   forgotText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.primaryLight },
   loginButton: { marginBottom: Spacing.lg },
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
