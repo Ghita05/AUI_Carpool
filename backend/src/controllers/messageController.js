@@ -1,4 +1,4 @@
-const { Message, User, Ride, Booking } = require('../models');
+const { Message, User, Ride } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const sendMessage = async (req, res, next) => {
@@ -161,8 +161,10 @@ const isRideMember = async (rideId, userId) => {
   const ride = await Ride.findById(rideId);
   if (!ride) return { member: false, ride: null };
   if (ride.driverId.toString() === userId.toString()) return { member: true, ride };
-  const booking = await Booking.findOne({ rideId, passengerId: userId, status: 'Confirmed' });
-  return { member: !!booking, ride };
+  const hasBooking = (ride.bookings || []).some(
+    b => b.passengerId.toString() === userId.toString() && b.status === 'Confirmed'
+  );
+  return { member: hasBooking, ride };
 };
 
 const getChannels = async (req, res, next) => {
@@ -170,13 +172,16 @@ const getChannels = async (req, res, next) => {
     const userId = req.user._id;
 
     // Find rides where user is driver
-    const driverRides = await Ride.find({ driverId: userId, status: { $nin: ['Cancelled'] } }).select('_id');
-    // Find rides where user has a confirmed booking
-    const passengerBookings = await Booking.find({ passengerId: userId, status: 'Confirmed' }).select('rideId');
+    const driverRides = await Ride.find({ driverId: userId, state: { $nin: ['Cancelled'] } }).select('_id');
+    // Find rides where user has a confirmed embedded booking
+    const passengerRides = await Ride.find({
+      'bookings.passengerId': userId,
+      'bookings.status': 'Confirmed',
+    }).select('_id');
 
     const rideIds = [
       ...driverRides.map(r => r._id),
-      ...passengerBookings.map(b => b.rideId),
+      ...passengerRides.map(r => r._id),
     ];
 
     // Only rides that actually have group messages
@@ -186,9 +191,9 @@ const getChannels = async (req, res, next) => {
 
     // Build channel info for each
     const channels = await Promise.all(groupRideIds.map(async (rideId) => {
-      const ride = await Ride.findById(rideId).select('destination driverId');
-      const bookings = await Booking.find({ rideId, status: 'Confirmed' }).select('passengerId');
-      const memberIds = [ride.driverId, ...bookings.map(b => b.passengerId)];
+      const ride = await Ride.findById(rideId).select('destination driverId bookings');
+      const confirmedBookings = (ride.bookings || []).filter(b => b.status === 'Confirmed');
+      const memberIds = [ride.driverId, ...confirmedBookings.map(b => b.passengerId)];
       const members = await User.find({ _id: { $in: memberIds } }).select('firstName lastName profilePicture');
       const lastMsg = await Message.findOne({ groupRideId: rideId })
         .sort({ date: -1 })

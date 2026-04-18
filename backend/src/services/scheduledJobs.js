@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { User, Ride, Booking, Notification } = require('../models');
+const { User, Ride, Notification } = require('../models');
 
 /**
  * Job 1: Clean up unverified accounts
@@ -46,7 +46,7 @@ const scheduleRideReminders = () => {
 
       // Find active/full rides departing in the next 2 hours
       const rides = await Ride.find({
-        status: { $in: ['Active', 'Full'] },
+        state: { $in: ['Active', 'Full'] },
         departureDateTime: { $gte: now, $lte: twoHoursLater },
       });
 
@@ -68,13 +68,12 @@ const scheduleRideReminders = () => {
           type: 'Reminder',
         });
 
-        // Notify all confirmed passengers
-        const bookings = await Booking.find({
-          rideId: ride._id,
-          status: 'Confirmed',
-        });
+        // Notify all confirmed passengers (embedded bookings)
+        const confirmedBookings = ride.bookings
+          ? ride.bookings.filter(b => b.status === 'Confirmed')
+          : [];
 
-        for (const booking of bookings) {
+        for (const booking of confirmedBookings) {
           await Notification.create({
             userId: booking.passengerId,
             title: 'Departure Reminder',
@@ -83,7 +82,7 @@ const scheduleRideReminders = () => {
           });
         }
 
-        console.log(`[CRON] Sent reminders for ride ${ride._id} to ${ride.destination} (${bookings.length} passengers).`);
+        console.log(`[CRON] Sent reminders for ride ${ride._id} to ${ride.destination} (${confirmedBookings.length} passengers).`);
       }
     } catch (err) {
       console.error('[CRON] Ride reminder error:', err.message);
@@ -94,11 +93,73 @@ const scheduleRideReminders = () => {
 };
 
 /**
+ * Job 3: OnGoing ride safety-net completion
+ * Runs every 30 minutes.
+ *
+ * If a ride has been OnGoing for > 6 hours (GPS either failed or the driver
+ * never sent a final position), auto-complete it. This prevents rides from
+ * being stuck in OnGoing state permanently.
+ * 6 hours is generous enough to cover the longest AUI → Casablanca route.
+ */
+const scheduleOngoingSafetyNet = () => {
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000);
+      const stuckRides = await Ride.find({
+        state:            'OnGoing',
+        reviewsPrompted:  false,
+        ongoingStartedAt: { $lt: cutoff },
+      });
+
+      for (const ride of stuckRides) {
+        const completed = await Ride.findOneAndUpdate(
+          { _id: ride._id, state: 'OnGoing', reviewsPrompted: false },
+          {
+            $set: {
+              state:           'Completed',
+              reviewsPrompted: true,
+              'bookings.$[elem].status': 'Completed',
+            },
+          },
+          { arrayFilters: [{ 'elem.status': 'Confirmed' }], new: true }
+        );
+        if (!completed) continue;
+
+        const presentIds = (completed.bookings || [])
+          .filter(b => b.status === 'Completed' && b.attendanceStatus !== 'Absent')
+          .map(b => b.passengerId);
+        await User.updateMany(
+          { _id: { $in: [completed.driverId, ...presentIds] } },
+          { $inc: { totalCompletedRides: 1 } }
+        );
+
+        // Notify all members (no io available from cron — use Notification only)
+        const memberIds = [completed.driverId, ...presentIds];
+        for (const mid of memberIds) {
+          await Notification.create({
+            userId:  mid,
+            title:   'Ride Completed — Rate Your Experience',
+            content: `Your ride to ${completed.destination} has been completed. Open the app to leave a review.`,
+            type:    'Alert',
+          });
+        }
+
+        console.log(`[CRON] Safety-net completed stuck OnGoing ride ${ride._id}.`);
+      }
+    } catch (err) {
+      console.error('[CRON] OnGoing safety-net error:', err.message);
+    }
+  });
+  console.log('[CRON] OnGoing safety-net scheduled (every 30min).');
+};
+
+/**
  * Initialize all scheduled jobs
  */
 const initScheduledJobs = () => {
   scheduleUnverifiedCleanup();
   scheduleRideReminders();
+  scheduleOngoingSafetyNet();
 };
 
 module.exports = initScheduledJobs;

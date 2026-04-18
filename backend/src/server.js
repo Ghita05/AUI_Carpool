@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 
 const connectDB = require('./config/db');
-const configureSocket = require('./socket');
+const configureSocket = require('./socket').configureSocket;
 const errorHandler = require('./middleware/errorHandler');
 const initScheduledJobs = require('./services/scheduledJobs');
 
@@ -23,6 +23,7 @@ const rideRoutes = require('./routes/rideRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const routeRoutes = require('./routes/routeRoutes');
 
 const app = express();
 
@@ -117,6 +118,7 @@ app.use('/api/rides', rideRoutes);           // BB2: Manage Rides (offers, reque
 app.use('/api/reviews', reviewRoutes);       // BB4: Manage Ratings & Reviews
 app.use('/api/notifications', notificationRoutes); // BB5: Manage Notifications
 app.use('/api/messages', messageRoutes);     // BB6: Manage Messages
+app.use('/api/routes', routeRoutes);         // BB7: Routes & Locations
 
 // Health check
 app.get('/api/health', (req, res) => {

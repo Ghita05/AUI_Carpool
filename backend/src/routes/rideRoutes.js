@@ -109,6 +109,7 @@ router.put('/bookings/:bookingId/luggage', authenticate, booking.declareLuggage)
 router.put('/bookings/:bookingId/stop', authenticate, booking.requestAdditionalStop);
 router.put('/bookings/:bookingId/stop/respond', authenticate, booking.respondToStopRequest);
 router.get('/:rideId/stops', authenticate, booking.getStopRequests);
+router.get('/:rideId/validate-stop', authenticate, booking.validateStopOnRoute);
 router.delete('/bookings/:bookingId', authenticate, booking.cancelBooking);
 
 module.exports = router;

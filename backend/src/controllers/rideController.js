@@ -1,15 +1,14 @@
 /**
  * controllers/rideController.js
- * Changes from previous version:
- *  1. postRideOffer — auto-computes route via Google Maps server-side
- *  2. completeRide  — requires attendance to be marked first
- *  3. markAttendance (NEW) — driver marks Present/Absent per passenger
- *  4. getAttendance  (NEW) — driver fetches passenger list with status
+ * Unified Ride model — all queries use type: 'Offer' and state instead of status.
+ * Bookings are embedded in the Ride document.
  */
 
-const { Ride, Booking, Notification, User, Message } = require('../models');
+const { Ride, Notification, User, Message, Review } = require('../models');
 const { success, error } = require('../utils/responses');
 const { getDirections } = require('../utils/maps');
+const { scoreRides } = require('../utils/recommender');
+const { emitReviewPrompts } = require('../socket');
 
 // ── postRideOffer ─────────────────────────────────────────────────────────────
 const postRideOffer = async (req, res, next) => {
@@ -17,6 +16,7 @@ const postRideOffer = async (req, res, next) => {
     const {
       vehicleId, departureLocation, destination, stops,
       departureDateTime, totalSeats, pricePerSeat, genderPreference,
+      selectedRoute,
     } = req.body;
 
     const now = new Date();
@@ -24,30 +24,44 @@ const postRideOffer = async (req, res, next) => {
     if (depTime <= now) return error(res, 400, 'Departure time cannot be in the past.');
     if (depTime - now < 60 * 60 * 1000) return error(res, 400, 'Departure time must be at least 1 hour from now.');
 
-    // Auto-compute route server-side. Client no longer sends route data.
-    // Fail gracefully: if Maps is unavailable, save the ride with null route.
     let routeData = null;
-    try {
-      const directions = await getDirections(departureLocation, destination, stops || []);
+    if (selectedRoute && selectedRoute.polyline) {
+      // Use the route the user selected from the alternatives modal
       routeData = {
-        originLatitude: directions.originLat,
-        originLongitude: directions.originLng,
-        destinationLatitude: directions.destLat,
-        destinationLongitude: directions.destLng,
-        distanceKM: directions.distanceKM,
-        durationMinutes: directions.durationMinutes,
-        polyline: directions.polyline,
+        originLatitude: selectedRoute.originLat,
+        originLongitude: selectedRoute.originLng,
+        destinationLatitude: selectedRoute.destLat,
+        destinationLongitude: selectedRoute.destLng,
+        distanceKM: selectedRoute.distanceKM,
+        durationMinutes: selectedRoute.durationMinutes,
+        polyline: selectedRoute.polyline,
+        summary: selectedRoute.summary || null,
       };
-    } catch (mapsErr) {
-      console.warn('[postRideOffer] Directions API failed, saving without route:', mapsErr.message);
+    } else {
+      // Fallback: compute route server-side (first route returned)
+      try {
+        const directions = await getDirections(departureLocation, destination, stops || []);
+        routeData = {
+          originLatitude: directions.originLat,
+          originLongitude: directions.originLng,
+          destinationLatitude: directions.destLat,
+          destinationLongitude: directions.destLng,
+          distanceKM: directions.distanceKM,
+          durationMinutes: directions.durationMinutes,
+          polyline: directions.polyline,
+        };
+      } catch (mapsErr) {
+        console.warn('[postRideOffer] Directions API failed, saving without route:', mapsErr.message);
+      }
     }
 
     const ride = await Ride.create({
+      type: 'Offer',
+      state: 'Active',
       driverId: req.user._id,
       vehicleId,
       departureLocation,
       destination,
-      stops: stops || [],
       departureDateTime,
       totalSeats,
       availableSeats: totalSeats,
@@ -63,10 +77,10 @@ const postRideOffer = async (req, res, next) => {
 // ── modifyRide ────────────────────────────────────────────────────────────────
 const modifyRide = async (req, res, next) => {
   try {
-    const ride = await Ride.findById(req.params.rideId);
+    const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'You can only modify your own rides.');
-    if (['Completed', 'Cancelled'].includes(ride.status)) return error(res, 400, `Cannot modify a ${ride.status.toLowerCase()} ride.`);
+    if (['Completed', 'Cancelled'].includes(ride.state)) return error(res, 400, `Cannot modify a ${ride.state.toLowerCase()} ride.`);
 
     if (req.body.departureDateTime) {
       const now = new Date();
@@ -78,7 +92,7 @@ const modifyRide = async (req, res, next) => {
       if (Math.abs(newTime - oldTime) > 24 * 60 * 60 * 1000) return error(res, 400, 'Time can only be changed within ±24 hours of the original departure time.');
     }
 
-    const allowedFields = ['departureLocation', 'destination', 'stops', 'departureDateTime', 'totalSeats', 'genderPreference'];
+    const allowedFields = ['departureLocation', 'destination', 'departureDateTime', 'totalSeats', 'genderPreference'];
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
@@ -95,6 +109,26 @@ const modifyRide = async (req, res, next) => {
 
     if (updates.departureDateTime) updates.timeChangeCount = (ride.timeChangeCount || 0) + 1;
 
+    const routeAffected = updates.departureLocation || updates.destination;
+    if (routeAffected) {
+      const newDeparture = updates.departureLocation || ride.departureLocation;
+      const newDestination = updates.destination || ride.destination;
+      try {
+        const directions = await getDirections(newDeparture, newDestination, []);
+        updates.route = {
+          originLatitude: directions.originLat,
+          originLongitude: directions.originLng,
+          destinationLatitude: directions.destLat,
+          destinationLongitude: directions.destLng,
+          distanceKM: directions.distanceKM,
+          durationMinutes: directions.durationMinutes,
+          polyline: directions.polyline,
+        };
+      } catch (mapsErr) {
+        console.warn('[modifyRide] Directions API failed, keeping existing route:', mapsErr.message);
+      }
+    }
+
     const updatedRide = await Ride.findByIdAndUpdate(req.params.rideId, { $set: updates }, { new: true, runValidators: true });
     return success(res, 200, 'Ride updated.', { ride: updatedRide });
   } catch (err) { next(err); }
@@ -103,31 +137,36 @@ const modifyRide = async (req, res, next) => {
 // ── cancelRide ────────────────────────────────────────────────────────────────
 const cancelRide = async (req, res, next) => {
   try {
-    const ride = await Ride.findById(req.params.rideId);
+    const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'You can only cancel your own rides.');
-    if (['Completed', 'Cancelled'].includes(ride.status)) return error(res, 400, `Cannot cancel a ${ride.status.toLowerCase()} ride.`);
+    if (['Completed', 'Cancelled'].includes(ride.state)) return error(res, 400, `Cannot cancel a ${ride.state.toLowerCase()} ride.`);
 
     const now = new Date();
     const departurTime = new Date(ride.departureDateTime);
     if (departurTime - now < 2 * 60 * 60 * 1000) return error(res, 400, 'Cannot cancel a ride within 2 hours of departure.');
 
-    ride.status = 'Cancelled';
-    ride.cancellationReason = req.body.reason || 'Cancelled by driver';
-    ride.cancellationDate = new Date();
-    await ride.save({ validateModifiedOnly: true });
-
-    const confirmedBookings = await Booking.find({ rideId: ride._id, status: 'Confirmed' });
     const reason = req.body.reason || 'Ride cancelled by driver';
     const driver = await User.findById(ride.driverId).select('firstName lastName');
     const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim();
 
-    for (const booking of confirmedBookings) {
-      booking.status = 'Cancelled';
-      booking.cancellationDate = new Date();
-      booking.cancellationReason = `Ride cancelled by driver: ${reason}`;
-      await booking.save({ validateModifiedOnly: true });
+    // Cancel ride and all confirmed embedded bookings atomically
+    const confirmedBookings = ride.bookings.filter(b => b.status === 'Confirmed');
 
+    await Ride.findByIdAndUpdate(ride._id, {
+      $set: {
+        state: 'Cancelled',
+        cancellationReason: req.body.reason || 'Cancelled by driver',
+        cancellationDate: new Date(),
+        'bookings.$[elem].status': 'Cancelled',
+        'bookings.$[elem].cancellationDate': new Date(),
+        'bookings.$[elem].cancellationReason': `Ride cancelled by driver: ${reason}`,
+      },
+    }, {
+      arrayFilters: [{ 'elem.status': 'Confirmed' }],
+    });
+
+    for (const booking of confirmedBookings) {
       await Message.create({
         senderId: ride.driverId,
         receiverId: booking.passengerId,
@@ -149,17 +188,13 @@ const cancelRide = async (req, res, next) => {
 };
 
 // ── markAttendance ────────────────────────────────────────────────────────────
-// PUT /api/rides/:rideId/attendance
-// Driver marks each passenger Present or Absent before completing the ride.
-// Absent passengers get a no-show penalty (cancellationCount++).
 const markAttendance = async (req, res, next) => {
   try {
-    const ride = await Ride.findById(req.params.rideId);
+    const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'Only the driver can mark attendance.');
-    if (!['Active', 'Full'].includes(ride.status)) return error(res, 400, 'Attendance can only be marked for active rides.');
+    if (!['Active', 'Full'].includes(ride.state)) return error(res, 400, 'Attendance can only be marked for active rides.');
 
-    // Allow marking 30 minutes before departure onwards
     const now = new Date();
     const depTime = new Date(ride.departureDateTime);
     const thirtyMinBefore = new Date(depTime.getTime() - 30 * 60 * 1000);
@@ -175,11 +210,13 @@ const markAttendance = async (req, res, next) => {
       const { bookingId, status } = entry;
       if (!['Present', 'Absent'].includes(status)) continue;
 
-      const booking = await Booking.findOne({ _id: bookingId, rideId: ride._id, status: 'Confirmed' });
-      if (!booking) continue;
+      const booking = ride.bookings.id(bookingId);
+      if (!booking || booking.status !== 'Confirmed') continue;
 
-      booking.attendanceStatus = status;
-      await booking.save({ validateModifiedOnly: true });
+      await Ride.findOneAndUpdate(
+        { _id: ride._id, 'bookings._id': bookingId },
+        { $set: { 'bookings.$.attendanceStatus': status } }
+      );
 
       if (status === 'Absent') {
         await User.findByIdAndUpdate(booking.passengerId, { $inc: { cancellationCount: 1 } });
@@ -199,27 +236,24 @@ const markAttendance = async (req, res, next) => {
 };
 
 // ── getAttendance ─────────────────────────────────────────────────────────────
-// GET /api/rides/:rideId/attendance
-// Driver fetches passenger list with attendanceStatus for the check-in panel.
 const getAttendance = async (req, res, next) => {
   try {
-    const ride = await Ride.findById(req.params.rideId);
+    const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' })
+      .populate('bookings.passengerId', 'firstName lastName profilePicture phoneNumber');
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'Only the driver can view attendance.');
 
-    const bookings = await Booking.find({ rideId: ride._id, status: 'Confirmed' })
-      .populate('passengerId', 'firstName lastName profilePicture phoneNumber');
+    const confirmedBookings = ride.bookings.filter(b => b.status === 'Confirmed');
 
-    const attendanceList = bookings.map((b) => ({
+    const attendanceList = confirmedBookings.map((b) => ({
       bookingId: b._id,
       passenger: b.passengerId,
-      seatsCount: b.seatsCount,
       pickupLocation: b.pickupLocation,
-      attendanceStatus: b.attendanceStatus, // null = not yet marked
+      attendanceStatus: b.attendanceStatus,
     }));
 
     return success(res, 200, `${attendanceList.length} passenger(s).`, {
-      ride: { _id: ride._id, destination: ride.destination, departureDateTime: ride.departureDateTime, status: ride.status },
+      ride: { _id: ride._id, destination: ride.destination, departureDateTime: ride.departureDateTime, state: ride.state },
       attendance: attendanceList,
       allMarked: attendanceList.every((a) => a.attendanceStatus !== null),
     });
@@ -227,77 +261,88 @@ const getAttendance = async (req, res, next) => {
 };
 
 // ── completeRide ──────────────────────────────────────────────────────────────
-// Requires at least one passenger to have been attendance-marked before completing.
 const completeRide = async (req, res, next) => {
   try {
-    const ride = await Ride.findById(req.params.rideId);
+    const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'Only the driver can complete a ride.');
-    if (!['Active', 'Full'].includes(ride.status)) return error(res, 400, `Cannot complete a ${ride.status.toLowerCase()} ride.`);
+    if (!['Active', 'Full', 'OnGoing'].includes(ride.state)) return error(res, 400, `Cannot complete a ${ride.state?.toLowerCase()} ride.`);
 
-    const confirmedBookings = await Booking.find({ rideId: ride._id, status: 'Confirmed' });
-
-    // Enforce attendance gate only when there are passengers
-    if (confirmedBookings.length > 0) {
-      const anyMarked = confirmedBookings.some((b) => b.attendanceStatus !== null);
-      if (!anyMarked) return error(res, 400, 'Please mark attendance before completing the ride.');
+    // Guard: if GPS already completed it, refuse duplicate
+    if (ride.reviewsPrompted) {
+      return error(res, 400, 'This ride was already completed automatically via GPS.');
     }
 
-    ride.status = 'Completed';
-    await ride.save({ validateModifiedOnly: true });
+    const confirmedBookings = ride.bookings.filter(b => b.status === 'Confirmed');
 
-    await Booking.updateMany({ rideId: ride._id, status: 'Confirmed' }, { $set: { status: 'Completed' } });
+    // Mark reviewsPrompted = true FIRST (atomic guard against GPS double-fire)
+    const completed = await Ride.findOneAndUpdate(
+      { _id: ride._id, reviewsPrompted: false },
+      {
+        $set: {
+          state: 'Completed',
+          reviewsPrompted: true,
+          'bookings.$[elem].status': 'Completed',
+        },
+      },
+      { arrayFilters: [{ 'elem.status': 'Confirmed' }], new: true }
+    );
+    if (!completed) return error(res, 400, 'Ride was already completed.');
 
-    // Only credit present passengers (absent already penalised in markAttendance)
-    const presentPassengerIds = confirmedBookings
-      .filter((b) => b.attendanceStatus !== 'Absent')
-      .map((b) => b.passengerId);
+    const presentIds = confirmedBookings
+      .filter(b => b.attendanceStatus !== 'Absent')
+      .map(b => b.passengerId);
 
     await User.updateMany(
-      { _id: { $in: [...presentPassengerIds, ride.driverId] } },
+      { _id: { $in: [ride.driverId, ...presentIds] } },
       { $inc: { totalCompletedRides: 1 } }
     );
 
-    for (const pid of presentPassengerIds) {
-      await Notification.create({
-        userId: pid,
-        title: 'Ride Completed — Rate Your Driver!',
-        content: `Your ride to ${ride.destination} is complete. How was your experience? Leave a review for your driver.`,
-        type: 'Alert',
-      });
-    }
-
-    await Notification.create({
-      userId: ride.driverId,
-      title: 'Ride Completed',
-      content: `Your ride to ${ride.destination} has been marked as completed.`,
-      type: 'Alert',
-    });
+    // Emit review prompts via Socket.IO + create in-app notifications
+    const io = req.app.get('io');
+    if (io) await emitReviewPrompts(io, completed);
 
     return success(res, 200, 'Ride completed.', {
       completedBookings: confirmedBookings.length,
-      presentPassengers: presentPassengerIds.length,
+      presentPassengers: presentIds.length,
     });
   } catch (err) { next(err); }
 };
-
 // ── getAvailableRides ─────────────────────────────────────────────────────────
 const getAvailableRides = async (req, res, next) => {
   try {
     const {
-      destination, departureLocation, date,
+      destination, departureLocation, date, afterTime,
       sortBy = 'departureDateTime', order = 'asc',
-      minPrice, maxPrice, genderPreference,
+      minPrice, maxPrice, genderPreference, driverId, smokingPolicy,
       page = 1, limit = 20,
     } = req.query;
 
-    const filter = { status: 'Active', departureDateTime: { $gte: new Date() } };
+    const filter = {
+      type: 'Offer',
+      state: { $in: ['Active', 'Full'] },
+      departureDateTime: { $gte: new Date() },
+    };
+
     if (destination) filter.destination = { $regex: destination, $options: 'i' };
     if (departureLocation) filter.departureLocation = { $regex: departureLocation, $options: 'i' };
+    if (driverId) filter.driverId = driverId;
     if (date) {
       const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
+      if (afterTime) {
+        const [hh, mm] = afterTime.split(':').map(Number);
+        if (!isNaN(hh) && !isNaN(mm)) startOfDay.setHours(hh, mm, 0, 0);
+      }
       filter.departureDateTime = { $gte: startOfDay, $lte: endOfDay };
+    } else if (afterTime) {
+      // No date but afterTime: filter from today at that time
+      const now = new Date();
+      const [hh, mm] = afterTime.split(':').map(Number);
+      if (!isNaN(hh) && !isNaN(mm)) {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+        if (start > now) filter.departureDateTime = { $gte: start };
+      }
     }
     if (minPrice || maxPrice) {
       filter.pricePerSeat = {};
@@ -310,7 +355,7 @@ const getAvailableRides = async (req, res, next) => {
     const sortOrder = order === 'desc' ? -1 : 1;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const [rides, total] = await Promise.all([
+    const [rides, total, userHistory] = await Promise.all([
       Ride.find(filter)
         .populate('driverId', 'firstName lastName averageRating totalCompletedRides profilePicture')
         .populate('vehicleId', 'brand model color sizeCategory luggageCapacity licensePlate smokingPolicy')
@@ -318,10 +363,37 @@ const getAvailableRides = async (req, res, next) => {
         .skip(skip)
         .limit(Number(limit)),
       Ride.countDocuments(filter),
+      // Expanded history: includes route vectors, driverId, and embedded bookings
+      // for co-passenger affinity. bookings are used server-side only — never sent to client.
+      Ride.find(
+        { type: 'Offer', state: 'Completed', 'bookings.passengerId': req.user._id },
+        {
+          destination:       1,
+          departureLocation: 1,
+          departureDateTime: 1,
+          pricePerSeat:      1,
+          driverId:          1,
+          'route.originLatitude':       1,
+          'route.originLongitude':      1,
+          'route.destinationLatitude':  1,
+          'route.destinationLongitude': 1,
+          'bookings.passengerId':       1,
+          'bookings.status':            1,
+        }
+      ).limit(50),
     ]);
 
-    return success(res, 200, `${rides.length} ride(s) found.`, {
-      rides,
+    let scored = scoreRides(rides, userHistory, req.user);
+
+    // Post-filter by vehicle smoking policy (requires populated vehicleId)
+    if (smokingPolicy) {
+      scored = scored.filter(r => r.vehicleId && r.vehicleId.smokingPolicy === smokingPolicy);
+    }
+
+    scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
+
+    return success(res, 200, `${scored.length} ride(s) found.`, {
+      rides: scored,
       pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
     });
   } catch (err) { next(err); }
@@ -342,16 +414,32 @@ const getRideDetails = async (req, res, next) => {
 const getMyRides = async (req, res, next) => {
   try {
     const { status = 'upcoming' } = req.query;
-    const filter = { driverId: req.user._id };
+    const filter = { type: 'Offer', driverId: req.user._id };
     if (status === 'upcoming') {
-      filter.status = { $in: ['Active', 'Full'] };
-      filter.departureDateTime = { $gte: new Date() };
+      filter.state = { $in: ['Active', 'Full', 'OnGoing'] };
+      filter.departureDateTime = { $gte: new Date(Date.now() - 12 * 60 * 60 * 1000) }; // include rides up to 12h past departure (ongoing)
     } else {
-      filter.status = { $in: ['Completed', 'Cancelled'] };
+      filter.state = { $in: ['Completed', 'Cancelled'] };
     }
     const rides = await Ride.find(filter)
       .populate('vehicleId', 'brand model color')
-      .sort({ departureDateTime: status === 'upcoming' ? 1 : -1 });
+      .populate('bookings.passengerId', 'firstName lastName')
+      .sort({ departureDateTime: status === 'upcoming' ? 1 : -1 })
+      .lean();
+
+    // For past rides, check if driver has already reviewed
+    if (status !== 'upcoming' && rides.length > 0) {
+      const rideIds = rides.map(r => r._id);
+      const existingReviews = await Review.find({
+        authorId: req.user._id,
+        rideId: { $in: rideIds },
+      }).select('rideId').lean();
+      const reviewedRideIds = new Set(existingReviews.map(r => r.rideId.toString()));
+      for (const ride of rides) {
+        ride.rated = reviewedRideIds.has(ride._id.toString());
+      }
+    }
+
     return success(res, 200, `${rides.length} ride(s) found.`, { rides });
   } catch (err) { next(err); }
 };

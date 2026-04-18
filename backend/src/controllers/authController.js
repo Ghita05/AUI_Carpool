@@ -853,6 +853,47 @@ const previewOCR = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/users/change-password
+ * Authenticated: verifies current password, then replaces it with a new one.
+ * Invalidates all existing sessions by clearing the refresh token so that
+ * other devices must re-login — a standard security measure after a credential change.
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return error(res, 400, 'Current and new passwords are required.');
+    }
+    if (newPassword.length < 8) {
+      return error(res, 400, 'New password must be at least 8 characters.');
+    }
+    if (currentPassword === newPassword) {
+      return error(res, 400, 'New password must differ from current password.');
+    }
+
+    // Fetch the user with password field (normally excluded by select)
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) return error(res, 404, 'User not found.');
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return error(res, 401, 'Current password is incorrect.');
+    }
+
+    // Assign new password — the pre-save hook will hash it automatically
+    user.password = newPassword;
+    // Invalidate all existing sessions: any stored refresh token is now stale
+    user.refreshToken = null;
+    await user.save();
+
+    return success(res, 200, 'Password changed successfully. Please log in again.');
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   sendVerification,
   checkVerification,
@@ -877,4 +918,5 @@ module.exports = {
   uploadCashWallet,
   uploadDriverLicense,
   previewOCR,
+  changePassword,
 };

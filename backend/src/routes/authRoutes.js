@@ -26,6 +26,7 @@ router.get('/sort', authenticate, auth.sortUsers);
 router.get('/profile/:userId', authenticate, auth.getUserProfile);
 router.put('/profile', authenticate, auth.updateProfile);
 router.put('/preferences', authenticate, auth.updatePreferences);
+router.put('/change-password', authenticate, auth.changePassword);
 router.post('/logout', authenticate, auth.logout);
 router.delete('/deactivate', authenticate, auth.deactivateAccount);
 

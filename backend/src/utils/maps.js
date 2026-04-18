@@ -111,6 +111,82 @@ async function getDirections(origin, destination, waypoints = []) {
 }
 
 /**
+ * getAlternativeRoutes
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Calls Directions API with alternatives=true. Returns ALL routes so the user
+ * can choose their preferred path before publishing a ride.
+ *
+ * @param {string}   origin
+ * @param {string}   destination
+ * @param {string[]} [waypoints] - Optional intermediate stops
+ * @returns {Promise<Array<{
+ *   index: number,
+ *   summary: string,
+ *   distanceKM: number,
+ *   durationMinutes: number,
+ *   originLat: number,
+ *   originLng: number,
+ *   destLat: number,
+ *   destLng: number,
+ *   polyline: string
+ * }>>}
+ */
+async function getAlternativeRoutes(origin, destination, waypoints = []) {
+  const params = {
+    origin,
+    destination,
+    travelMode: TravelMode.driving,
+    unitSystem: UnitSystem.metric,
+    alternatives: true,
+    key: process.env.GOOGLE_MAPS_API_KEY,
+  };
+
+  if (waypoints && waypoints.length > 0) {
+    params.waypoints = waypoints;
+  }
+
+  const response = await mapsClient.directions({ params });
+  const { status, routes } = response.data;
+
+  if (status !== 'OK' || !routes || routes.length === 0) {
+    throw new Error(`Google Maps Directions API returned status: ${status}`);
+  }
+
+  return routes.map((route, index) => {
+    const legs = route.legs;
+    const totalDistanceMeters = legs.reduce((sum, leg) => sum + leg.distance.value, 0);
+    const totalDurationSeconds = legs.reduce((sum, leg) => sum + leg.duration.value, 0);
+    const originLoc = legs[0].start_location;
+    const destLoc = legs[legs.length - 1].end_location;
+
+    // Extract geocoded waypoint (stop) coordinates from leg boundaries.
+    // With N waypoints there are N+1 legs; each intermediate leg boundary is a stop.
+    const waypointCoords = [];
+    for (let i = 0; i < legs.length - 1; i++) {
+      const loc = legs[i].end_location;
+      waypointCoords.push({
+        latitude: loc.lat,
+        longitude: loc.lng,
+        name: waypoints && waypoints[i] ? waypoints[i] : `Stop ${i + 1}`,
+      });
+    }
+
+    return {
+      index,
+      summary: route.summary || `Route ${index + 1}`,
+      distanceKM: parseFloat((totalDistanceMeters / 1000).toFixed(1)),
+      durationMinutes: Math.round(totalDurationSeconds / 60),
+      originLat: originLoc.lat,
+      originLng: originLoc.lng,
+      destLat: destLoc.lat,
+      destLng: destLoc.lng,
+      polyline: route.overview_polyline.points,
+      waypoints: waypointCoords,
+    };
+  });
+}
+
+/**
  * isStopOnRoute
  * ─────────────────────────────────────────────────────────────────────────────
  * Determines whether a passenger-requested stop location is reasonably on the
@@ -189,4 +265,4 @@ async function isStopOnRoute(origin, destination, stopLocation) {
   };
 }
 
-module.exports = { getDirections, isStopOnRoute };
+module.exports = { getDirections, getAlternativeRoutes, isStopOnRoute };

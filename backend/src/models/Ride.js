@@ -1,115 +1,132 @@
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-// ── Embedded sub-document: Route (Table 6) ──
-const routeSchema = new mongoose.Schema(
-  {
-    originLatitude: { type: Number },
-    originLongitude: { type: Number },
-    destinationLatitude: { type: Number },
-    destinationLongitude: { type: Number },
-    distanceKM: { type: Number },
-    durationMinutes: { type: Number },
-    // Encoded overview polyline from the Directions API response.
-    // Stored here so the mobile can draw the route on MapView without a
-    // second API call from the client. Decoded on the mobile using
-    // @mapbox/polyline or similar.
-    polyline: { type: String, default: null },
-  },
-  { _id: false }
-);
+// ── Route sub-document ────────────────────────────────────────────────────
+const routeSchema = new Schema({
+  originLatitude:       { type: Number },
+  originLongitude:      { type: Number },
+  destinationLatitude:  { type: Number },
+  destinationLongitude: { type: Number },
+  distanceKM:           { type: Number },
+  durationMinutes:      { type: Number },
+  polyline:             { type: String, default: null },
+  summary:              { type: String, default: null },
+}, { _id: false });
 
-const rideSchema = new mongoose.Schema(
-  {
-    driverId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, 'Driver ID is required'],
-    },
-    vehicleId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Vehicle',
-      required: [true, 'Vehicle ID is required'],
-    },
-    departureLocation: {
-      type: String,
-      required: [true, 'Departure location is required'],
-      trim: true,
-    },
-    destination: {
-      type: String,
-      required: [true, 'Destination is required'],
-      trim: true,
-    },
-    stops: {
-      type: [String],
-      default: [],
-    },
-    departureDateTime: {
-      type: Date,
-      required: [true, 'Departure date and time is required'],
-    },
-    totalSeats: {
-      type: Number,
-      required: [true, 'Total seats is required'],
-      min: [1, 'Must offer at least 1 seat'],
-    },
-    availableSeats: {
-      type: Number,
-      required: [true, 'Available seats is required'],
-      min: [0, 'Available seats cannot be negative'],
-    },
-    pricePerSeat: {
-      type: Number,
-      required: [true, 'Price per seat is required'],
-      min: [0, 'Price cannot be negative'],
-    },
-    status: {
-      type: String,
-      enum: {
-        values: ['Draft', 'Active', 'Full', 'Completed', 'Cancelled'],
-        message: '{VALUE} is not a valid ride status',
-      },
-      default: 'Active',
-    },
-    genderPreference: {
-      type: String,
-      enum: {
-        values: ['Women-Only', 'All'],
-        message: '{VALUE} is not a valid gender preference',
-      },
-      default: 'All',
-    },
-    creationDate: {
-      type: Date,
-      default: Date.now,
-    },
-    route: {
-      type: routeSchema,
-      default: null,
-    },
-    timeChangeCount: {
-      type: Number,
-      default: 0,
-    },
-    cancellationReason: {
-      type: String,
-      default: null,
-    },
-    cancellationDate: {
-      type: Date,
-      default: null,
-    },
+// ── Booking sub-document (embedded in Offer documents) ───────────────────
+const bookingSubSchema = new Schema({
+  passengerId:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  groupId:            { type: Schema.Types.ObjectId, default: null },
+  status:             {
+    type: String,
+    enum: ['Confirmed', 'Cancelled', 'Completed'],
+    default: 'Confirmed',
   },
-  {
-    timestamps: true,
+  pickupLocation:     { type: String, default: '' },
+  luggageDeclaration: { type: String, default: '' },
+  price:              { type: Number, default: 0 },
+  attendanceStatus:   {
+    type: String,
+    enum: ['Present', 'Absent'],
+    default: null,
+  },
+  cancellationReason: { type: String, default: null },
+  cancellationDate:   { type: Date, default: null },
+  report: {
+    category:    { type: String, default: null },
+    description: { type: String, default: null },
+    status:      {
+      type: String,
+      enum: ['Open', 'Resolved', 'Closed'],
+      default: null,
+    },
+    adminNote:   { type: String, default: null },
+    createdAt:   { type: Date, default: null },
+    resolvedAt:  { type: Date, default: null },
+  },
+  bookedAt: { type: Date, default: Date.now },
+}, { _id: true, timestamps: false });
+
+// ── Unified Ride schema ───────────────────────────────────────────────────
+const rideSchema = new Schema({
+
+  type: {
+    type: String,
+    enum: ['Offer', 'Request'],
+    required: [true, 'Ride type is required'],
+  },
+
+  state: {
+    type: String,
+    enum: ['Open', 'Active', 'Full', 'Accepted', 'OnGoing', 'Completed', 'Cancelled', 'Expired'],
+    default: null,
+  },
+
+  // ── Live-ride flags (set by GPS-driven socket logic) ──────────────────
+  // Prevents duplicate late-departure notifications per ride.
+  lateNotificationSent: { type: Boolean, default: false },
+  // Set when the ride transitions OnGoing → Completed via GPS, prevents
+  // duplicate review prompts if the driver also manually completes the ride.
+  reviewsPrompted:      { type: Boolean, default: false },
+  // Timestamp when the ride transitioned to OnGoing — used to estimate ETA.
+  ongoingStartedAt:     { type: Date, default: null },
+
+
+
+  // ── Shared fields ─────────────────────────────────────────────────────
+  departureLocation: { type: String, required: true, trim: true },
+  destination:       { type: String, required: true, trim: true },
+  departureDateTime: { type: Date, required: true },
+  pricePerSeat:      { type: Number, required: true, min: 0 },
+  genderPreference:  {
+    type: String,
+    enum: ['Women-Only', 'All'],
+    default: 'All',
+  },
+  notes: { type: String, default: '' },
+
+  // ── Offer-only fields ─────────────────────────────────────────────────
+  driverId:        { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  vehicleId:       { type: Schema.Types.ObjectId, ref: 'Vehicle', default: null },
+  totalSeats:      { type: Number, min: 1, default: null },
+  availableSeats:  { type: Number, min: 0, default: null },
+  timeChangeCount: { type: Number, default: 0 },
+  route:           { type: routeSchema, default: null },
+  bookings:        { type: [bookingSubSchema], default: [] },
+
+  // ── Stops (used by both Offer and Request) ────────────────────────────
+  stops:             { type: [String], default: [] },
+
+  // ── Request-only fields ───────────────────────────────────────────────
+  passengerId:       { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  groupPassengerIds: { type: [Schema.Types.ObjectId], default: [] },
+  leftMembers:       { type: Map, of: Number, default: {} },
+  passengerCount:    { type: Number, min: 1, default: null },
+  maxPrice:          { type: Number, default: null },
+  acceptedRideId:    { type: Schema.Types.ObjectId, ref: 'Ride', default: null },
+
+  // ── Cancellation (both types) ─────────────────────────────────────────
+  cancellationReason: { type: String, default: null },
+  cancellationDate:   { type: Date, default: null },
+
+}, { timestamps: true });
+
+// ── Pre-save: set default state based on type ─────────────────────────────
+rideSchema.pre('save', function(next) {
+  if (this.isNew && this.state === null) {
+    this.state = this.type === 'Offer' ? 'Active' : 'Open';
   }
-);
+  next();
+});
 
-// ── Indexes optimized for the search/sort/filter functions in Table 14 ──
+// ── Indexes ───────────────────────────────────────────────────────────────
+rideSchema.index({ type: 1, state: 1, departureDateTime: 1 });
+rideSchema.index({ driverId: 1, type: 1 });
+rideSchema.index({ passengerId: 1, type: 1 });
+rideSchema.index({ 'bookings.passengerId': 1 });
+rideSchema.index({ 'bookings._id': 1 });
 rideSchema.index({ destination: 'text', departureLocation: 'text' });
-rideSchema.index({ departureDateTime: 1 });
-rideSchema.index({ status: 1, departureDateTime: 1 });
-rideSchema.index({ driverId: 1 });
+
 rideSchema.index({ pricePerSeat: 1 });
 rideSchema.index({ availableSeats: -1 });
 
