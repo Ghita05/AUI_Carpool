@@ -30,6 +30,9 @@ import BookingConfirmationScreen from '../screens/bookings/BookingConfirmationSc
 import UserProfileScreen     from '../screens/profile/UserProfileScreen';
 import AccountSettingsScreen from '../screens/settings/AccountSettingsScreen';
 
+// Community
+import CommunityScreen from '../screens/community/CommunityScreen';
+
 // Messages
 import MessagesScreen from '../screens/messages/MessagesScreen';
 
@@ -105,6 +108,7 @@ export default function AppNavigator() {
         <Stack.Screen name="RideRequestsScreen"   component={RideRequestsScreen} />
         <Stack.Screen name="UserProfile"          component={UserProfileScreen} />
         <Stack.Screen name="AccountSettings"      component={AccountSettingsScreen} />
+        <Stack.Screen name="Community"            component={CommunityScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

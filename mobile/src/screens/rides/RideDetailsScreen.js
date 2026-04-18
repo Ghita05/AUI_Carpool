@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Share, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Share, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { getRideDetails, cancelRide, modifyRide, markAttendance, getAttendance, completeRide } from '../../services/rideService';
-import { getPassengerList } from '../../services/rideService';
+import { getRideDetails, cancelRide, modifyRide, markAttendance, getAttendance, completeRide, getPassengerList } from '../../services/rideService';
 import { getUserReviews } from '../../services/reviewService';
 import { getCurrentBookings } from '../../services/bookingService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
@@ -393,7 +393,7 @@ function CancelRideModal({visible, ride, onClose, onCancelledAndBack}) {
   if (!ride) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={st.modalOv}>
+      <KeyboardAvoidingView style={st.modalOv} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={[st.manageModal, {maxHeight: '50%'}]}>
           <View style={st.modalH}>
             <Text style={st.modalTitle}>Cancel Ride</Text>
@@ -424,15 +424,16 @@ function CancelRideModal({visible, ride, onClose, onCancelledAndBack}) {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 // ── RouteMapModal ─────────────────────────────────────────────────────────────
-// Full-screen MapView showing the stored polyline between origin and destination.
-// Falls back gracefully when no polyline exists (Maps was unavailable at post time).
-function RouteMapModal({ visible, ride, onClose }) {
+// Full-screen MapView. When the ride is OnGoing it also renders live member
+// markers from the memberPositions map so every participant can see each other.
+// Falls back gracefully when no polyline stored (Maps unavailable at post time).
+function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, isOnGoing }) {
   if (!ride) return null;
   const hasPolyline = !!ride.route?.polyline;
   const routeCoords = hasPolyline ? decodePolyline(ride.route.polyline) : [];
@@ -444,23 +445,44 @@ function RouteMapModal({ visible, ride, onClose }) {
     ? { latitude: ride.route.destinationLatitude, longitude: ride.route.destinationLongitude }
     : null;
 
-  // Bounding region: center between the two endpoints, delta sized to contain both
   const region = origin && dest ? {
-    latitude: (origin.latitude + dest.latitude) / 2,
-    longitude: (origin.longitude + dest.longitude) / 2,
-    latitudeDelta: Math.abs(origin.latitude - dest.latitude) * 1.6 + 0.05,
+    latitude:       (origin.latitude  + dest.latitude)  / 2,
+    longitude:      (origin.longitude + dest.longitude) / 2,
+    latitudeDelta:  Math.abs(origin.latitude  - dest.latitude)  * 1.6 + 0.05,
     longitudeDelta: Math.abs(origin.longitude - dest.longitude) * 1.6 + 0.05,
   } : null;
+
+  const liveMembers = Object.entries(memberPositions);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
-        <View style={st.modalH}>
-          <Text style={st.modalTitle}>Full Route</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color={Colors.textSecondary}/>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: '#fff', paddingHorizontal: Spacing.lg, paddingVertical: 16,
+          borderBottomWidth: 1, borderBottomColor: Colors.border,
+        }}>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            style={{ marginRight: 14 }}
+          >
+            <Ionicons name="arrow-back" size={26} color={Colors.textPrimary} />
           </TouchableOpacity>
+          <Text style={{ flex: 1, fontSize: 20, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary }}>
+            {isOnGoing ? 'Live Tracking' : 'Full Route'}
+          </Text>
         </View>
+
+        {/* Live ETA strip shown when ride is in progress */}
+        {isOnGoing && liveEta && (
+          <View style={{ backgroundColor: Colors.primary, paddingVertical: 6, paddingHorizontal: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="time-outline" size={14} color="#fff"/>
+            <Text style={{ color: '#fff', fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
+              Estimated arrival in ~{liveEta} min
+            </Text>
+          </View>
+        )}
 
         {region ? (
           <MapView
@@ -468,17 +490,16 @@ function RouteMapModal({ visible, ride, onClose }) {
             provider={PROVIDER_GOOGLE}
             initialRegion={region}
             showsCompass={false}
+            showsUserLocation={true}      // show the device's own blue dot
+            followsUserLocation={isOnGoing} // auto-pan to user when tracking
           >
             {/* Origin marker */}
-            {origin && (
-              <Marker coordinate={origin} title={ride.departureLocation} pinColor={Colors.primary}/>
-            )}
+            {origin && <Marker coordinate={origin} title={ride.departureLocation} pinColor={Colors.primary}/>}
+
             {/* Destination marker */}
-            {dest && (
-              <Marker coordinate={dest} title={ride.destination} pinColor="#E53935"/>
-            )}
-            {/* Route polyline decoded from the Directions API overview_polyline
-                stored at ride creation time. strokeWidth 4 matches Figma mockup. */}
+            {dest && <Marker coordinate={dest} title={ride.destination} pinColor="#E53935"/>}
+
+            {/* Route polyline */}
             {routeCoords.length > 0 && (
               <Polyline
                 coordinates={routeCoords}
@@ -487,6 +508,31 @@ function RouteMapModal({ visible, ride, onClose }) {
                 lineDashPattern={[0]}
               />
             )}
+
+            {/* Live member markers — rendered when ride is OnGoing */}
+            {isOnGoing && liveMembers.map(([userId, pos]) => (
+              <Marker
+                key={userId}
+                coordinate={{ latitude: pos.latitude, longitude: pos.longitude }}
+                title={pos.isDriver ? 'Driver' : 'Passenger'}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                {/* Custom callout-style pin — green circle for driver, amber for passenger */}
+                <View style={{
+                  width: 32, height: 32, borderRadius: 16,
+                  backgroundColor: pos.isDriver ? Colors.primary : Colors.accent,
+                  alignItems: 'center', justifyContent: 'center',
+                  borderWidth: 2, borderColor: '#fff',
+                  shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3, elevation: 4,
+                }}>
+                  <Ionicons
+                    name={pos.isDriver ? 'car' : 'person'}
+                    size={14}
+                    color="#fff"
+                  />
+                </View>
+              </Marker>
+            ))}
           </MapView>
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl }}>
@@ -503,7 +549,12 @@ function RouteMapModal({ visible, ride, onClose }) {
           </Text>
           {ride.route?.distanceKM && (
             <Text style={{ fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 4 }}>
-              {ride.route.distanceKM} km · ~{ride.route.durationMinutes} min
+              {ride.route.distanceKM} km · ~{ride.route.durationMinutes} min estimated
+            </Text>
+          )}
+          {isOnGoing && liveMembers.length > 0 && (
+            <Text style={{ fontSize: Typography.xs, color: Colors.primary, marginTop: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
+              {liveMembers.length} member{liveMembers.length > 1 ? 's' : ''} sharing live location
             </Text>
           )}
         </View>
@@ -663,7 +714,7 @@ function AttendanceModal({ visible, rideId, onClose, onAttendanceSaved }) {
 }
 
 export default function RideDetailsScreen({ navigation, route }) {
-  const { isDriver, user } = useAuth();
+  const { isDriver, user, socket: socketRef } = useAuth();
   const rideId = route?.params?.rideId;
   const [ride,setRide]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -673,12 +724,126 @@ export default function RideDetailsScreen({ navigation, route }) {
   const [showCancelRide,setShowCancelRide]=useState(false);
   const [showStopRequests,setShowStopRequests]=useState(false);
   const [hasBooking, setHasBooking] = useState(false);
-  // Route map modal — shows polyline on a real MapView
   const [showRouteMap, setShowRouteMap] = useState(false);
-  // Attendance flow — driver must check in passengers before completing
   const [showAttendance, setShowAttendance] = useState(false);
   const [attendanceSaved, setAttendanceSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
+
+  // ── Live tracking state ──────────────────────────────────────────────────
+  // memberPositions: { [userId]: { latitude, longitude, isDriver } }
+  const [memberPositions, setMemberPositions] = useState({});
+  // liveEta: recalculated minutes remaining, updated as driver moves
+  const [liveEta, setLiveEta]   = useState(null);
+  const [isOnGoing, setIsOnGoing] = useState(false);
+  const locationWatchRef = useRef(null); // expo-location subscription
+
+  // Haversine in JS — mirrors the backend, used for client-side ETA estimation
+  const haversine = useCallback((lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }, []);
+
+  // ── Socket: join ride room + listen to member-location + ride-started ────
+  useEffect(() => {
+    const socket = socketRef?.current;
+    if (!socket || !rideId) return;
+
+    socket.emit('join-ride', rideId);
+
+    const handleMemberLocation = (data) => {
+      if (data.rideId !== rideId) return;
+      setMemberPositions(prev => ({
+        ...prev,
+        [data.userId]: {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          isDriver: data.isDriver,
+          updatedAt: data.timestamp,
+        },
+      }));
+
+      // If this is the driver's position and we have destination coords, estimate ETA
+      if (data.isDriver && ride?.route?.destinationLatitude) {
+        const distKm = haversine(
+          data.latitude, data.longitude,
+          ride.route.destinationLatitude, ride.route.destinationLongitude
+        );
+        // Rough estimate: 60 km/h average on Moroccan intercity roads
+        const etaMin = Math.max(1, Math.round((distKm / 60) * 60));
+        setLiveEta(etaMin);
+      }
+    };
+
+    const handleRideStarted = (data) => {
+      if (data.rideId !== rideId) return;
+      setIsOnGoing(true);
+    };
+
+    const handleRideAutoCompleted = (data) => {
+      if (data.rideId !== rideId) return;
+      Alert.alert('Ride Completed', `Your ride to ${data.destination} has been completed.`, [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    };
+
+    socket.on('member-location',    handleMemberLocation);
+    socket.on('ride-started',       handleRideStarted);
+    socket.on('ride-auto-completed',handleRideAutoCompleted);
+
+    return () => {
+      socket.emit('leave-ride', rideId);
+      socket.off('member-location',    handleMemberLocation);
+      socket.off('ride-started',       handleRideStarted);
+      socket.off('ride-auto-completed',handleRideAutoCompleted);
+    };
+  }, [rideId, socketRef, ride?.route, haversine, navigation]);
+
+  // ── GPS broadcasting: start when ride is OnGoing ─────────────────────────
+  // The driver's device sends its position every 5 seconds via Socket.IO.
+  // Passengers also send their position so the late-departure check works.
+  useEffect(() => {
+    const socket = socketRef?.current;
+    const rideState = ride?.state;
+
+    // Broadcast for driver (OnGoing) and all members around departure time
+    const shouldBroadcast = rideState === 'OnGoing' ||
+      (rideState === 'Active' || rideState === 'Full');
+
+    if (!shouldBroadcast || !socket || !rideId) return;
+
+    let watchSub = null;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      watchSub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,   // 5 s
+          distanceInterval: 10, // or 10 m, whichever comes first
+        },
+        ({ coords }) => {
+          socket.emit('location-update', {
+            rideId,
+            latitude:  coords.latitude,
+            longitude: coords.longitude,
+          });
+        }
+      );
+      locationWatchRef.current = watchSub;
+    })();
+
+    return () => {
+      if (locationWatchRef.current) {
+        locationWatchRef.current.remove();
+        locationWatchRef.current = null;
+      }
+    };
+  }, [ride?.state, rideId, socketRef]);
 
   const fetchRide = async () => {
     try {
@@ -760,6 +925,8 @@ export default function RideDetailsScreen({ navigation, route }) {
     );
   };
 
+  const isOnGoingState = ride?.state === 'OnGoing' || isOnGoing;
+
   return (
     <SafeAreaView style={st.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface}/>
@@ -769,18 +936,34 @@ export default function RideDetailsScreen({ navigation, route }) {
         <TouchableOpacity onPress={handleShare} style={st.headerBtn}><Ionicons name="share-outline" size={22} color={Colors.textSecondary}/></TouchableOpacity>
       </View>
 
+      {/* Live ETA banner — shown when ride is OnGoing */}
+      {isOnGoingState && (
+        <View style={st.etaBanner}>
+          <View style={st.etaPulse}/>
+          <Ionicons name="navigate" size={14} color="#fff" style={{ marginRight: 6 }}/>
+          <Text style={st.etaText}>
+            Ride in progress
+            {liveEta ? ` · ~${liveEta} min remaining` : ''}
+          </Text>
+        </View>
+      )}
+
       <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
         <Card><View style={st.routeRow}><View style={st.routeDots}><View style={[st.dot,{backgroundColor:Colors.primary}]}/><View style={st.dashed}/><View style={[st.dot,{backgroundColor:Colors.error}]}/></View><View style={{flex:1,gap:16}}><Text style={st.routeCity}>{ride.departureLocation}</Text><Text style={st.routeCity}>{ride.destination}</Text></View></View>
           <View style={st.divider}/>
           <View style={st.statsRow}>{[{icon:'calendar-outline',val:departureDate,label:'Date'},{icon:'time-outline',val:departureTime,label:'Departure'},{icon:'resize-outline',val:distanceKM,label:'Distance'},{icon:'hourglass-outline',val:duration,label:'Est. time'}].map((s,i)=>(<View key={i} style={st.stat}><Ionicons name={s.icon} size={14} color={Colors.textSecondary}/><Text style={st.statVal}>{s.val}</Text><Text style={st.statLabel}>{s.label}</Text></View>))}</View>
         </Card>
 
-        <TouchableOpacity activeOpacity={isOwner?1:0.7} onPress={!isOwner?()=>setShowProfile(true):undefined}>
+        {/* Driver card — always navigates to the full profile screen */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('UserProfile', { userId: driver._id })}
+        >
           <Card>
             <View style={st.driverRow}>
               <View style={st.driverAv}><Text style={st.driverAvText}>{getInitials(driver)}</Text></View>
               <View style={{flex:1}}><Text style={st.driverName}>{getName(driver)}</Text><View style={{flexDirection:'row',alignItems:'center',gap:4}}><Ionicons name="star" size={12} color="#F59E0B"/><Text style={st.driverSub}>{driver.averageRating||0} · {driver.totalCompletedRides||0} rides</Text></View></View>
-              {!isOwner && <Text style={st.viewProfile}>View Profile →</Text>}
+              <Text style={st.viewProfile}>Profile →</Text>
             </View>
             <View style={{flexDirection:'row',gap:8}}>
               {driver.smokingPreference&&<View style={st.prefChip}><Ionicons name="ban-outline" size={11} color={Colors.primary}/><Text style={st.prefChipText}>{driver.smokingPreference}</Text></View>}
@@ -834,13 +1017,16 @@ export default function RideDetailsScreen({ navigation, route }) {
               <Ionicons name="flag-outline" size={16} color={Colors.primary}/>
               <Text style={st.outlineBtnText}>Stops</Text>
             </TouchableOpacity>
-            {/* Attendance-gated complete flow:
-                Step 1 — "Check In" opens AttendanceModal.
-                Step 2 — after saving, button becomes "Complete Ride".
-                This enforces the backend's attendance gate and gives the
-                driver a clear two-step confirmation before irreversibly
-                completing the ride. Only shown when ride is active. */}
-            {['Active', 'Full'].includes(ride.status) ? (
+            {isOnGoingState ? (
+              /* Ride is in progress — driver can complete when near destination */
+              <TouchableOpacity
+                style={[st.primaryBtn, completing && { opacity: 0.7 }]}
+                onPress={handleCompleteRide}
+                disabled={completing}
+              >
+                <Text style={st.primaryBtnText}>{completing ? 'Completing...' : 'Complete Ride'}</Text>
+              </TouchableOpacity>
+            ) : ['Active', 'Full'].includes(ride.state) ? (
               !attendanceSaved ? (
                 <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowAttendance(true)}>
                   <Ionicons name="checkmark-circle-outline" size={16} color="#fff" style={{marginRight:4}}/>
@@ -863,10 +1049,14 @@ export default function RideDetailsScreen({ navigation, route }) {
           </>
         ) : (
           <>
-            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages', {driverId: driver._id, driverName: `${driver.firstName} ${driver.lastName}`})}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message Driver</Text></TouchableOpacity>
-            {isRideFull ? (
+            <TouchableOpacity style={st.outlineBtn} onPress={()=>navigation.navigate('Messages', {driverId: driver._id, driverName: `${driver.firstName} ${driver.lastName}`})}><Ionicons name="chatbubble-outline" size={16} color={Colors.primary}/><Text style={st.outlineBtnText}>Message</Text></TouchableOpacity>
+            {isOnGoingState ? (
+              <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowRouteMap(true)}>
+                <Ionicons name="navigate-outline" size={16} color="#fff" style={{marginRight:4}}/>
+                <Text style={st.primaryBtnText}>Track Live</Text>
+              </TouchableOpacity>
+            ) : isRideFull ? (
               <View style={[st.primaryBtn, {backgroundColor: Colors.textDisabled}]}>
-                <Ionicons name="alert-circle-outline" size={16} color="#fff" style={{marginRight: 4}}/>
                 <Text style={st.primaryBtnText}>Ride Full</Text>
               </View>
             ) : hasBooking ? (
@@ -880,7 +1070,6 @@ export default function RideDetailsScreen({ navigation, route }) {
         )}
       </View>
 
-      <DriverProfileModal visible={showProfile} ride={ride} driver={driver} onClose={()=>setShowProfile(false)}/>
       <ManagePassengersModal visible={showManagePax} rideId={ride._id} totalSeats={ride.totalSeats} onClose={()=>setShowManagePax(false)}/>
       <StopRequestsModal visible={showStopRequests} rideId={ride._id} onClose={()=>setShowStopRequests(false)}/>
       <ManageRideModal
@@ -895,8 +1084,15 @@ export default function RideDetailsScreen({ navigation, route }) {
         onClose={() => setShowCancelRide(false)}
         onCancelledAndBack={() => navigation.goBack()}
       />
-      {/* Route map — real MapView with polyline */}
-      <RouteMapModal visible={showRouteMap} ride={ride} onClose={() => setShowRouteMap(false)} />
+      {/* Route map / live tracking — passes member positions when OnGoing */}
+      <RouteMapModal
+        visible={showRouteMap}
+        ride={ride}
+        onClose={() => setShowRouteMap(false)}
+        memberPositions={memberPositions}
+        liveEta={liveEta}
+        isOnGoing={isOnGoingState}
+      />
       {/* Attendance check-in — driver marks Present/Absent before completing */}
       <AttendanceModal
         visible={showAttendance}
@@ -953,4 +1149,13 @@ const st = StyleSheet.create({
   mngDateTimeButton:{flexDirection:'row',alignItems:'center',height:44,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,backgroundColor:Colors.background,marginBottom:4},
   mngDateTimeValue:{fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary},
   cancelIconBtn:{width:42,height:42,borderWidth:1.5,borderColor:Colors.error,borderRadius:8,alignItems:'center',justifyContent:'center'},
+  // Live tracking banner
+  etaBanner:{
+    flexDirection:'row',alignItems:'center',backgroundColor:Colors.primary,
+    paddingVertical:8,paddingHorizontal:Spacing.md,
+  },
+  etaPulse:{
+    width:8,height:8,borderRadius:4,backgroundColor:'#4CAF50',marginRight:8,
+  },
+  etaText:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',color:'#fff'},
 });

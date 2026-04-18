@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, FlatList
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, FlatList, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { selectVehicle } from '../../services/vehicleService';
-import { postRideOffer } from '../../services/rideService';
+import { postRideOffer, validateStopOnRoute, getRouteAlternatives } from '../../services/rideService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
+import RouteSelectionModal from '../../components/RouteSelectionModal';
 import { autocompleteLocation } from '../../utils/mapsService';
 
 // ── Input formatters ──────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ function ToggleRow({ label, sublabel, value, onToggle }) {
 
 export default function CreateRideScreen({ navigation }) {
   const [vehicles, setVehicles] = useState([]);
-  const [departure, setDeparture] = useState('AUI Main Gate');
+  const [departure, setDeparture] = useState('');
   const [destination, setDestination] = useState('');
   const [stops, setStops] = useState([]);
   const [addingStop, setAddingStop] = useState(false);
@@ -159,13 +160,19 @@ export default function CreateRideScreen({ navigation }) {
   const [noSmoking, setNoSmoking] = useState(true);
   const [drivStyle, setDrivStyle] = useState('Calm');
   const [publishing, setPublishing] = useState(false);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [showRouteModal, setShowRouteModal] = useState(false);
+  const [validatingStop, setValidatingStop] = useState(false);
+  // Map of stop name → { onRoute, deviationKM } for per-stop validation feedback
+  const [stopValidations, setStopValidations] = useState({});
 
   // ── Places autocomplete state ────────────────────────────────────────────
   // Two separate suggestion lists — one per field — so typing in one doesn't
   // affect the other. activeField tracks which input is focused.
   const [departureSuggestions, setDepartureSuggestions] = useState([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState([]);
-  const [activeField, setActiveField] = useState(null); // 'departure' | 'destination' | null
+  const [stopSuggestions, setStopSuggestions] = useState([]);
+  const [activeField, setActiveField] = useState(null); // 'departure' | 'destination' | 'stop' | null
   // Session token groups autocomplete + geocode calls for billing efficiency.
   // Reset each time the user selects a suggestion (starts a new session).
   const sessionToken = useRef(Math.random().toString(36).substring(2));
@@ -183,38 +190,55 @@ export default function CreateRideScreen({ navigation }) {
     ? `${vehicle.brand} ${vehicle.model} (${vehicle.color})`
     : 'No vehicle — add one in settings';
 
-  // ── Autocomplete handlers ────────────────────────────────────────────────
+  //  Autocomplete handlers
   // Debounced so we don't fire an API call on every single keystroke.
   // 300ms is the standard UX threshold — fast enough to feel live, slow enough
   // to avoid hammering the API while the user is still typing.
   const handleLocationChange = useCallback((text, field) => {
     if (field === 'departure') setDeparture(text);
-    else setDestination(text);
+    else if (field === 'destination') setDestination(text);
+    else if (field === 'stop') setNewStop(text);
 
     clearTimeout(debounceTimer.current);
     if (text.trim().length < 2) {
       if (field === 'departure') setDepartureSuggestions([]);
-      else setDestinationSuggestions([]);
+      else if (field === 'destination') setDestinationSuggestions([]);
+      else if (field === 'stop') setStopSuggestions([]);
       return;
     }
 
     debounceTimer.current = setTimeout(async () => {
       const results = await autocompleteLocation(text, sessionToken.current);
       if (field === 'departure') setDepartureSuggestions(results);
-      else setDestinationSuggestions(results);
+      else if (field === 'destination') setDestinationSuggestions(results);
+      else if (field === 'stop') setStopSuggestions(results);
     }, 300);
   }, []);
 
-  const handleSuggestionSelect = (suggestion, field) => {
+  const handleSuggestionSelect = async (suggestion, field) => {
     // Use the mainText (e.g. "Fez Airport") as the field value — concise and
     // human-readable, which is what gets sent to the Directions API.
     const value = suggestion.mainText;
     if (field === 'departure') {
       setDeparture(value);
       setDepartureSuggestions([]);
-    } else {
+    } else if (field === 'destination') {
       setDestination(value);
       setDestinationSuggestions([]);
+      // Auto-open route modal once both departure and destination are set
+      if (departure.trim() && value.trim()) {
+        setSelectedRoute(null);
+        setTimeout(() => setShowRouteModal(true), 200);
+      }
+    } else if (field === 'stop') {
+      // For stops, validate against the route first, then add
+      const trimmed = value.trim();
+      if (trimmed) {
+        setNewStop('');
+        setStopSuggestions([]);
+        setAddingStop(false);
+        await addAndValidateStop(trimmed);
+      }
     }
     setActiveField(null);
     // Reset session token — a new autocomplete session starts next time
@@ -227,18 +251,92 @@ export default function CreateRideScreen({ navigation }) {
     setDestination(tmp);
     setDepartureSuggestions([]);
     setDestinationSuggestions([]);
+    setSelectedRoute(null);
+  };
+
+  const handleRouteSelected = (route) => {
+    setSelectedRoute(route);
+    setShowRouteModal(false);
   };
 
   const handleConfirmStop = () => {
     const trimmed = newStop.trim();
     if (!trimmed) return;
-    setStops(prev => [...prev, trimmed]);
     setNewStop('');
     setAddingStop(false);
+    addAndValidateStop(trimmed);
+  };
+
+  const refetchRoute = async (currentStops) => {
+    const dep = departure.trim();
+    const dest = destination.trim();
+    if (!dep || !dest) return;
+    try {
+      const res = await getRouteAlternatives(dep, dest, currentStops);
+      const fetched = res.data?.routes || res.routes || [];
+      if (fetched.length > 0) {
+        setSelectedRoute(fetched[0]);
+      } else {
+        setSelectedRoute(null);
+      }
+    } catch {
+      setSelectedRoute(null);
+    }
+  };
+
+  const addAndValidateStop = async (stopName) => {
+    // Add the stop immediately
+    const updatedStops = [...stops, stopName];
+    setStops(updatedStops);
+    setSelectedRoute(null);
+
+    // Only validate if we have origin + destination
+    if (!departure.trim() || !destination.trim()) return;
+
+    setValidatingStop(true);
+    try {
+      const res = await validateStopOnRoute(departure.trim(), destination.trim(), stopName);
+      const validation = res.data || res;
+      setStopValidations(prev => ({ ...prev, [stopName]: validation }));
+
+      if (validation.onRoute) {
+        // Stop fits — refetch route with all stops and auto-select
+        await refetchRoute(updatedStops);
+        Alert.alert('Route updated', `Route adjusted to include "${stopName}".`);
+      } else {
+        // Stop is off every sensible route
+        Alert.alert(
+          'Stop off route',
+          `"${stopName}" adds ${validation.deviationKM} km detour. The route will be adjusted, but the ride will be longer.`,
+          [
+            { text: 'Keep & update route', onPress: async () => {
+              await refetchRoute(updatedStops);
+            }},
+            { text: 'Remove', style: 'destructive', onPress: () => {
+              setStops(prev => prev.filter(s => s !== stopName));
+              setStopValidations(prev => { const copy = {...prev}; delete copy[stopName]; return copy; });
+              // Restore route without this stop
+              refetchRoute(updatedStops.filter(s => s !== stopName));
+            }},
+          ]
+        );
+      }
+    } catch (e) {
+      console.warn('Stop validation failed:', e.message);
+      // Still refetch route so it's not left null
+      await refetchRoute(updatedStops);
+    } finally {
+      setValidatingStop(false);
+    }
   };
 
   const handleRemoveStop = (index) => {
-    setStops(prev => prev.filter((_, i) => i !== index));
+    const removed = stops[index];
+    const updatedStops = stops.filter((_, i) => i !== index);
+    setStops(updatedStops);
+    setStopValidations(prev => { const copy = {...prev}; delete copy[removed]; return copy; });
+    // Re-fetch route without the removed stop
+    refetchRoute(updatedStops);
   };
 
   const handlePublish = async () => {
@@ -257,6 +355,7 @@ export default function CreateRideScreen({ navigation }) {
         totalSeats: seats,
         pricePerSeat: parseInt(price) || 50,
         genderPreference: womenOnly ? 'Women-Only' : 'All',
+        selectedRoute: selectedRoute || undefined,
       });
       Alert.alert('Ride Published!', 'Your ride is now visible to passengers.', [
         { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) },
@@ -373,39 +472,117 @@ export default function CreateRideScreen({ navigation }) {
             )}
           </View>
 
+          {/* Selected route indicator */}
+          {selectedRoute && (
+            <View style={styles.selectedRouteChip}>
+              <Ionicons name="navigate" size={14} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectedRouteText}>
+                  {selectedRoute.summary || 'Selected route'}
+                </Text>
+                <Text style={styles.selectedRouteMeta}>
+                  {selectedRoute.distanceKM} km · {selectedRoute.durationMinutes} min
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowRouteModal(true)}>
+                <Text style={styles.changeRouteLink}>View on map</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Manual "Choose route" button when both fields set but no route selected */}
+          {!selectedRoute && departure.trim() && destination.trim() && (
+            <TouchableOpacity
+              style={styles.chooseRouteBtn}
+              onPress={() => setShowRouteModal(true)}
+            >
+              <Ionicons name="map-outline" size={14} color={Colors.primary} />
+              <Text style={styles.chooseRouteText}>Choose route on map</Text>
+            </TouchableOpacity>
+          )}
+
           {stops.length > 0 && (
             <View style={styles.stopsContainer}>
-              {stops.map((stop, i) => (
-                <View key={i} style={styles.stopChip}>
-                  <Ionicons name="ellipse" size={6} color={Colors.textSecondary} />
-                  <Text style={styles.stopChipText}>{stop}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveStop(i)} style={styles.stopRemove}>
-                    <Ionicons name="close" size={13} color={Colors.textSecondary} />
-                  </TouchableOpacity>
+              {stops.map((stop, i) => {
+                const v = stopValidations[stop];
+                const chipStyle = v
+                  ? v.onRoute ? styles.stopChipValid : styles.stopChipInvalid
+                  : {};
+                return (
+                  <View key={i} style={[styles.stopChip, chipStyle]}>
+                    {v ? (
+                      <Ionicons
+                        name={v.onRoute ? 'checkmark-circle' : 'warning'}
+                        size={14}
+                        color={v.onRoute ? Colors.success : Colors.warning}
+                      />
+                    ) : (
+                      <Ionicons name="ellipse" size={6} color={Colors.textSecondary} />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.stopChipText}>{stop}</Text>
+                      {v && !v.onRoute && (
+                        <Text style={styles.stopDeviationText}>+{v.deviationKM} km detour</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity onPress={() => handleRemoveStop(i)} style={styles.stopRemove}>
+                      <Ionicons name="close" size={13} color={Colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              {validatingStop && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={{ fontSize: 12, color: Colors.textSecondary }}>Checking stop…</Text>
                 </View>
-              ))}
+              )}
             </View>
           )}
 
           {addingStop ? (
-            <View style={styles.stopEntryRow}>
-              <Ionicons name="navigate-outline" size={13} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.stopEntryInput}
-                value={newStop}
-                onChangeText={setNewStop}
-                placeholder="e.g. Ifrane Marché"
-                placeholderTextColor={Colors.textDisabled}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleConfirmStop}
-              />
-              <TouchableOpacity onPress={handleConfirmStop} style={styles.stopConfirmBtn}>
-                <Text style={styles.stopConfirmText}>Add</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setAddingStop(false); setNewStop(''); }}>
-                <Ionicons name="close" size={16} color={Colors.textSecondary} />
-              </TouchableOpacity>
+            <View>
+              <View style={styles.stopEntryRow}>
+                <Ionicons name="navigate-outline" size={13} color={Colors.textSecondary} />
+                <TextInput
+                  style={styles.stopEntryInput}
+                  value={newStop}
+                  onChangeText={(text) => handleLocationChange(text, 'stop')}
+                  onFocus={() => setActiveField('stop')}
+                  placeholder="e.g. Ifrane Marché"
+                  placeholderTextColor={Colors.textDisabled}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleConfirmStop}
+                />
+                <TouchableOpacity onPress={handleConfirmStop} style={styles.stopConfirmBtn}>
+                  <Text style={styles.stopConfirmText}>Add</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setAddingStop(false); setNewStop(''); setStopSuggestions([]); }}>
+                  <Ionicons name="close" size={16} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Stop suggestions dropdown */}
+              {activeField === 'stop' && stopSuggestions.length > 0 && (
+                <View style={styles.suggestionsBox}>
+                  {stopSuggestions.map((s) => (
+                    <TouchableOpacity
+                      key={s.placeId}
+                      style={styles.suggestionRow}
+                      onPress={() => handleSuggestionSelect(s, 'stop')}
+                    >
+                      <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.suggestionMain}>{s.mainText}</Text>
+                        {s.secondaryText ? (
+                          <Text style={styles.suggestionSub}>{s.secondaryText}</Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           ) : (
             <TouchableOpacity style={styles.addStopBtn} onPress={() => setAddingStop(true)}>
@@ -493,6 +670,15 @@ export default function CreateRideScreen({ navigation }) {
         }}
       />
 
+      <RouteSelectionModal
+        visible={showRouteModal}
+        origin={departure.trim()}
+        destination={destination.trim()}
+        stops={stops}
+        onSelect={handleRouteSelected}
+        onClose={() => setShowRouteModal(false)}
+      />
+
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.publishBtn}
@@ -558,6 +744,9 @@ const styles = StyleSheet.create({
   },
   stopChipText: { flex: 1, fontSize: Typography.base, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textPrimary },
   stopRemove: { padding: 2 },
+  stopChipValid: { borderColor: Colors.success, backgroundColor: Colors.successBg },
+  stopChipInvalid: { borderColor: Colors.warning, backgroundColor: Colors.warningBg },
+  stopDeviationText: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.warning, marginTop: 1 },
   stopEntryRow: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     marginTop: Spacing.sm, height: 44,
@@ -575,6 +764,19 @@ const styles = StyleSheet.create({
   stopConfirmText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' },
   addStopBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.sm },
   addStopText: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.primary },
+  selectedRouteChip: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    marginTop: Spacing.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+    backgroundColor: Colors.primaryBg, borderRadius: Radius.sm,
+    borderWidth: 1, borderColor: Colors.primary,
+  },
+  selectedRouteText: { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textPrimary },
+  selectedRouteMeta: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary, marginTop: 1 },
+  changeRouteLink: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary },
+  chooseRouteBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.md,
+  },
+  chooseRouteText: { fontSize: Typography.base, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.primary },
   twoCol: { flexDirection: 'row', gap: Spacing.md },
   col: { flex: 1 },
   fieldLabel: {

@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { getRideDetails } from '../../services/rideService';
-import { bookRide, requestAdditionalStop } from '../../services/bookingService';
+import { bookRide, requestAdditionalStop, validateStopOnRoute } from '../../services/bookingService';
+import { autocompleteLocation } from '../../utils/mapsService';
 
 const LUGGAGE = ['No luggage','1 small bag','1 suitcase','2+ bags'];
 function Card({children,style}){return <View style={[st.card,style]}>{children}</View>;}
@@ -17,19 +18,63 @@ export default function BookRideScreen({ navigation, route }) {
   const [loading,setLoading]=useState(true);
   const [booking,setBooking]=useState(false);
   const [seats,setSeats]=useState(1);
-  const [selectedStop,setSelectedStop]=useState('');
   const [luggage,setLuggage]=useState('1 suitcase');
   const [suggestedStop,setSuggestedStop]=useState('');
   const suggestedStopRef = useRef('');
+  const [stopQuery, setStopQuery] = useState('');
+  const [stopSuggestions, setStopSuggestions] = useState([]);
+  const [validatingStop, setValidatingStop] = useState(false);
+  const [stopValid, setStopValid] = useState(null); // null | true | false
+  const sessionTokenRef = useRef(`${Date.now()}`);
+  const debounceRef = useRef(null);
 
   useEffect(()=>{
     if(!rideId) return;
     getRideDetails(rideId).then(r=>{
       const rd=r.data?.ride;
       setRide(rd);
-      if(rd?.stops?.length) setSelectedStop(rd.stops[0]);
     }).catch(()=>{}).finally(()=>setLoading(false));
   },[rideId]);
+
+  // ── Stop autocomplete with debounce ──
+  const handleStopQueryChange = useCallback((text) => {
+    setStopQuery(text);
+    setSuggestedStop('');
+    suggestedStopRef.current = '';
+    setStopValid(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!text || text.length < 2) { setStopSuggestions([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await autocompleteLocation(text, sessionTokenRef.current);
+        setStopSuggestions(results || []);
+      } catch { setStopSuggestions([]); }
+    }, 400);
+  }, []);
+
+  // ── When user picks a suggestion, validate it against the ride route ──
+  const handlePickSuggestion = useCallback(async (suggestion) => {
+    const label = suggestion.description || suggestion.mainText;
+    setStopQuery(label);
+    setStopSuggestions([]);
+    setValidatingStop(true);
+    setStopValid(null);
+    try {
+      const res = await validateStopOnRoute(rideId, label);
+      const data = res.data || res;
+      if (data.onRoute) {
+        setSuggestedStop(label);
+        suggestedStopRef.current = label;
+        setStopValid(true);
+      } else {
+        setStopValid(false);
+        setSuggestedStop('');
+        suggestedStopRef.current = '';
+      }
+    } catch {
+      setStopValid(false);
+    } finally { setValidatingStop(false); }
+  }, [rideId]);
 
   if(loading) return <SafeAreaView style={st.safe} edges={['top']}><ActivityIndicator color={Colors.primary} style={{flex:1}}/></SafeAreaView>;
   if(!ride) return <SafeAreaView style={st.safe} edges={['top']}><Text style={{textAlign:'center',marginTop:40,color:Colors.textSecondary}}>Ride not found</Text></SafeAreaView>;
@@ -37,7 +82,6 @@ export default function BookRideScreen({ navigation, route }) {
   const driver = ride.driverId||{};
   const vehicle = ride.vehicleId||{};
   const total = seats * ride.pricePerSeat;
-  const allStops = ride.stops || [];
 
   // ── Compatibility warnings ──
   const warnings = [];
@@ -72,7 +116,7 @@ export default function BookRideScreen({ navigation, route }) {
       const stopValue = suggestedStop || suggestedStopRef.current;
       const res = await bookRide(rideId, {
         seatsCount: seats,
-        pickupLocation: stopValue || selectedStop || ride.departureLocation,
+        pickupLocation: ride.departureLocation,
         luggageDeclaration: luggage,
       });
       
@@ -95,7 +139,7 @@ export default function BookRideScreen({ navigation, route }) {
       
       navigation.navigate('BookingConfirmation', {
         bookingId,
-        seats, stop: stopValue||selectedStop, luggage, total,
+        seats, stop: stopValue||'', luggage, total,
         ride: { departure: ride.departureLocation, destination: ride.destination, departureTime: ride.departureDateTime, driver: `${driver.firstName} ${driver.lastName}`, vehicle: `${vehicle.brand} ${vehicle.model}` },
       });
     } catch (err) {
@@ -147,24 +191,45 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
 
           <Card>
-            <View style={st.rowBetween}><Text style={st.cardLabel}>Your Stop</Text>{allStops.length > 0 && <Text style={st.subLabel}>{allStops.length} stops</Text>}</View>
-            {allStops.length > 0 && (
-              <>
-                <Text style={st.stopsHint}>Select where you want to board</Text>
-                <View style={st.pillRow}>
-                  {allStops.map(stop=>(<TouchableOpacity key={stop} style={[st.pill,selectedStop===stop&&st.pillActive]} onPress={()=>setSelectedStop(stop)}><Text style={[st.pillText,selectedStop===stop&&st.pillTextActive]}>{stop}</Text></TouchableOpacity>))}
+            <View style={st.rowBetween}><Text style={st.cardLabel}>Suggest a Stop</Text></View>
+            <Text style={st.stopsHint}>
+              Suggest a stop along the route — this is not your pickup or dropoff point, just a waypoint you'd like the driver to pass through. Only locations on the ride's route will be accepted.
+            </Text>
+            <View style={{position:'relative',zIndex:10}}>
+              <TextInput 
+                style={[st.stopInput, stopValid === true && st.stopInputValid, stopValid === false && st.stopInputInvalid]} 
+                placeholder="Search for a city or place along the route" 
+                value={stopQuery} 
+                onChangeText={handleStopQueryChange}
+                placeholderTextColor={Colors.textDisabled}
+              />
+              {validatingStop && <ActivityIndicator size="small" color={Colors.primary} style={{position:'absolute',right:12,top:12}}/>}
+              {stopSuggestions.length > 0 && (
+                <View style={st.suggestionsBox}>
+                  {stopSuggestions.map((s, i) => (
+                    <TouchableOpacity key={s.placeId || i} style={st.suggestionItem} onPress={() => handlePickSuggestion(s)}>
+                      <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+                      <View style={{flex:1,marginLeft:8}}>
+                        <Text style={st.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
+                        <Text style={st.suggestionSecondary} numberOfLines={1}>{s.secondaryText}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Text style={[st.stopsHint,{marginTop:12}]}>Or suggest a new stop</Text>
-              </>
+              )}
+            </View>
+            {stopValid === true && (
+              <View style={st.stopFeedback}>
+                <Ionicons name="checkmark-circle" size={14} color="#4CAF50"/>
+                <Text style={[st.stopFeedbackText, {color:'#4CAF50'}]}>This stop is on the route</Text>
+              </View>
             )}
-            {allStops.length === 0 && <Text style={st.stopsHint}>Suggest a stop where you want to board</Text>}
-            <TextInput 
-              style={st.stopInput} 
-              placeholder="e.g. Ifrane Hay Riad" 
-              value={suggestedStop} 
-              onChangeText={(text) => { setSuggestedStop(text); suggestedStopRef.current = text; }}
-              placeholderTextColor={Colors.textDisabled}
-            />
+            {stopValid === false && (
+              <View style={st.stopFeedback}>
+                <Ionicons name="close-circle" size={14} color="#E53935"/>
+                <Text style={[st.stopFeedbackText, {color:'#E53935'}]}>This stop is not on the route — please choose another</Text>
+              </View>
+            )}
           </Card>
 
           <Card>
@@ -203,6 +268,14 @@ const st = StyleSheet.create({
   stepperRow:{flexDirection:'row',alignItems:'center',gap:16},stepBtn:{width:36,height:36,borderRadius:18,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},stepBtnDisabled:{borderColor:Colors.divider},stepperVal:{fontSize:22,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary,minWidth:28,textAlign:'center'},
   stopsHint:{fontSize:11,color:Colors.textSecondary,marginBottom:8},pillRow:{flexDirection:'row',flexWrap:'wrap',gap:8},pill:{paddingHorizontal:14,paddingVertical:8,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.background},pillActive:{backgroundColor:Colors.primaryBg,borderColor:Colors.primary},pillText:{fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},pillTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
   stopInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary,marginTop:4},
+  stopInputValid:{borderColor:'#4CAF50',borderWidth:1.5},
+  stopInputInvalid:{borderColor:'#E53935',borderWidth:1.5},
+  suggestionsBox:{position:'absolute',top:48,left:0,right:0,backgroundColor:Colors.surface,borderRadius:8,borderWidth:1,borderColor:Colors.border,...Shadows.card,zIndex:20,maxHeight:200},
+  suggestionItem:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:10,borderBottomWidth:1,borderBottomColor:Colors.border},
+  suggestionMain:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
+  suggestionSecondary:{fontSize:11,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,marginTop:1},
+  stopFeedback:{flexDirection:'row',alignItems:'center',gap:6,marginTop:8},
+  stopFeedbackText:{fontSize:12,fontFamily:'PlusJakartaSans_500Medium'},
   totalRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},totalLabel:{fontSize:14,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},totalVal:{fontSize:16,fontFamily:'PlusJakartaSans_700Bold',color:Colors.primary},
   warningsCard:{backgroundColor:'#FFF8E1',borderRadius:Radius.md,padding:Spacing.lg,marginBottom:Spacing.md,borderWidth:1,borderColor:'#FFE082'},
   warningsTitle:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#F57F17'},

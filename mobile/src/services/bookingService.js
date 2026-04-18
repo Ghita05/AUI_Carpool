@@ -1,8 +1,12 @@
 import api from './api';
 
-export const bookRide = async (rideId, { seatsCount, pickupLocation, luggageDeclaration }) => {
+export const bookRide = async (rideId, {
+  pickupLocation,
+  luggageDeclaration,
+}) => {
   const { data } = await api.post(`/rides/${rideId}/bookings`, {
-    seatsCount, pickupLocation, luggageDeclaration,
+    pickupLocation,
+    luggageDeclaration,
   });
   return data;
 };
@@ -46,5 +50,12 @@ export const respondToStopRequest = async (bookingId, approved) => {
 
 export const getStopRequests = async (rideId) => {
   const { data } = await api.get(`/rides/${rideId}/stops`);
+  return data;
+};
+
+export const validateStopOnRoute = async (rideId, stopLocation) => {
+  const { data } = await api.get(`/rides/${rideId}/validate-stop`, {
+    params: { stopLocation },
+  });
   return data;
 };

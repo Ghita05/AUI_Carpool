@@ -12,6 +12,7 @@ import { getCurrentBookings, getBookingHistory } from '../../services/bookingSer
 import CancelBookingModal from '../../components/CancelBookingModal';
 import { getMyRideRequests, modifyRideRequest, deleteRideRequest, leaveGroupRideRequest, transferGroupOwner, getUsersByIds, cancelGroupRideRequest } from '../../services/rideService';
 import EditRideRequestModal from '../../components/EditRideRequestModal';
+import PostRideReviewModal from '../../components/PostRideReviewModal';
 
 // Data fetched from API — see useEffect below
 
@@ -19,23 +20,17 @@ const STATUS_STYLES = {
   confirmed:   { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
   upcoming:    { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Upcoming' },
   open:        { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Pending' },
-  accepted:    { bg: Colors.background,  text: Colors.textSecondary,  label: 'Accepted' },
+  active:      { bg: Colors.primaryBg,   text: Colors.primary,        label: 'Active' },
+  full:        { bg: '#FFF7ED',          text: '#EA580C',             label: 'Full' },
+  ongoing:     { bg: '#ECFDF5',          text: '#059669',             label: 'On Going' },
+  accepted:    { bg: '#EFF6FF',          text: '#2563EB',             label: 'Accepted' },
   completed:   { bg: Colors.background,  text: Colors.textSecondary,  label: 'Completed' },
   cancelled:   { bg: '#FEF2F2',          text: Colors.error,          label: 'Cancelled' },
   expired:     { bg: '#FEF2F2',          text: Colors.error,          label: 'Expired' },
 };
 
 function StatusBadge({ status }) {
-  let normalized = status?.toLowerCase();
-  // Map backend statuses to display
-  if (normalized === 'confirmed') normalized = 'confirmed';
-  else if (normalized === 'open') normalized = 'open';
-  else if (normalized === 'accepted') normalized = 'accepted';
-  else if (normalized === 'completed') normalized = 'completed';
-  else if (normalized === 'cancelled') normalized = 'cancelled';
-  else if (normalized === 'expired') normalized = 'expired';
-  else if (normalized === 'upcoming') normalized = 'upcoming';
-  else normalized = 'completed';
+  const normalized = status?.toLowerCase() || 'completed';
   const s = STATUS_STYLES[normalized] || STATUS_STYLES.completed;
   return (
     <View style={[styles.badge, { backgroundColor: s.bg }]}> 
@@ -44,8 +39,9 @@ function StatusBadge({ status }) {
   );
 }
 
-function PassengerRideCard({ ride, navigation, onCancel }) {
-  const isPast = ride.status !== 'Confirmed';
+function PassengerRideCard({ ride, navigation, onCancel, onRate }) {
+  const normalized = ride.status?.toLowerCase();
+  const isActive = normalized === 'confirmed';
   return (
     <View style={styles.rideCard}>
       <View style={styles.cardTopRow}>
@@ -79,15 +75,19 @@ function PassengerRideCard({ ride, navigation, onCancel }) {
       </View>
 
       <View style={styles.cardBottom}>
-        <View style={styles.driverChip}>
+        <TouchableOpacity
+          style={styles.driverChip}
+          onPress={() => ride.driverId && navigation.navigate('UserProfile', { userId: ride.driverId })}
+          activeOpacity={ride.driverId ? 0.7 : 1}
+        >
           <View style={styles.driverAvatar}>
             <Text style={styles.driverAvatarText}>{ride.driverInitials}</Text>
           </View>
           <Text style={styles.driverName}>{ride.driver}</Text>
           <Ionicons name="star" size={11} color={Colors.accent} style={{ marginLeft: 4 }} />
           <Text style={styles.driverRating}>{ride.driverRating}</Text>
-        </View>
-        {!isPast ? (
+        </TouchableOpacity>
+        {isActive ? (
           <View style={styles.actionBtnGroup}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}>
               <Ionicons name="information-circle-outline" size={12} color={Colors.primary} />
@@ -101,22 +101,28 @@ function PassengerRideCard({ ride, navigation, onCancel }) {
               <Text style={[styles.actionBtnText, {color: Colors.error}]}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        ) : ride.status === 'completed' && !ride.rated ? (
+        ) : normalized === 'completed' && !ride.rated ? (
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnAccent]}
-            onPress={() => navigation.navigate('RideDetails', { rideId: ride.rideId || ride.id })}
+            onPress={() => onRate && onRate(ride)}
           >
             <Ionicons name="star-outline" size={12} color={Colors.accent} />
-            <Text style={[styles.actionBtnText, { color: Colors.accent }]}>Rate Ride</Text>
+            <Text style={[styles.actionBtnText, { color: Colors.accent }]}>Rate & Review</Text>
           </TouchableOpacity>
+        ) : normalized === 'completed' && ride.rated ? (
+          <View style={[styles.actionBtn, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+            <Ionicons name="checkmark-circle-outline" size={12} color={Colors.textSecondary} />
+            <Text style={[styles.actionBtnText, { color: Colors.textSecondary }]}>Rated</Text>
+          </View>
         ) : null}
       </View>
     </View>
   );
 }
 
-function DriverRideCard({ ride, navigation }) {
-  const isPast = ride.status !== 'upcoming';
+function DriverRideCard({ ride, navigation, onRate }) {
+  const normalized = ride.status?.toLowerCase();
+  const isActive = ['active', 'full', 'ongoing'].includes(normalized);
   return (
     <View style={styles.rideCard}>
       <View style={styles.cardTopRow}>
@@ -154,7 +160,7 @@ function DriverRideCard({ ride, navigation }) {
           <Ionicons name="people-outline" size={13} color={Colors.textSecondary} />
           <Text style={styles.passengerText}>{ride.passengers}/{ride.totalSeats} passengers · Booked</Text>
         </View>
-        {!isPast ? (
+        {isActive ? (
           <View style={styles.actionBtnGroup}>
             <TouchableOpacity
               style={styles.actionBtn}
@@ -171,6 +177,19 @@ function DriverRideCard({ ride, navigation }) {
               <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        ) : normalized === 'completed' && !ride.rated ? (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnAccent]}
+            onPress={() => onRate && onRate(ride)}
+          >
+            <Ionicons name="star-outline" size={12} color={Colors.accent} />
+            <Text style={[styles.actionBtnText, { color: Colors.accent }]}>Rate & Review</Text>
+          </TouchableOpacity>
+        ) : normalized === 'completed' && ride.rated ? (
+          <View style={[styles.actionBtn, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+            <Ionicons name="checkmark-circle-outline" size={12} color={Colors.textSecondary} />
+            <Text style={[styles.actionBtnText, { color: Colors.textSecondary }]}>Rated</Text>
+          </View>
         ) : null}
       </View>
     </View>
@@ -183,7 +202,7 @@ function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
     (request.passengerId && request.passengerId === currentUser._id) ||
     (request.passenger && request.passenger._id === currentUser._id)
   );
-  const travelDate = new Date(request.travelDateTime);
+  const travelDate = new Date(request.departureDateTime);
   return (
     <View style={styles.rideCard}>
       <View style={styles.cardTopRow}>
@@ -198,7 +217,7 @@ function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
             <Text style={styles.routeCity}>{request.destination}</Text>
           </View>
         </View>
-        <StatusBadge status={request.status} />
+        <StatusBadge status={request.state} />
       </View>
       <View style={styles.metaRow}>
         <View style={styles.metaItem}>
@@ -249,6 +268,57 @@ export default function MyRidesScreen({ navigation }) {
   const [ownerTransferRequest, setOwnerTransferRequest] = useState(null);
   const [ownerCandidates, setOwnerCandidates] = useState([]);
   const [selectedNewOwner, setSelectedNewOwner] = useState(null);
+
+  // Review modal state — opened when user taps "Rate & Review" on a completed ride.
+  const [reviewTarget, setReviewTarget] = useState(null); // { rideId, destination, participants[] }
+
+  const handleRateRide = async (ride) => {
+    // Passenger rating the driver
+    if (ride.driverId && ride.rideId) {
+      setReviewTarget({
+        rideId:      ride.rideId,
+        destination: ride.to || 'destination',
+        participants: [{
+          userId: ride.driverId.toString(),
+          name:   ride.driverName || ride.driver || 'Driver',
+          role:   'Driver',
+        }],
+      });
+      return;
+    }
+    // Driver rating passengers
+    if (ride._ride && ride.rideId) {
+      const confirmedBookings = (ride._ride.bookings || []).filter(b =>
+        ['Confirmed', 'Completed'].includes(b.status)
+      );
+      if (confirmedBookings.length === 0) return;
+      const passengerIds = confirmedBookings.map(b => b.passengerId?._id || b.passengerId);
+      try {
+        const res = await getUsersByIds(passengerIds);
+        const passengers = res.users || [];
+        setReviewTarget({
+          rideId:      ride.rideId,
+          destination: ride.to || 'destination',
+          participants: passengers.map(p => ({
+            userId: p._id,
+            name:   `${p.firstName} ${p.lastName || ''}`.trim(),
+            role:   'Passenger',
+          })),
+        });
+      } catch {
+        // fallback: use IDs without names
+        setReviewTarget({
+          rideId:      ride.rideId,
+          destination: ride.to || 'destination',
+          participants: passengerIds.map(id => ({
+            userId: id.toString(),
+            name:   'Passenger',
+            role:   'Passenger',
+          })),
+        });
+      }
+    }
+  };
   // Edit ride request handler: open modal
   // Only owner can edit
   const handleEditRequest = async (request) => {
@@ -391,13 +461,13 @@ export default function MyRidesScreen({ navigation }) {
         const requests = requestsRes.data?.requests || [];
         // Upcoming requests: status 'Open' and future date
         const upcomingRequests = requests.filter(r => {
-          const travelDate = new Date(r.travelDateTime);
-          return r.status === 'Open' && travelDate >= now;
+          const travelDate = new Date(r.departureDateTime);
+          return r.state === 'Open' && travelDate >= now;
         });
         // Past/expired requests: all others
         const expiredRequests = requests.filter(r => {
-          const travelDate = new Date(r.travelDateTime);
-          return r.status !== 'Open' || travelDate < now;
+          const travelDate = new Date(r.departureDateTime);
+          return r.state !== 'Open' || travelDate < now;
         });
         setPendingRequests(upcomingRequests);
         setPastRequests(expiredRequests);
@@ -421,7 +491,9 @@ export default function MyRidesScreen({ navigation }) {
               cost: b.price,
               driver: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}` : '',
               driverInitials: driver.firstName ? (driver.firstName[0] + (driver.lastName ? driver.lastName[0] : '')).toUpperCase() : '',
-              driverRating: driver.rating || '',
+              driverRating: driver.averageRating || '',
+              driverId: driver._id,           // needed for review modal
+              driverName: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}`.trim() : '',
               rated: b.rated,
               status: b.status,
             };
@@ -434,14 +506,17 @@ export default function MyRidesScreen({ navigation }) {
         const res = await getMyRides(tab === 'upcoming' ? 'upcoming' : 'past');
         setData((res.data?.rides || []).map(r => {
           const v = r.vehicleId || {};
+          const confirmedBookings = (r.bookings || []).filter(b => ['Confirmed', 'Completed'].includes(b.status));
           return {
             id: r._id, from: r.departureLocation, to: r.destination,
             date: new Date(r.departureDateTime).toLocaleDateString(),
             time: new Date(r.departureDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             price: r.pricePerSeat,
-            status: ['Active', 'Full'].includes(r.status) ? 'upcoming' : r.status?.toLowerCase() || 'completed',
+            status: r.state?.toLowerCase() || 'completed',
+            rated: r.rated,
             passengers: r.totalSeats - r.availableSeats, totalSeats: r.totalSeats,
             rideId: r._id,
+            _ride: r,
           };
         }));
         setPendingRequests([]);
@@ -609,7 +684,7 @@ export default function MyRidesScreen({ navigation }) {
                   <View style={{ marginBottom: Spacing.lg }}>
                     <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Upcoming Rides</Text>
                     {data.map(ride => (
-                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
+                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} onRate={handleRateRide} />
                     ))}
                   </View>
                 )}
@@ -641,7 +716,7 @@ export default function MyRidesScreen({ navigation }) {
                   <View style={{ marginBottom: Spacing.lg }}>
                     <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Past Rides</Text>
                     {data.map(ride => (
-                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} />
+                      <PassengerRideCard key={ride.id} ride={ride} navigation={navigation} onCancel={handleCancelPress} onRate={handleRateRide} />
                     ))}
                   </View>
                 )}
@@ -673,7 +748,7 @@ export default function MyRidesScreen({ navigation }) {
                     <Text style={styles.emptyText}>No {tab} rides</Text>
                   </View>
                 ) : data.map(ride => (
-                  <DriverRideCard key={ride.id} ride={ride} navigation={navigation} />
+                  <DriverRideCard key={ride.id} ride={ride} navigation={navigation} onRate={handleRateRide} />
                 ))}
               </>
             )}
@@ -713,6 +788,26 @@ export default function MyRidesScreen({ navigation }) {
           fetchData();
         }}
       />
+
+      {/* Post-ride review modal — opened inline when passenger taps Rate Ride.
+          On completion it marks the local booking as rated so the button
+          disappears without requiring a full data refresh. */}
+      {reviewTarget && (
+        <PostRideReviewModal
+          visible={!!reviewTarget}
+          rideId={reviewTarget.rideId}
+          destination={reviewTarget.destination}
+          participants={reviewTarget.participants}
+          onDone={() => {
+            // Mark the booking as rated in local state so the button converts
+            // to "Rated" immediately without a network round-trip.
+            setData(prev => prev.map(r =>
+              r.rideId === reviewTarget.rideId ? { ...r, rated: true } : r
+            ));
+            setReviewTarget(null);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

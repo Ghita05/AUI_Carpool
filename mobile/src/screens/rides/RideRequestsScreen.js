@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { getRideRequests, acceptRideRequest, dismissRideRequest } from '../../services/rideService';
+import RouteSelectionModal from '../../components/RouteSelectionModal';
 
 export default function RideRequestsScreen({ navigation }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [routePreview, setRoutePreview] = useState(null); // { origin, destination, stops }
 
 
   const fetchRequests = async () => {
@@ -80,11 +82,11 @@ export default function RideRequestsScreen({ navigation }) {
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Ionicons name="calendar-outline" size={12} color={Colors.textSecondary} />
-                    <Text style={styles.metaText}>{new Date(req.travelDateTime).toLocaleDateString()}</Text>
+                    <Text style={styles.metaText}>{new Date(req.departureDateTime).toLocaleDateString()}</Text>
                   </View>
                   <View style={styles.metaItem}>
                     <Ionicons name="time-outline" size={12} color={Colors.textSecondary} />
-                    <Text style={styles.metaText}>{new Date(req.travelDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</Text>
+                    <Text style={styles.metaText}>{new Date(req.departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</Text>
                   </View>
                   <View style={styles.metaItem}>
                     <Ionicons name="people-outline" size={12} color={Colors.textSecondary} />
@@ -100,6 +102,30 @@ export default function RideRequestsScreen({ navigation }) {
                     <Ionicons name="document-text-outline" size={13} color={Colors.textSecondary} />
                     <Text style={styles.notesText}>{req.notes}</Text>
                   </View>
+                ) : null}
+                {/* Stops */}
+                {req.stops && req.stops.length > 0 && (
+                  <View style={styles.stopsRow}>
+                    <Ionicons name="location-outline" size={13} color={Colors.textSecondary} />
+                    <Text style={styles.metaText}>Stops: {req.stops.join(', ')}</Text>
+                  </View>
+                )}
+                {/* Route info */}
+                {req.route && req.route.polyline ? (
+                  <TouchableOpacity
+                    style={styles.routePreviewBtn}
+                    onPress={() => setRoutePreview({
+                      origin: req.departureLocation,
+                      destination: req.destination,
+                      stops: req.stops || [],
+                    })}
+                  >
+                    <Ionicons name="navigate-outline" size={14} color={Colors.primary} />
+                    <Text style={styles.routePreviewText}>
+                      {req.route.summary || 'Route'} · {req.route.distanceKM} km · {req.route.durationMinutes} min
+                    </Text>
+                    <Text style={styles.routeViewLink}>View</Text>
+                  </TouchableOpacity>
                 ) : null}
                 <View style={styles.actionBtnGroup}>
                   <TouchableOpacity
@@ -121,6 +147,18 @@ export default function RideRequestsScreen({ navigation }) {
             ))
           )}
         </ScrollView>
+      )}
+
+      {/* Route preview modal */}
+      {routePreview && (
+        <RouteSelectionModal
+          visible={!!routePreview}
+          origin={routePreview.origin}
+          destination={routePreview.destination}
+          stops={routePreview.stops}
+          onSelect={() => setRoutePreview(null)}
+          onClose={() => setRoutePreview(null)}
+        />
       )}
     </SafeAreaView>
   );
@@ -160,6 +198,13 @@ const styles = StyleSheet.create({
   metaText: { fontSize: Typography.sm, color: Colors.textSecondary, marginLeft: 4 },
   notesRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   notesText: { fontSize: Typography.sm, color: Colors.textSecondary, marginLeft: 4 },
+  stopsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  routePreviewBtn: {
+    flexDirection: 'row', alignItems: 'center', padding: 8,
+    backgroundColor: Colors.primaryBg, borderRadius: Radius.sm, marginBottom: 8, gap: 6,
+  },
+  routePreviewText: { fontSize: Typography.sm, color: Colors.textPrimary, flex: 1 },
+  routeViewLink: { fontSize: Typography.sm, color: Colors.primary, fontFamily: 'PlusJakartaSans_700Bold' },
   actionBtnGroup: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.sm, paddingVertical: 7, paddingHorizontal: 16 },
   actionBtnAccent: { backgroundColor: Colors.primary },

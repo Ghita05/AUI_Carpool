@@ -34,6 +34,20 @@ export const searchUsers = async (query) => {
 import api from './api';
 
 // ═══════════════════════════════════════════
+// ROUTE ALTERNATIVES
+// ═══════════════════════════════════════════
+
+export const getRouteAlternatives = async (origin, destination, stops = []) => {
+  const { data } = await api.post('/routes/alternatives', { origin, destination, stops });
+  return data;
+};
+
+export const validateStopOnRoute = async (origin, destination, stopLocation) => {
+  const { data } = await api.post('/routes/validate-stop', { origin, destination, stopLocation });
+  return data;
+};
+
+// ═══════════════════════════════════════════
 // RIDE OFFERS
 // ═══════════════════════════════════════════
 

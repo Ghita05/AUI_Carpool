@@ -15,8 +15,9 @@ export const deleteReview = async (reviewId) => {
   return data;
 };
 
-export const getUserReviews = async (userId, sortBy = 'date', order = 'desc') => {
-  const { data } = await api.get(`/reviews/user/${userId}`, { params: { sortBy, order } });
+// type: 'received' (default) or 'given'
+export const getUserReviews = async (userId, sortBy = 'date', order = 'desc', type = 'received') => {
+  const { data } = await api.get(`/reviews/user/${userId}`, { params: { sortBy, order, type } });
   return data;
 };
 
@@ -27,5 +28,17 @@ export const getUserRatings = async (userId) => {
 
 export const getReviewSummary = async (userId) => {
   const { data } = await api.get(`/reviews/user/${userId}/summary`);
+  return data;
+};
+
+// Community leaderboard — top-rated drivers with AI summaries
+export const getCommunityDrivers = async (limit = 20) => {
+  const { data } = await api.get('/reviews/community', { params: { limit } });
+  return data;
+};
+
+// Driver route analytics — for the driver's own profile
+export const getDriverAnalytics = async (userId) => {
+  const { data } = await api.get(`/reviews/driver/${userId}/analytics`);
   return data;
 };

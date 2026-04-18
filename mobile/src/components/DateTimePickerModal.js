@@ -213,15 +213,11 @@ function TimePicker({ time, onTimeChange }) {
 }
 
 // Main modal component
-export default function DateTimePickerModal({ visible, date, time, onClose, onConfirm }) {
+export default function DateTimePickerModal({ visible, date, onClose, onConfirm }) {
   const [selectedDate, setSelectedDate] = useState(date ? new Date(date) : new Date());
-  const [selectedTime, setSelectedTime] = useState(time || '14:00');
 
   const handleConfirm = () => {
-    const [hh, mm] = selectedTime.split(':').map(Number);
-    const finalDate = new Date(selectedDate);
-    finalDate.setHours(hh, mm, 0, 0);
-    onConfirm(finalDate.toISOString(), selectedTime);
+    onConfirm(selectedDate.toISOString());
     onClose();
   };
 
@@ -230,7 +226,7 @@ export default function DateTimePickerModal({ visible, date, time, onClose, onCo
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Date & Time</Text>
+            <Text style={styles.modalTitle}>Select Date</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.textSecondary} />
             </TouchableOpacity>
@@ -238,7 +234,6 @@ export default function DateTimePickerModal({ visible, date, time, onClose, onCo
 
           <View style={styles.scrollContent}>
             <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
-            <TimePicker time={selectedTime} onTimeChange={setSelectedTime} />
           </View>
 
           <View style={styles.modalFooter}>

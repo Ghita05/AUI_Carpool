@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Input from './common/Input';
 import { Colors, Spacing, Radius, Typography } from '../theme';
 import DateTimePickerModal from './DateTimePickerModal';
-import { searchUsers } from '../services/rideService';
+import RouteSelectionModal from './RouteSelectionModal';
+import { searchUsers, validateStopOnRoute, getRouteAlternatives } from '../services/rideService';
+import { autocompleteLocation } from '../utils/mapsService';
 
 export default function EditRideRequestModal({ visible, onClose, onSave, request, currentUser, onCancelRequest }) {
   const [maxPrice, setMaxPrice] = useState(request?.maxPrice?.toString() || '');
   const [notes, setNotes] = useState(request?.notes || '');
   const [loading, setLoading] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
-  const [travelDateTime, setTravelDateTime] = useState(request?.travelDateTime ? new Date(request.travelDateTime) : null);
+  const [travelDateTime, setTravelDateTime] = useState(request?.departureDateTime ? new Date(request.departureDateTime) : null);
   const [dateTimeChanged, setDateTimeChanged] = useState(false);
   const [groupPassengerIds, setGroupPassengerIds] = useState(request?.groupPassengerIds || []);
   // Always include the owner in groupUsers
@@ -29,11 +31,22 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
   const [stops, setStops] = useState(request?.stops || []);
   const [newStop, setNewStop] = useState('');
 
+  // Route state
+  const [selectedRoute, setSelectedRoute] = useState(request?.route || null);
+  const [showRouteModal, setShowRouteModal] = useState(false);
+  const [validatingStop, setValidatingStop] = useState(false);
+  const [stopValidations, setStopValidations] = useState({});
+
+  // Places autocomplete for stops
+  const [stopSuggestions, setStopSuggestions] = useState([]);
+  const sessionToken = useRef(Math.random().toString(36).substring(2));
+  const debounceTimer = useRef(null);
+
   // Reset modal state when request changes
   React.useEffect(() => {
     setMaxPrice(request?.maxPrice?.toString() || '');
     setNotes(request?.notes || '');
-    setTravelDateTime(request?.travelDateTime ? new Date(request.travelDateTime) : null);
+    setTravelDateTime(request?.departureDateTime ? new Date(request.departureDateTime) : null);
     setDateTimeChanged(false);
     setGroupPassengerIds(request?.groupPassengerIds || []);
     setGroupUsers(request?.groupUsers || []);
@@ -41,7 +54,104 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
     setUserSearchResults([]);
     setStops(request?.stops || []);
     setNewStop('');
+    setSelectedRoute(request?.route || null);
+    setStopValidations({});
+    setStopSuggestions([]);
   }, [request]);
+
+  const refetchRoute = async (currentStops) => {
+    const dep = request?.departureLocation?.trim();
+    const dest = request?.destination?.trim();
+    if (!dep || !dest) return;
+    try {
+      const res = await getRouteAlternatives(dep, dest, currentStops);
+      const fetched = res.data?.routes || res.routes || [];
+      if (fetched.length > 0) {
+        setSelectedRoute(fetched[0]);
+      } else {
+        setSelectedRoute(null);
+      }
+    } catch {
+      setSelectedRoute(null);
+    }
+  };
+
+  const handleStopInputChange = useCallback((text) => {
+    setNewStop(text);
+    clearTimeout(debounceTimer.current);
+    if (text.trim().length < 2) {
+      setStopSuggestions([]);
+      return;
+    }
+    debounceTimer.current = setTimeout(async () => {
+      const results = await autocompleteLocation(text, sessionToken.current);
+      setStopSuggestions(results);
+    }, 300);
+  }, []);
+
+  const addAndValidateStop = async (stopName) => {
+    const updatedStops = [...stops, stopName];
+    setStops(updatedStops);
+    setSelectedRoute(null);
+
+    const dep = request?.departureLocation?.trim();
+    const dest = request?.destination?.trim();
+    if (!dep || !dest) return;
+
+    setValidatingStop(true);
+    try {
+      const res = await validateStopOnRoute(dep, dest, stopName);
+      const validation = res.data || res;
+      setStopValidations(prev => ({ ...prev, [stopName]: validation }));
+
+      if (validation.onRoute) {
+        await refetchRoute(updatedStops);
+        Alert.alert('Route updated', `Route adjusted to include "${stopName}".`);
+      } else {
+        Alert.alert(
+          'Stop off route',
+          `"${stopName}" adds ${validation.deviationKM} km detour. The route will be adjusted, but the ride will be longer.`,
+          [
+            { text: 'Keep & update route', onPress: async () => {
+              await refetchRoute(updatedStops);
+            }},
+            { text: 'Remove', style: 'destructive', onPress: () => {
+              setStops(prev => prev.filter(s => s !== stopName));
+              setStopValidations(prev => { const copy = {...prev}; delete copy[stopName]; return copy; });
+              refetchRoute(updatedStops.filter(s => s !== stopName));
+            }},
+          ]
+        );
+      }
+    } catch (e) {
+      console.warn('Stop validation failed:', e.message);
+      await refetchRoute(updatedStops);
+    } finally {
+      setValidatingStop(false);
+    }
+  };
+
+  const handleStopSelect = (suggestion) => {
+    const value = suggestion.mainText;
+    const trimmed = value.trim();
+    if (trimmed && !stops.includes(trimmed)) {
+      setNewStop('');
+      setStopSuggestions([]);
+      addAndValidateStop(trimmed);
+    } else {
+      setNewStop('');
+      setStopSuggestions([]);
+    }
+    sessionToken.current = Math.random().toString(36).substring(2);
+  };
+
+  const handleRemoveStop = (index) => {
+    const removed = stops[index];
+    const updatedStops = stops.filter((_, i) => i !== index);
+    setStops(updatedStops);
+    setStopValidations(prev => { const copy = {...prev}; delete copy[removed]; return copy; });
+    refetchRoute(updatedStops);
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -50,6 +160,10 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
       notes,
       stops,
     };
+    // Include route if updated
+    if (selectedRoute) {
+      payload.selectedRoute = selectedRoute;
+    }
     // Only send travelDateTime if the user explicitly changed it
     if (dateTimeChanged && travelDateTime) {
       payload.travelDateTime = travelDateTime.toISOString();
@@ -161,35 +275,84 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             <Text style={{ color: Colors.textSecondary, fontSize: 13, marginBottom: 8 }}>To add group members, this must be a group request (more than 1 member).</Text>
           )}
 
-          {/* Stops Section */}
+          {/* Stops Section with Google Places Autocomplete */}
           <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.md, marginBottom: 6, color: Colors.textPrimary }}>Stops (Optional)</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: stops.length ? 8 : 0 }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: stopSuggestions.length ? 0 : (stops.length ? 8 : 0) }}>
             <TextInput
               style={{ flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, padding: 8, fontSize: 15, color: Colors.textPrimary }}
               value={newStop}
-              onChangeText={setNewStop}
-              placeholder="Add a stop along the way"
+              onChangeText={handleStopInputChange}
+              placeholder="Search for a stop along the way"
               placeholderTextColor={Colors.textDisabled}
             />
-            <TouchableOpacity
-              style={{ height: 42, width: 42, backgroundColor: Colors.primary, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => { const s = newStop.trim(); if (s && !stops.includes(s)) { setStops([...stops, s]); setNewStop(''); } }}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
+            {validatingStop && <ActivityIndicator size="small" color={Colors.primary} style={{ marginLeft: 4 }} />}
           </View>
-          {stops.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-              {stops.map((s, i) => (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
-                  <Text style={{ color: Colors.primary, fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s}</Text>
-                  <TouchableOpacity onPress={() => setStops(stops.filter((_, j) => j !== i))} style={{ marginLeft: 6 }}>
-                    <Ionicons name="close-circle" size={14} color={Colors.error} />
+          {stopSuggestions.length > 0 && (
+            <View style={{ backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, marginBottom: 8, maxHeight: 150 }}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {stopSuggestions.map((s, i) => (
+                  <TouchableOpacity
+                    key={s.placeId || i}
+                    style={{ padding: 10, borderBottomWidth: i < stopSuggestions.length - 1 ? 1 : 0, borderBottomColor: Colors.border }}
+                    onPress={() => handleStopSelect(s)}
+                  >
+                    <Text style={{ fontSize: 14, color: Colors.textPrimary, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s.mainText}</Text>
+                    <Text style={{ fontSize: 12, color: Colors.textSecondary }}>{s.secondaryText}</Text>
                   </TouchableOpacity>
-                </View>
-              ))}
+                ))}
+              </ScrollView>
             </View>
           )}
+          {stops.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {stops.map((s, i) => {
+                const v = stopValidations[s];
+                return (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
+                    {v && (
+                      <Ionicons
+                        name={v.onRoute ? 'checkmark-circle' : 'warning'}
+                        size={13}
+                        color={v.onRoute ? '#059669' : '#EA580C'}
+                        style={{ marginRight: 4 }}
+                      />
+                    )}
+                    <Text style={{ color: Colors.primary, fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s}</Text>
+                    <TouchableOpacity onPress={() => handleRemoveStop(i)} style={{ marginLeft: 6 }}>
+                      <Ionicons name="close-circle" size={14} color={Colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Route Preview */}
+          {selectedRoute ? (
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: Colors.primaryBg, borderRadius: Radius.md, marginBottom: Spacing.md, gap: 8 }}
+              onPress={() => setShowRouteModal(true)}
+            >
+              <Ionicons name="navigate-outline" size={16} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary }}>
+                  {selectedRoute.summary || 'Selected Route'}
+                </Text>
+                <Text style={{ fontSize: 12, color: Colors.textSecondary }}>
+                  {selectedRoute.distanceKM} km · {selectedRoute.durationMinutes} min
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: Colors.primary, fontFamily: 'PlusJakartaSans_600SemiBold' }}>View on map</Text>
+            </TouchableOpacity>
+          ) : request?.departureLocation && request?.destination ? (
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, marginBottom: Spacing.md, gap: 8 }}
+              onPress={() => setShowRouteModal(true)}
+            >
+              <Ionicons name="map-outline" size={16} color={Colors.primary} />
+              <Text style={{ fontSize: 13, color: Colors.primary, fontFamily: 'PlusJakartaSans_600SemiBold' }}>Choose route on map</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <Input
             label="Max Price (MAD)"
@@ -212,7 +375,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
               ((request?.passengerId && request.passengerId === currentUser._id) ||
                (request?.passenger && request.passenger._id === currentUser._id)) && (
                 <TouchableOpacity
-                  style={[styles.saveBtn, { flex: 1, backgroundColor: Colors.error, opacity: loading ? 0.7 : 1 }]} 
+                  style={[styles.actionBtn, styles.cancelActionBtn, { opacity: loading ? 0.7 : 1 }]}
                   onPress={async () => {
                     setLoading(true);
                     try {
@@ -225,16 +388,31 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
                   }}
                   disabled={loading}
                 >
-                  <Text style={styles.saveText}>{loading ? 'Cancelling...' : 'Cancel Request'}</Text>
+                  <Ionicons name="close-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnText}>{loading ? 'Cancelling...' : 'Cancel Request'}</Text>
                 </TouchableOpacity>
               )
             )}
-            <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSave} disabled={loading}>
-              <Text style={styles.saveText}>{loading ? 'Saving...' : 'Save Changes'}</Text>
+            <TouchableOpacity style={[styles.actionBtn, styles.saveActionBtn]} onPress={handleSave} disabled={loading}>
+              <Ionicons name="checkmark-circle-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.actionBtnText}>{loading ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
+
+      {/* Route Selection Modal */}
+      <RouteSelectionModal
+        visible={showRouteModal}
+        origin={request?.departureLocation || ''}
+        destination={request?.destination || ''}
+        stops={stops}
+        onSelect={(route) => {
+          setSelectedRoute(route);
+          setShowRouteModal(false);
+        }}
+        onClose={() => setShowRouteModal(false)}
+      />
     </Modal>
   );
 }
@@ -270,14 +448,22 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: Typography.md,
   },
-  saveBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: Radius.sm,
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+  },
+  cancelActionBtn: {
+    backgroundColor: Colors.error,
+  },
+  saveActionBtn: {
     backgroundColor: Colors.primary,
   },
-  saveText: {
-    color: Colors.textWhite,
+  actionBtnText: {
+    color: '#fff',
     fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: Typography.md,
   },

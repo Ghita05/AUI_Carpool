@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 // Using the machine's network IP so the app works on physical devices,
 // simulators, and Expo Go. Port 5001 = HTTP fallback (Expo Go can't trust self-signed certs).
 // Change to https:// on port 5000 for production builds with real certs.
-const BASE_URL = 'http://10.121.24.103:5001';
+const BASE_URL = 'https://auicarpool-production-46f2.up.railway.app';
 
 const api = axios.create({
   baseURL: `${BASE_URL}/api`,
