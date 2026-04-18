@@ -84,6 +84,7 @@ app.use(
   cors({
     origin: [
       process.env.CLIENT_WEB_URL || 'http://localhost:3000',
+      'https://aui-carpool-web.vercel.app',
       'http://localhost:19006',
     ],
     credentials: true,
