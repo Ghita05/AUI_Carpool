@@ -193,7 +193,7 @@ const markAttendance = async (req, res, next) => {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
     if (!ride) return error(res, 404, 'Ride not found.');
     if (ride.driverId.toString() !== req.user._id.toString()) return error(res, 403, 'Only the driver can mark attendance.');
-    if (!['Active', 'Full'].includes(ride.state)) return error(res, 400, 'Attendance can only be marked for active rides.');
+    if (!['Active', 'Full', 'OnGoing'].includes(ride.state)) return error(res, 400, 'Attendance can only be marked for active or ongoing rides.');
 
     const now = new Date();
     const depTime = new Date(ride.departureDateTime);

@@ -63,13 +63,15 @@ const rideSchema = new Schema({
   },
 
   // ── Live-ride flags (set by GPS-driven socket logic) ──────────────────
-  // Prevents duplicate late-departure notifications per ride.
-  lateNotificationSent: { type: Boolean, default: false },
+  // Tracks how many departure-window alerts have been sent (allows repeated alerts).
+  departureAlertsSent:  { type: Number, default: 0 },
   // Set when the ride transitions OnGoing → Completed via GPS, prevents
   // duplicate review prompts if the driver also manually completes the ride.
   reviewsPrompted:      { type: Boolean, default: false },
   // Timestamp when the ride transitioned to OnGoing — used to estimate ETA.
   ongoingStartedAt:     { type: Date, default: null },
+  // Set when absent passengers have been auto-cancelled upon ride going OnGoing.
+  absentPassengersCancelled: { type: Boolean, default: false },
 
 
 

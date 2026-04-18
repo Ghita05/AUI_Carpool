@@ -154,12 +154,79 @@ const scheduleOngoingSafetyNet = () => {
 };
 
 /**
+ * Job 4: Late driver auto-cancel (backup)
+ * Runs every 5 minutes.
+ *
+ * If a ride's departure time was > 15 minutes ago and the ride is still
+ * Active/Full (driver never moved away), auto-cancel the entire ride.
+ * This is a safety net for when the driver is offline (no socket connection).
+ * The socket state machine handles the same check in real-time when the
+ * driver is online.
+ */
+const scheduleLateDriverAutoCancel = () => {
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const cutoff = new Date(Date.now() - 15 * 60 * 1000); // 15 min ago
+      const lateRides = await Ride.find({
+        type: 'Offer',
+        state: { $in: ['Active', 'Full'] },
+        departureDateTime: { $lt: cutoff },
+      });
+
+      for (const ride of lateRides) {
+        const reason = 'Auto-cancelled: driver did not depart within 15 minutes of scheduled time';
+        const driver = await User.findById(ride.driverId).select('firstName lastName');
+        const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim();
+        const confirmed = (ride.bookings || []).filter(b => b.status === 'Confirmed');
+
+        await Ride.findByIdAndUpdate(ride._id, {
+          $set: {
+            state: 'Cancelled',
+            cancellationReason: reason,
+            cancellationDate: new Date(),
+            'bookings.$[elem].status': 'Cancelled',
+            'bookings.$[elem].cancellationDate': new Date(),
+            'bookings.$[elem].cancellationReason': reason,
+          },
+        }, { arrayFilters: [{ 'elem.status': 'Confirmed' }] });
+
+        await User.findByIdAndUpdate(ride.driverId, { $inc: { cancellationCount: 1 } });
+
+        // Notify all confirmed passengers
+        for (const bk of confirmed) {
+          await Notification.create({
+            userId: bk.passengerId,
+            title: 'Ride Auto-Cancelled',
+            content: `The ride to ${ride.destination} by ${driverName} was cancelled because the driver did not show up within 15 minutes of the scheduled departure.`,
+            type: 'Cancellation',
+          });
+        }
+
+        // Notify driver
+        await Notification.create({
+          userId: ride.driverId,
+          title: 'Ride Auto-Cancelled',
+          content: `Your ride to ${ride.destination} was automatically cancelled because you did not depart within 15 minutes of the scheduled time.`,
+          type: 'Cancellation',
+        });
+
+        console.log(`[CRON] Late-driver auto-cancelled ride ${ride._id} to ${ride.destination}.`);
+      }
+    } catch (err) {
+      console.error('[CRON] Late driver auto-cancel error:', err.message);
+    }
+  });
+  console.log('[CRON] Late driver auto-cancel scheduled (every 5min).');
+};
+
+/**
  * Initialize all scheduled jobs
  */
 const initScheduledJobs = () => {
   scheduleUnverifiedCleanup();
   scheduleRideReminders();
   scheduleOngoingSafetyNet();
+  scheduleLateDriverAutoCancel();
 };
 
 module.exports = initScheduledJobs;
