@@ -298,8 +298,28 @@ const getCommunity = async (req, res, next) => {
       .sort({ averageRating: -1, totalCompletedRides: -1 })
       .limit(Number(limit));
 
-    // For each driver, attach their top route (most frequent completed offer)
+    // For each driver, compute driver-only rating and attach top route
     const enriched = await Promise.all(drivers.map(async (driver) => {
+      // Driver-only rating: only reviews where this user was the driver of the ride
+      const driverRideIds = await Ride.find(
+        { type: 'Offer', state: 'Completed', driverId: driver._id },
+        { _id: 1 },
+      ).lean();
+      const rideIds = driverRideIds.map(r => r._id);
+
+      let driverRating = 0;
+      let driverReviewCount = 0;
+      if (rideIds.length > 0) {
+        const ratingAgg = await Review.aggregate([
+          { $match: { subjectId: driver._id, rideId: { $in: rideIds } } },
+          { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
+        ]);
+        if (ratingAgg.length > 0) {
+          driverRating = Math.round(ratingAgg[0].avg * 10) / 10;
+          driverReviewCount = ratingAgg[0].count;
+        }
+      }
+
       const topRoutes = await Ride.aggregate([
         {
           $match: {
@@ -321,6 +341,8 @@ const getCommunity = async (req, res, next) => {
 
       return {
         ...driver.toObject(),
+        averageRating: driverRating,
+        driverReviewCount,
         topRoute: topRoutes[0]
           ? {
               from:     topRoutes[0]._id.from,
@@ -331,6 +353,9 @@ const getCommunity = async (req, res, next) => {
           : null,
       };
     }));
+
+    // Re-sort by driver-only rating (the DB sort used the global averageRating)
+    enriched.sort((a, b) => b.averageRating - a.averageRating || b.totalCompletedRides - a.totalCompletedRides);
 
     return success(res, 200, `${enriched.length} driver(s) in community.`, { drivers: enriched });
   } catch (err) { next(err); }

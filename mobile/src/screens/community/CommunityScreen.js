@@ -61,11 +61,6 @@ function DriverCard({ driver, rank, onPress }) {
           <View style={s.avatar}>
             <Text style={s.avatarText}>{initials}</Text>
           </View>
-          {rank === 1 && (
-            <View style={s.crownBadge}>
-              <Text style={{ fontSize: 11 }}>👑</Text>
-            </View>
-          )}
         </View>
 
         <View style={s.info}>
@@ -263,11 +258,6 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: 18, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primary },
-  crownBadge: {
-    position: 'absolute', top: -6, right: -6,
-    backgroundColor: Colors.surface, borderRadius: 10,
-    padding: 2,
-  },
 
   info:      { flex: 1, paddingRight: 40 },
   name:      { fontSize: Typography.md, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary, marginBottom: 3 },
