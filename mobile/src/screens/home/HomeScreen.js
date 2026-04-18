@@ -132,6 +132,7 @@ function FilterModal({ visible, onClose, onApply }) {
   const [driverResults,setDriverResults]=useState([]);
   const [selectedDriver,setSelectedDriver]=useState(null);
   const [driverLoading,setDriverLoading]=useState(false);
+  const [showTimePicker,setShowTimePicker]=useState(false);
   const driverDebounce = useRef(null);
 
   const Pill = ({label,active,onPress}) => <TouchableOpacity style={[st.fpill,active&&st.fpillActive]} onPress={onPress}><Text style={[st.fpillText,active&&st.fpillTextActive]}>{label}</Text></TouchableOpacity>;
@@ -168,7 +169,9 @@ function FilterModal({ visible, onClose, onApply }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={st.modalOverlay}><View style={st.filterModal}>
+      <View style={st.modalOverlay}>
+        <KeyboardAvoidingView style={{width:'100%'}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={st.filterModal}>
         <View style={st.filterHeader}>
           <Text style={st.filterTitle}>Filters</Text>
           <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
@@ -178,15 +181,15 @@ function FilterModal({ visible, onClose, onApply }) {
         </View>
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <Text style={st.filterLabel}>DEPARTURE TIME</Text>
-          <TextInput
-            style={[st.fpill, { minWidth: '100%', paddingHorizontal: 12, fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_500Medium', color: Colors.textPrimary }]}
-            placeholder="HH:MM (e.g. 14:00)"
-            placeholderTextColor={Colors.textSecondary}
-            value={time}
-            onChangeText={(t) => setTime(formatTime(t))}
-            keyboardType="number-pad"
-            maxLength={5}
-          />
+          <TouchableOpacity
+            style={[st.fpill, { minWidth: '100%', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+            onPress={() => setShowTimePicker(true)}
+          >
+            <Text style={{ fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_500Medium', color: time ? Colors.textPrimary : Colors.textSecondary }}>
+              {time || 'Select time'}
+            </Text>
+            <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
+          </TouchableOpacity>
           <Text style={st.filterLabel}>MAX PRICE (MAD)</Text>
           <TextInput
             style={[st.fpill, { minWidth: '100%', paddingHorizontal: 12, fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_500Medium', color: Colors.textPrimary }]}
@@ -237,7 +240,16 @@ function FilterModal({ visible, onClose, onApply }) {
           <View style={st.pillRow}>{['Any','Non-smoking'].map(s=><Pill key={s} label={s} active={smoking===s} onPress={()=>setSmoking(s)}/>)}</View>
         </ScrollView>
         <TouchableOpacity style={st.filterApply} onPress={handleApply}><Text style={st.filterApplyText}>Show Rides</Text></TouchableOpacity>
-      </View></View>
+      </View>
+      </KeyboardAvoidingView>
+      </View>
+      <DateTimePickerModal
+        visible={showTimePicker}
+        time={time || '12:00'}
+        mode="time"
+        onClose={() => setShowTimePicker(false)}
+        onConfirm={(selectedTime) => { setTime(selectedTime); setShowTimePicker(false); }}
+      />
     </Modal>
   );
 }
@@ -1282,6 +1294,7 @@ export default function HomeScreen({ navigation }) {
         visible={showDatePicker}
         date={new Date()}
         mode="date"
+        minDate={new Date()}
         onClose={() => setShowDatePicker(false)}
         onConfirm={(isoString) => handleDateConfirm(isoString)}
       />

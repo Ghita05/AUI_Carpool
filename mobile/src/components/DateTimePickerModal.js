@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 
 // Simple calendar date picker
-function DatePicker({ date, onDateChange }) {
+function DatePicker({ date, onDateChange, minDate }) {
   const [currentDate, setCurrentDate] = useState(new Date(date || Date.now()));
+  const today = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : null;
 
   const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
@@ -24,8 +25,13 @@ function DatePicker({ date, onDateChange }) {
     calendarDays.push(i);
   }
 
+  const isDayDisabled = (day) => {
+    if (!day || !today) return false;
+    return new Date(year, month, day) < today;
+  };
+
   const handleDayPress = (day) => {
-    if (day) {
+    if (day && !isDayDisabled(day)) {
       const newDate = new Date(year, month, day);
       onDateChange(newDate);
       setCurrentDate(newDate);
@@ -68,13 +74,15 @@ function DatePicker({ date, onDateChange }) {
           <TouchableOpacity
             key={index}
             onPress={() => handleDayPress(day)}
+            disabled={isDayDisabled(day)}
             style={[
               styles.dayButton,
               !day && styles.dayEmpty,
               day && isCurrentMonth && day === selectedDay && styles.daySelected,
+              isDayDisabled(day) && styles.dayDisabled,
             ]}
           >
-            {day && <Text style={[styles.dayText, day && isCurrentMonth && day === selectedDay && styles.dayTextSelected]}>{day}</Text>}
+            {day && <Text style={[styles.dayText, day && isCurrentMonth && day === selectedDay && styles.dayTextSelected, isDayDisabled(day) && styles.dayTextDisabled]}>{day}</Text>}
           </TouchableOpacity>
         ))}
       </View>
@@ -213,10 +221,11 @@ function TimePicker({ time, onTimeChange }) {
 }
 
 // Main modal component
-export default function DateTimePickerModal({ visible, date, time, mode = 'datetime', onClose, onConfirm }) {
+export default function DateTimePickerModal({ visible, date, time, mode = 'datetime', minDate, onClose, onConfirm }) {
   const [selectedDate, setSelectedDate] = useState(date ? new Date(date) : new Date());
   const [selectedTime, setSelectedTime] = useState(time || '09:00');
   const showTime = mode !== 'date';
+  const showDate = mode !== 'time';
 
   // Reset state when modal opens with new props
   useEffect(() => {
@@ -227,7 +236,9 @@ export default function DateTimePickerModal({ visible, date, time, mode = 'datet
   }, [visible, date, time]);
 
   const handleConfirm = () => {
-    if (showTime) {
+    if (mode === 'time') {
+      onConfirm(selectedTime);
+    } else if (showTime) {
       const [h, m] = selectedTime.split(':').map(Number);
       const dt = new Date(selectedDate);
       dt.setHours(h, m, 0, 0);
@@ -243,17 +254,17 @@ export default function DateTimePickerModal({ visible, date, time, mode = 'datet
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{showTime ? 'Select Date & Time' : 'Select Date'}</Text>
+            <Text style={styles.modalTitle}>{mode === 'time' ? 'Select Time' : showTime ? 'Select Date & Time' : 'Select Date'}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollContent} bounces={false}>
-            <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
+            {showDate && <DatePicker date={selectedDate} onDateChange={setSelectedDate} minDate={minDate} />}
             {showTime && (
               <>
-                <View style={styles.timeDivider} />
+                {showDate && <View style={styles.timeDivider} />}
                 <TimePicker time={selectedTime} onTimeChange={setSelectedTime} />
               </>
             )}
@@ -396,6 +407,12 @@ const styles = StyleSheet.create({
   },
   dayTextSelected: {
     color: '#fff',
+  },
+  dayDisabled: {
+    opacity: 0.3,
+  },
+  dayTextDisabled: {
+    color: Colors.textDisabled,
   },
 
   // Time picker styles

@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Share, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '../../utils/MapView';
 import * as Location from 'expo-location';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { getRideDetails, cancelRide, modifyRide, markAttendance, getAttendance, completeRide, getPassengerList } from '../../services/rideService';
+import { getRideDetails, cancelRide, modifyRide, markAttendance, getAttendance, completeRide, getPassengerList, getUsersByIds, validateStopOnRoute } from '../../services/rideService';
 import { getUserReviews } from '../../services/reviewService';
 import { getCurrentBookings } from '../../services/bookingService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
 import StopRequestsModal from '../../components/StopRequestsModal';
+import PostRideReviewModal from '../../components/PostRideReviewModal';
 // Decode Google's encoded polyline format into [{latitude, longitude}] array
 // for the Polyline component. Inline implementation avoids adding a dependency.
 function decodePolyline(encoded) {
@@ -163,6 +164,7 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
   const [departureDateTime, setDepartureDateTime] = useState(null);
   const [rideStops, setRideStops] = useState([]);
   const [newStop, setNewStop] = useState('');
+  const [validatingStop, setValidatingStop] = useState(false);
 
   useEffect(() => {
     if (visible && ride) {
@@ -211,8 +213,9 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
   if (!ride) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={st.modalOv} behavior="padding" keyboardVerticalOffset={50}>
-        <View style={st.manageModal}>
+      <View style={st.modalOv}>
+        <KeyboardAvoidingView style={{width:'100%'}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={st.manageModal}>
           <View style={st.modalH}>
             <Text style={st.modalTitle}>Manage Ride</Text>
             <TouchableOpacity onPress={onClose}>
@@ -300,13 +303,30 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
                 placeholderTextColor={Colors.textDisabled}
               />
               <TouchableOpacity
-                style={{height:46,width:46,backgroundColor:Colors.primary,borderRadius:Radius.sm,alignItems:'center',justifyContent:'center'}}
-                onPress={()=>{
+                style={{height:46,width:46,backgroundColor:validatingStop ? Colors.textDisabled : Colors.primary,borderRadius:Radius.sm,alignItems:'center',justifyContent:'center'}}
+                disabled={validatingStop}
+                onPress={async ()=>{
                   const s=newStop.trim();
-                  if(s&&!rideStops.includes(s)){setRideStops([...rideStops,s]);setNewStop('');}
+                  if(!s||rideStops.includes(s)) return;
+                  setValidatingStop(true);
+                  try {
+                    const res = await validateStopOnRoute(ride.departureLocation, ride.destination, s);
+                    if (res.data?.isOnRoute) {
+                      setRideStops([...rideStops, s]);
+                      setNewStop('');
+                    } else {
+                      Alert.alert('Invalid Stop', 'This stop is not along the route between departure and destination.');
+                    }
+                  } catch {
+                    Alert.alert('Error', 'Could not validate stop. Please try again.');
+                  } finally {
+                    setValidatingStop(false);
+                  }
                 }}
               >
-                <Ionicons name="add" size={20} color={Colors.textWhite}/>
+                {validatingStop
+                  ? <ActivityIndicator size="small" color="#fff"/>
+                  : <Ionicons name="add" size={20} color={Colors.textWhite}/>}
               </TouchableOpacity>
             </View>
             {rideStops.length>0&&(
@@ -328,8 +348,9 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
       <DateTimePickerModal 
         visible={showDateTimePicker} 
         date={departureDateTime}
@@ -434,6 +455,7 @@ function CancelRideModal({visible, ride, onClose, onCancelledAndBack}) {
 // markers from the memberPositions map so every participant can see each other.
 // Falls back gracefully when no polyline stored (Maps unavailable at post time).
 function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, isOnGoing }) {
+  const insets = useSafeAreaInsets();
   if (!ride) return null;
   const hasPolyline = !!ride.route?.polyline;
   const routeCoords = hasPolyline ? decodePolyline(ride.route.polyline) : [];
@@ -456,10 +478,11 @@ function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, 
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
         <View style={{
           flexDirection: 'row', alignItems: 'center',
-          backgroundColor: '#fff', paddingHorizontal: Spacing.lg, paddingVertical: 16,
+          backgroundColor: '#fff', paddingHorizontal: Spacing.lg,
+          paddingTop: insets.top + 12, paddingBottom: 18,
           borderBottomWidth: 1, borderBottomColor: Colors.border,
         }}>
           <TouchableOpacity
@@ -467,9 +490,9 @@ function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, 
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             style={{ marginRight: 14 }}
           >
-            <Ionicons name="arrow-back" size={26} color={Colors.textPrimary} />
+            <Ionicons name="arrow-back" size={28} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={{ flex: 1, fontSize: 20, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary }}>
+          <Text style={{ flex: 1, fontSize: 24, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.textPrimary }}>
             {isOnGoing ? 'Live Tracking' : 'Full Route'}
           </Text>
         </View>
@@ -558,7 +581,7 @@ function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, 
             </Text>
           )}
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -568,12 +591,16 @@ function RouteMapModal({ visible, ride, onClose, memberPositions = {}, liveEta, 
 // Absent = no-show: backend increments their cancellationCount.
 // The modal fetches the current list via GET /api/rides/:rideId/attendance,
 // then submits via PUT /api/rides/:rideId/attendance.
+// Passengers auto-detected by GPS will already have attendanceStatus = 'Present'.
+// The driver can override any status for passengers who are offline or have no GPS.
 function AttendanceModal({ visible, rideId, onClose, onAttendanceSaved }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Local marks: { [bookingId]: 'Present' | 'Absent' | null }
   const [marks, setMarks] = useState({});
+  // Track which bookings were auto-detected via GPS
+  const [autoDetected, setAutoDetected] = useState({});
 
   useEffect(() => {
     if (!visible || !rideId) return;
@@ -585,8 +612,16 @@ function AttendanceModal({ visible, rideId, onClose, onAttendanceSaved }) {
         // Pre-populate any previously saved statuses so the driver sees their
         // prior work if they close and reopen the modal
         const initial = {};
-        att.forEach(a => { initial[a.bookingId] = a.attendanceStatus; });
+        const detected = {};
+        att.forEach(a => {
+          initial[a.bookingId] = a.attendanceStatus;
+          // If already marked Present (by GPS auto-detection), flag it
+          if (a.attendanceStatus === 'Present') {
+            detected[a.bookingId] = true;
+          }
+        });
         setMarks(initial);
+        setAutoDetected(detected);
       })
       .catch(() => setList([]))
       .finally(() => setLoading(false));
@@ -635,7 +670,7 @@ function AttendanceModal({ visible, rideId, onClose, onAttendanceSaved }) {
           </View>
 
           <Text style={{ fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
-            Mark who is present before completing the ride. Absent passengers will be recorded as no-shows.
+            Mark who is present before completing the ride. Passengers detected at the departure point via GPS are auto-marked. You can override for offline passengers.
           </Text>
 
           {loading ? (
@@ -661,6 +696,11 @@ function AttendanceModal({ visible, rideId, onClose, onAttendanceSaved }) {
                       <Text style={{ fontSize: 11, color: Colors.textSecondary }}>
                         {item.pickupLocation || 'No stop specified'}
                       </Text>
+                      {autoDetected[item.bookingId] && (
+                        <Text style={{ fontSize: 10, color: Colors.primary, marginTop: 2 }}>
+                          📍 Detected at departure via GPS
+                        </Text>
+                      )}
                     </View>
                     {/* Present / Absent toggle buttons */}
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -729,6 +769,9 @@ export default function RideDetailsScreen({ navigation, route }) {
   const [attendanceSaved, setAttendanceSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
 
+  // ── Review modal state (opened from notification deep link) ──────────────
+  const [reviewTarget, setReviewTarget] = useState(null); // { rideId, destination, participants[] }
+
   // ── Live tracking state ──────────────────────────────────────────────────
   // memberPositions: { [userId]: { latitude, longitude, isDriver } }
   const [memberPositions, setMemberPositions] = useState({});
@@ -784,20 +827,57 @@ export default function RideDetailsScreen({ navigation, route }) {
 
     const handleRideAutoCompleted = (data) => {
       if (data.rideId !== rideId) return;
-      Alert.alert('Ride Completed', `Your ride to ${data.destination} has been completed.`, [
+      Alert.alert('Ride Completed', `Your ride to ${data.destination || ride?.destination} has been completed.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     };
 
-    socket.on('member-location',    handleMemberLocation);
-    socket.on('ride-started',       handleRideStarted);
-    socket.on('ride-auto-completed',handleRideAutoCompleted);
+    // Auto-cancelled ride (late driver or system cancellation)
+    const handleRideAutoCancelled = (data) => {
+      if (data.rideId !== rideId) return;
+      Alert.alert('Ride Cancelled', data.reason || 'This ride has been automatically cancelled.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    };
+
+    // Passenger's booking auto-cancelled (not present at departure)
+    const handleBookingAutoCancelled = (data) => {
+      if (data.rideId !== rideId) return;
+      Alert.alert('Booking Cancelled', data.reason || 'Your booking was cancelled because you were not at the departure point.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    };
+
+    // Attendance auto-marked via GPS (passenger notification)
+    const handleAttendanceAutoMarked = (data) => {
+      if (data.rideId !== rideId) return;
+      Alert.alert('Check-In Confirmed', 'You have been automatically checked in at the departure point.');
+    };
+
+    // Attendance updated (driver receives this when a passenger is auto-detected)
+    const handleAttendanceUpdated = (data) => {
+      if (data.rideId !== rideId) return;
+      // Refresh ride data so attendance UI updates
+      fetchRide();
+    };
+
+    socket.on('member-location',          handleMemberLocation);
+    socket.on('ride-started',             handleRideStarted);
+    socket.on('ride-auto-completed',      handleRideAutoCompleted);
+    socket.on('ride-auto-cancelled',      handleRideAutoCancelled);
+    socket.on('booking-auto-cancelled',   handleBookingAutoCancelled);
+    socket.on('attendance-auto-marked',   handleAttendanceAutoMarked);
+    socket.on('attendance-updated',       handleAttendanceUpdated);
 
     return () => {
       socket.emit('leave-ride', rideId);
-      socket.off('member-location',    handleMemberLocation);
-      socket.off('ride-started',       handleRideStarted);
-      socket.off('ride-auto-completed',handleRideAutoCompleted);
+      socket.off('member-location',        handleMemberLocation);
+      socket.off('ride-started',           handleRideStarted);
+      socket.off('ride-auto-completed',    handleRideAutoCompleted);
+      socket.off('ride-auto-cancelled',    handleRideAutoCancelled);
+      socket.off('booking-auto-cancelled', handleBookingAutoCancelled);
+      socket.off('attendance-auto-marked', handleAttendanceAutoMarked);
+      socket.off('attendance-updated',     handleAttendanceUpdated);
     };
   }, [rideId, socketRef, ride?.route, haversine, navigation]);
 
@@ -877,6 +957,45 @@ export default function RideDetailsScreen({ navigation, route }) {
       if (route?.params?.openManage) setShowManageRide(true);
       if (route?.params?.openCancel) setShowCancelRide(true);
       if (route?.params?.openStops) setShowStopRequests(true);
+      // Deep-link from notification: open review modal for completed rides
+      if (route?.params?.showReview && ride.state === 'Completed') {
+        (async () => {
+          try {
+            const driver = ride.driverId || {};
+            const isOwner = user?._id === driver._id;
+            if (isOwner) {
+              // Driver rates passengers
+              const confirmedBookings = (ride.bookings || []).filter(b =>
+                ['Confirmed', 'Completed'].includes(b.status) && b.attendanceStatus !== 'Absent'
+              );
+              const passengerIds = confirmedBookings.map(b => b.passengerId?._id || b.passengerId);
+              if (passengerIds.length === 0) return;
+              const res = await getUsersByIds(passengerIds);
+              const passengers = res.users || [];
+              setReviewTarget({
+                rideId: ride._id,
+                destination: ride.destination,
+                participants: passengers.map(p => ({
+                  userId: p._id,
+                  name: `${p.firstName} ${p.lastName || ''}`.trim(),
+                  role: 'Passenger',
+                })),
+              });
+            } else {
+              // Passenger rates driver
+              setReviewTarget({
+                rideId: ride._id,
+                destination: ride.destination,
+                participants: [{
+                  userId: driver._id,
+                  name: `${driver.firstName || ''} ${driver.lastName || ''}`.trim(),
+                  role: 'Driver',
+                }],
+              });
+            }
+          } catch {}
+        })();
+      }
     }
   }, [loading, ride]);
 
@@ -1027,20 +1146,37 @@ export default function RideDetailsScreen({ navigation, route }) {
                 <Text style={st.primaryBtnText}>{completing ? 'Completing...' : 'Complete Ride'}</Text>
               </TouchableOpacity>
             ) : ['Active', 'Full'].includes(ride.state) ? (
-              !attendanceSaved ? (
-                <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowAttendance(true)}>
-                  <Ionicons name="checkmark-circle-outline" size={16} color="#fff" style={{marginRight:4}}/>
-                  <Text style={st.primaryBtnText}>Check In</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[st.primaryBtn, completing && { opacity: 0.7 }]}
-                  onPress={handleCompleteRide}
-                  disabled={completing}
-                >
-                  <Text style={st.primaryBtnText}>{completing ? 'Completing...' : 'Complete Ride'}</Text>
-                </TouchableOpacity>
-              )
+              /* Show Check In only within 10 min of departure; otherwise Manage Ride */
+              (() => {
+                const now = new Date();
+                const dep = new Date(ride.departureDateTime);
+                const minUntilDep = (dep - now) / 60000;
+                const nearDeparture = minUntilDep <= 10;
+                if (nearDeparture && !attendanceSaved) {
+                  return (
+                    <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowAttendance(true)}>
+                      <Ionicons name="checkmark-circle-outline" size={16} color="#fff" style={{marginRight:4}}/>
+                      <Text style={st.primaryBtnText}>Check In</Text>
+                    </TouchableOpacity>
+                  );
+                } else if (nearDeparture && attendanceSaved) {
+                  return (
+                    <TouchableOpacity
+                      style={[st.primaryBtn, completing && { opacity: 0.7 }]}
+                      onPress={handleCompleteRide}
+                      disabled={completing}
+                    >
+                      <Text style={st.primaryBtnText}>{completing ? 'Completing...' : 'Complete Ride'}</Text>
+                    </TouchableOpacity>
+                  );
+                } else {
+                  return (
+                    <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowManageRide(true)}>
+                      <Text style={st.primaryBtnText}>Manage Ride</Text>
+                    </TouchableOpacity>
+                  );
+                }
+              })()
             ) : (
               <TouchableOpacity style={st.primaryBtn} onPress={()=>setShowManageRide(true)}>
                 <Text style={st.primaryBtnText}>Manage Ride</Text>
@@ -1100,6 +1236,16 @@ export default function RideDetailsScreen({ navigation, route }) {
         onClose={() => setShowAttendance(false)}
         onAttendanceSaved={() => setAttendanceSaved(true)}
       />
+      {/* Review modal — opened from notification deep link */}
+      {reviewTarget && (
+        <PostRideReviewModal
+          visible={!!reviewTarget}
+          rideId={reviewTarget.rideId}
+          destination={reviewTarget.destination}
+          participants={reviewTarget.participants}
+          onDone={() => setReviewTarget(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
