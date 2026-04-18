@@ -51,17 +51,29 @@ function mapReview(r) {
   const subject = r.subjectId || {};
   const ride    = r.rideId    || {};
   return {
-    _id:       r._id,
-    authorId:  author._id,
-    initials:  ((author.firstName?.[0] || '') + (author.lastName?.[0] || '')).toUpperCase() || '?',
-    name:      `${author.firstName || ''} ${author.lastName || ''}`.trim() || 'AUI Member',
-    rating:    r.rating || 0,
-    content:   r.content || '',
-    date:      r.date ? new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
-    route:     ride.departureLocation && ride.destination
-                 ? `${ride.departureLocation.split(',')[0]} → ${ride.destination.split(',')[0]}`
-                 : null,
+    _id:         r._id,
+    authorId:    author._id,
+    initials:    ((author.firstName?.[0] || '') + (author.lastName?.[0] || '')).toUpperCase() || '?',
+    name:        `${author.firstName || ''} ${author.lastName || ''}`.trim() || 'AUI Member',
+    rating:      r.rating || 0,
+    content:     r.content || '',
+    date:        r.date ? new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
+    route:       ride.departureLocation && ride.destination
+                   ? `${ride.departureLocation.split(',')[0]} → ${ride.destination.split(',')[0]}`
+                   : null,
+    subjectRole: r.subjectRole || null,
   };
+}
+
+function RoleBadge({ role }) {
+  if (!role) return null;
+  const isDriver = role === 'Driver';
+  return (
+    <View style={[s.roleBadge, isDriver ? s.roleBadgeDriver : s.roleBadgePassenger]}>
+      <Ionicons name={isDriver ? 'car' : 'person'} size={9} color={isDriver ? Colors.primary : Colors.textSecondary} />
+      <Text style={[s.roleBadgeText, isDriver && { color: Colors.primary }]}>as {role}</Text>
+    </View>
+  );
 }
 
 function ReviewCard({ review }) {
@@ -72,7 +84,10 @@ function ReviewCard({ review }) {
           <Text style={s.reviewAvatarText}>{review.initials}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={s.reviewAuthor}>{review.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={s.reviewAuthor}>{review.name}</Text>
+            <RoleBadge role={review.subjectRole} />
+          </View>
           <StarRow rating={review.rating} />
         </View>
         <View style={{ alignItems: 'flex-end' }}>
@@ -154,6 +169,7 @@ export default function UserProfileScreen({ navigation, route }) {
 
   const [profileUser, setProfileUser] = useState(isOwnProfile ? me : null);
   const [tab,         setTab]         = useState('received');
+  const [roleFilter,  setRoleFilter]  = useState('all'); // 'all' | 'Driver' | 'Passenger'
   const [received,    setReceived]    = useState([]);
   const [given,       setGiven]       = useState([]);
   const [analytics,   setAnalytics]   = useState(null);
@@ -233,7 +249,10 @@ export default function UserProfileScreen({ navigation, route }) {
   const lastName  = displayUser.lastName  || '';
   const initials  = ((firstName[0] || '') + (lastName[0] || '')).toUpperCase() || '?';
 
-  const displayReviews = tab === 'received' ? received : given;
+  const baseReviews    = tab === 'received' ? received : given;
+  const displayReviews  = roleFilter === 'all'
+    ? baseReviews
+    : baseReviews.filter(r => r.subjectRole === roleFilter);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -392,13 +411,30 @@ export default function UserProfileScreen({ navigation, route }) {
             ))}
           </View>
 
+          {/* Role sub-filter */}
+          <View style={s.roleFilterRow}>
+            {['all', 'Driver', 'Passenger'].map(rf => (
+              <TouchableOpacity
+                key={rf}
+                style={[s.roleChip, roleFilter === rf && s.roleChipActive]}
+                onPress={() => setRoleFilter(rf)}
+              >
+                <Text style={[s.roleChipText, roleFilter === rf && s.roleChipTextActive]}>
+                  {rf === 'all' ? 'All' : `As ${rf}`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {loadingReviews ? (
             <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
           ) : displayReviews.length > 0 ? (
             displayReviews.map(r => <ReviewCard key={r._id} review={r} />)
           ) : (
             <Text style={[s.emptySub, { textAlign: 'center', paddingVertical: 20 }]}>
-              {tab === 'received' ? 'No reviews yet.' : 'No reviews written yet.'}
+              {roleFilter !== 'all'
+                ? `No reviews as ${roleFilter.toLowerCase()} yet.`
+                : tab === 'received' ? 'No reviews yet.' : 'No reviews written yet.'}
             </Text>
           )}
         </View>
@@ -541,6 +577,25 @@ const s = StyleSheet.create({
   tabActive: { borderBottomColor: Colors.primary },
   tabText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
   tabTextActive: { color: Colors.primary },
+
+  roleFilterRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
+  roleChip: {
+    paddingVertical: 5, paddingHorizontal: 12,
+    borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  roleChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryBg },
+  roleChipText: { fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
+  roleChipTextActive: { color: Colors.primary },
+
+  roleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingVertical: 2, paddingHorizontal: 6,
+    borderRadius: 8,
+  },
+  roleBadgeDriver: { backgroundColor: Colors.primaryBg },
+  roleBadgePassenger: { backgroundColor: Colors.background },
+  roleBadgeText: { fontSize: 10, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
 
   reviewCard: { paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
   reviewTop:  { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },

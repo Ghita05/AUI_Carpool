@@ -229,10 +229,23 @@ const getUserReviews = async (req, res, next) => {
     const reviews = await Review.find(filter)
       .populate('authorId',  'firstName lastName profilePicture')
       .populate('subjectId', 'firstName lastName profilePicture')
-      .populate('rideId',    'departureLocation destination departureDateTime')
+      .populate('rideId',    'departureLocation destination departureDateTime driverId')
       .sort({ [sortField]: sortOrder });
 
-    return success(res, 200, `${reviews.length} review(s).`, { reviews });
+    // Attach subjectRole — was the reviewed person the driver or a passenger on that ride?
+    const enriched = reviews.map(r => {
+      const obj = r.toObject();
+      if (obj.rideId && obj.subjectId) {
+        const subjectStr = (obj.subjectId._id || obj.subjectId).toString();
+        const driverStr  = (obj.rideId.driverId || '').toString();
+        obj.subjectRole  = subjectStr === driverStr ? 'Driver' : 'Passenger';
+      } else {
+        obj.subjectRole = null;
+      }
+      return obj;
+    });
+
+    return success(res, 200, `${enriched.length} review(s).`, { reviews: enriched });
   } catch (err) { next(err); }
 };
 
