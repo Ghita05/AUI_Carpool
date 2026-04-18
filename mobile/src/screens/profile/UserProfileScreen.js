@@ -168,10 +168,8 @@ export default function UserProfileScreen({ navigation, route }) {
   const targetUserId = isOwnProfile ? me?._id : paramUserId;
 
   const [profileUser, setProfileUser] = useState(isOwnProfile ? me : null);
-  const [tab,         setTab]         = useState('received');
   const [roleFilter,  setRoleFilter]  = useState('all'); // 'all' | 'Driver' | 'Passenger'
   const [received,    setReceived]    = useState([]);
-  const [given,       setGiven]       = useState([]);
   const [analytics,   setAnalytics]   = useState(null);
   const [ratingInfo,  setRatingInfo]  = useState(null);
 
@@ -187,13 +185,11 @@ export default function UserProfileScreen({ navigation, route }) {
     setLoadingReviews(true);
 
     try {
-      const [receivedRes, givenRes, ratingRes] = await Promise.all([
+      const [receivedRes, ratingRes] = await Promise.all([
         getUserReviews(targetUserId, 'date', 'desc', 'received'),
-        getUserReviews(targetUserId, 'date', 'desc', 'given'),
         getUserRatings(targetUserId),
       ]);
       setReceived((receivedRes.data?.reviews || []).map(mapReview));
-      setGiven((givenRes.data?.reviews    || []).map(mapReview));
       setRatingInfo(ratingRes.data || null);
     } catch { /* show empty */ }
     finally { setLoadingReviews(false); }
@@ -249,10 +245,9 @@ export default function UserProfileScreen({ navigation, route }) {
   const lastName  = displayUser.lastName  || '';
   const initials  = ((firstName[0] || '') + (lastName[0] || '')).toUpperCase() || '?';
 
-  const baseReviews    = tab === 'received' ? received : given;
-  const displayReviews  = roleFilter === 'all'
-    ? baseReviews
-    : baseReviews.filter(r => r.subjectRole === roleFilter);
+  const displayReviews = roleFilter === 'all'
+    ? received
+    : received.filter(r => r.subjectRole === roleFilter);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -395,20 +390,11 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* ── Reviews tabs ── */}
+        {/* ── Reviews ── */}
         <View style={s.card}>
-          <View style={s.tabRow}>
-            {['received', 'given'].map(t => (
-              <TouchableOpacity
-                key={t}
-                style={[s.tab, tab === t && s.tabActive]}
-                onPress={() => setTab(t)}
-              >
-                <Text style={[s.tabText, tab === t && s.tabTextActive]}>
-                  {t === 'received' ? `Received (${received.length})` : `Given (${given.length})`}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={s.cardH}>
+            <Ionicons name="star" size={16} color={Colors.primary} />
+            <Text style={s.cardTitle}>Reviews ({received.length})</Text>
           </View>
 
           {/* Role sub-filter */}
@@ -434,7 +420,7 @@ export default function UserProfileScreen({ navigation, route }) {
             <Text style={[s.emptySub, { textAlign: 'center', paddingVertical: 20 }]}>
               {roleFilter !== 'all'
                 ? `No reviews as ${roleFilter.toLowerCase()} yet.`
-                : tab === 'received' ? 'No reviews yet.' : 'No reviews written yet.'}
+                : 'No reviews yet.'}
             </Text>
           )}
         </View>
@@ -571,12 +557,6 @@ const s = StyleSheet.create({
     borderRadius: Radius.md, padding: Spacing.sm,
   },
   earningsText: { fontSize: Typography.xs, color: Colors.primary, fontFamily: 'PlusJakartaSans_600SemiBold' },
-
-  tabRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: Colors.border, marginBottom: Spacing.md },
-  tab: { flex: 1, alignItems: 'center', paddingBottom: 10, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabActive: { borderBottomColor: Colors.primary },
-  tabText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.textSecondary },
-  tabTextActive: { color: Colors.primary },
 
   roleFilterRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
   roleChip: {
