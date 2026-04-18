@@ -213,11 +213,28 @@ function TimePicker({ time, onTimeChange }) {
 }
 
 // Main modal component
-export default function DateTimePickerModal({ visible, date, onClose, onConfirm }) {
+export default function DateTimePickerModal({ visible, date, time, mode = 'datetime', onClose, onConfirm }) {
   const [selectedDate, setSelectedDate] = useState(date ? new Date(date) : new Date());
+  const [selectedTime, setSelectedTime] = useState(time || '09:00');
+  const showTime = mode !== 'date';
+
+  // Reset state when modal opens with new props
+  useEffect(() => {
+    if (visible) {
+      setSelectedDate(date ? new Date(date) : new Date());
+      setSelectedTime(time || '09:00');
+    }
+  }, [visible, date, time]);
 
   const handleConfirm = () => {
-    onConfirm(selectedDate.toISOString());
+    if (showTime) {
+      const [h, m] = selectedTime.split(':').map(Number);
+      const dt = new Date(selectedDate);
+      dt.setHours(h, m, 0, 0);
+      onConfirm(dt.toISOString(), selectedTime);
+    } else {
+      onConfirm(selectedDate.toISOString());
+    }
     onClose();
   };
 
@@ -226,15 +243,21 @@ export default function DateTimePickerModal({ visible, date, onClose, onConfirm 
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Date</Text>
+            <Text style={styles.modalTitle}>{showTime ? 'Select Date & Time' : 'Select Date'}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.scrollContent}>
+          <ScrollView style={styles.scrollContent} bounces={false}>
             <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
-          </View>
+            {showTime && (
+              <>
+                <View style={styles.timeDivider} />
+                <TimePicker time={selectedTime} onTimeChange={setSelectedTime} />
+              </>
+            )}
+          </ScrollView>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
@@ -280,6 +303,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
+  },
+  timeDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: Spacing.md,
   },
   modalFooter: {
     flexDirection: 'row',

@@ -6,7 +6,7 @@ import {
   Animated, Easing, Image
 } from 'react-native';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
-import MapView, { Marker, Callout, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Callout, Polyline, PROVIDER_GOOGLE } from '../../utils/MapView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -1281,6 +1281,7 @@ export default function HomeScreen({ navigation }) {
       <DateTimePickerModal
         visible={showDatePicker}
         date={new Date()}
+        mode="date"
         onClose={() => setShowDatePicker(false)}
         onConfirm={(isoString) => handleDateConfirm(isoString)}
       />
