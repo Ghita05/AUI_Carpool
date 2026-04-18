@@ -30,8 +30,8 @@ const { Review, User, Ride } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const MIN_REVIEWS_FOR_SUMMARY = 5; // threshold to generate AI summary (reduced from 10 for capstone demo)
-const MIN_DRIVER_RIDES        = 3; // minimum completed rides to appear in community leaderboard
-const MIN_DRIVER_RATING       = 3.5;
+const MIN_DRIVER_RIDES        = 1; // minimum completed rides to appear in community leaderboard
+const MIN_DRIVER_RATING       = 0;  // show all rated drivers (sorted by rating desc)
 
 // ── Gemini helper ─────────────────────────────────────────────────────────────
 /**
@@ -292,8 +292,6 @@ const getCommunity = async (req, res, next) => {
     const drivers = await User.find({
       role:               'Driver',
       accountStatus:      'Active',
-      verificationStatus: true,
-      averageRating:      { $gte: MIN_DRIVER_RATING },
       totalCompletedRides:{ $gte: MIN_DRIVER_RIDES },
     })
       .select('firstName lastName profilePicture averageRating totalCompletedRides reviewSummary drivingStyle smokingPreference')
