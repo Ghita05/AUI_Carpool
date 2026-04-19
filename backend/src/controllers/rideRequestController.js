@@ -50,7 +50,7 @@ const transferGroupOwner = async (req, res, next) => {
   }
 };
 
-const { Ride, Notification, User, Vehicle, Message, Route, Location } = require('../models');
+const { Ride, Notification, User, Vehicle, Message, Route } = require('../models');
 const { success, error } = require('../utils/responses');
 
 /** Helper: persist a Route document from raw route data. */
@@ -69,22 +69,6 @@ async function createRouteDoc(data) {
   return doc._id;
 }
 
-/** Helper: convert stop name strings into Location ObjectIds (upsert). */
-async function resolveStopIds(stopNames) {
-  if (!Array.isArray(stopNames) || stopNames.length === 0) return [];
-  const ids = [];
-  for (const name of stopNames) {
-    if (!name || typeof name !== 'string') continue;
-    const loc = await Location.findOneAndUpdate(
-      { name: name.trim() },
-      { $setOnInsert: { name: name.trim() } },
-      { upsert: true, new: true }
-    );
-    ids.push(loc._id);
-  }
-  return ids;
-}
-
 // Accept a ride request: create an offer ride for the driver, embed booking(s) for passenger(s), notify, mark request as accepted
 const acceptRideRequest = async (req, res, next) => {
   try {
@@ -92,8 +76,7 @@ const acceptRideRequest = async (req, res, next) => {
     const driverId = req.user._id;
 
     const request = await Ride.findOne({ _id: requestId, type: 'Request' })
-      .populate('route')
-      .populate('stops');
+      .populate('route');
     if (!request) return error(res, 404, 'Ride request not found.');
     if (request.state !== 'Open') return error(res, 400, 'This request is no longer available.');
     if (request.passengerId.toString() === driverId.toString()) return error(res, 400, 'You cannot accept your own ride request.');
@@ -254,7 +237,6 @@ const postRideRequest = async (req, res, next) => {
             summary: selectedRoute.summary || null,
           })
         : null;
-      const stopIds = await resolveStopIds(stops);
       const request = await Ride.create({
         type: 'Request',
         state: 'Open',
@@ -266,7 +248,7 @@ const postRideRequest = async (req, res, next) => {
         maxPrice,
         notes: notes || '',
         groupPassengerIds: groupIds,
-        stops: stopIds,
+        stops: stops || [],
         route: routeId,
       });
       const uniqueMembers = [...new Set(groupIds)];
@@ -309,7 +291,6 @@ const postRideRequest = async (req, res, next) => {
           summary: selectedRoute.summary || null,
         })
       : null;
-    const singleStopIds = await resolveStopIds(stops);
     const request = await Ride.create({
       type: 'Request',
       state: 'Open',
@@ -320,7 +301,7 @@ const postRideRequest = async (req, res, next) => {
       pricePerSeat: maxPrice,
       maxPrice,
       notes: notes || '',
-      stops: singleStopIds,
+      stops: stops || [],
       route: singleRouteId,
     });
     await Notification.create({
@@ -478,16 +459,11 @@ const modifyRideRequest = async (req, res, next) => {
       }
     }
 
-    // Convert stop names to Location ObjectIds if stops were updated
-    if (updates.stops) {
-      updates.stops = await resolveStopIds(updates.stops);
-    }
-
     const updated = await Ride.findByIdAndUpdate(
       req.params.requestId,
       { $set: updates },
       { new: true, runValidators: true }
-    ).populate('route').populate('stops');
+    ).populate('route');
 
     const groupIds = (updated.groupPassengerIds || []).map(id => id.toString());
     if (groupIds.length > 1) {
@@ -600,7 +576,6 @@ const getRideRequests = async (req, res, next) => {
     const requests = await Ride.find(filter)
       .populate('passengerId', 'firstName lastName averageRating')
       .populate('route')
-      .populate('stops')
       .sort({ [sortField]: sortOrder });
 
     return success(res, 200, `${requests.length} request(s) found.`, { requests });
@@ -617,7 +592,7 @@ const getMyRideRequests = async (req, res, next) => {
         { passengerId: req.user._id },
         { groupPassengerIds: { $in: [req.user._id] } },
       ],
-    }).populate('route').populate('stops').sort({ createdAt: -1 });
+    }).populate('route').sort({ createdAt: -1 });
     return success(res, 200, `${requests.length} request(s).`, { requests });
   } catch (err) {
     next(err);

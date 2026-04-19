@@ -344,7 +344,6 @@ const getCurrentBookings = async (req, res, next) => {
       .populate('driverId', 'firstName lastName averageRating profilePicture')
       .populate('vehicleId', 'brand model color sizeCategory')
       .populate('route')
-      .populate('stops')
       .sort({ departureDateTime: -1 });
 
     // Map each ride to its matching booking sub-document(s)
@@ -380,7 +379,6 @@ const getBookingHistory = async (req, res, next) => {
       .populate('driverId', 'firstName lastName')
       .populate('vehicleId', 'brand model')
       .populate('route')
-      .populate('stops')
       .sort({ departureDateTime: -1 });
 
     // Check which rides the user has already reviewed

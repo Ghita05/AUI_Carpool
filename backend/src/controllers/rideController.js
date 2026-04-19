@@ -4,7 +4,7 @@
  * Bookings are embedded in the Ride document.
  */
 
-const { Ride, Notification, User, Message, Review, Route, Location } = require('../models');
+const { Ride, Notification, User, Message, Review, Route } = require('../models');
 const { success, error } = require('../utils/responses');
 const { getDirections } = require('../utils/maps');
 const { scoreRides } = require('../utils/recommender');
@@ -27,25 +27,6 @@ async function createRouteDoc(data) {
     summary:              data.summary || null,
   });
   return doc._id;
-}
-
-/**
- * Helper: convert an array of stop name strings into Location ObjectIds.
- * Uses findOneAndUpdate+upsert so the same name is reused across rides.
- */
-async function resolveStopIds(stopNames) {
-  if (!Array.isArray(stopNames) || stopNames.length === 0) return [];
-  const ids = [];
-  for (const name of stopNames) {
-    if (!name || typeof name !== 'string') continue;
-    const loc = await Location.findOneAndUpdate(
-      { name: name.trim() },
-      { $setOnInsert: { name: name.trim() } },
-      { upsert: true, new: true }
-    );
-    ids.push(loc._id);
-  }
-  return ids;
 }
 
 // ── postRideOffer ─────────────────────────────────────────────────────────────
@@ -92,7 +73,6 @@ const postRideOffer = async (req, res, next) => {
     }
 
     const routeId = await createRouteDoc(routeData);
-    const stopIds = await resolveStopIds(stops);
 
     const ride = await Ride.create({
       type: 'Offer',
@@ -107,12 +87,11 @@ const postRideOffer = async (req, res, next) => {
       pricePerSeat,
       genderPreference: genderPreference || 'All',
       route: routeId,
-      stops: stopIds,
+      stops: stops || [],
     });
 
     const populated = await Ride.findById(ride._id)
-      .populate('route')
-      .populate('stops');
+      .populate('route');
 
     return success(res, 201, 'Ride offer published.', { rideId: ride._id, ride: populated });
   } catch (err) { next(err); }
@@ -179,8 +158,7 @@ const modifyRide = async (req, res, next) => {
     }
 
     const updatedRide = await Ride.findByIdAndUpdate(req.params.rideId, { $set: updates }, { new: true, runValidators: true })
-      .populate('route')
-      .populate('stops');
+      .populate('route');
     return success(res, 200, 'Ride updated.', { ride: updatedRide });
   } catch (err) { next(err); }
 };
@@ -411,7 +389,6 @@ const getAvailableRides = async (req, res, next) => {
         .populate('driverId', 'firstName lastName averageRating totalCompletedRides profilePicture')
         .populate('vehicleId', 'brand model color sizeCategory luggageCapacity licensePlate smokingPolicy')
         .populate('route')
-        .populate('stops')
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(Number(limit)),
@@ -454,8 +431,7 @@ const getRideDetails = async (req, res, next) => {
     const ride = await Ride.findById(req.params.rideId)
       .populate('driverId', 'firstName lastName averageRating totalCompletedRides profilePicture phoneNumber smokingPreference drivingStyle')
       .populate('vehicleId')
-      .populate('route')
-      .populate('stops');
+      .populate('route');
     if (!ride) return error(res, 404, 'Ride not found.');
     return success(res, 200, 'Ride details retrieved.', { ride });
   } catch (err) { next(err); }
@@ -476,16 +452,8 @@ const getMyRides = async (req, res, next) => {
       .populate('vehicleId', 'brand model color')
       .populate('bookings.passengerId', 'firstName lastName')
       .populate('route')
-      .populate('stops')
       .sort({ departureDateTime: status === 'upcoming' ? 1 : -1 })
       .lean();
-
-    // Flatten populated stops for lean results (toJSON transform doesn't fire)
-    for (const ride of rides) {
-      if (Array.isArray(ride.stops)) {
-        ride.stops = ride.stops.map(s => (s && typeof s === 'object' && s.name) ? s.name : s);
-      }
-    }
 
     // For past rides, check if driver has already reviewed
     if (status !== 'upcoming' && rides.length > 0) {

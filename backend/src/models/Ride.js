@@ -85,7 +85,7 @@ const rideSchema = new Schema({
   bookings:        { type: [bookingSubSchema], default: [] },
 
   // ── Stops (used by both Offer and Request) ────────────────────────────
-  stops:             [{ type: Schema.Types.ObjectId, ref: 'Location' }],
+  stops:             { type: [String], default: [] },
 
   // ── Request-only fields ───────────────────────────────────────────────
   passengerId:       { type: Schema.Types.ObjectId, ref: 'User', default: null },
@@ -119,32 +119,5 @@ rideSchema.index({ destination: 'text', departureLocation: 'text' });
 
 rideSchema.index({ pricePerSeat: 1 });
 rideSchema.index({ availableSeats: -1 });
-
-// ── toJSON transform ──────────────────────────────────────────────────────
-// When populated stops (Location docs) are serialised, flatten them to
-// plain string names so the mobile app keeps working without changes.
-rideSchema.set('toJSON', {
-  virtuals: true,
-  transform(_doc, ret) {
-    if (Array.isArray(ret.stops)) {
-      ret.stops = ret.stops.map(s =>
-        (s && typeof s === 'object' && s.name) ? s.name : s
-      );
-    }
-    return ret;
-  },
-});
-
-rideSchema.set('toObject', {
-  virtuals: true,
-  transform(_doc, ret) {
-    if (Array.isArray(ret.stops)) {
-      ret.stops = ret.stops.map(s =>
-        (s && typeof s === 'object' && s.name) ? s.name : s
-      );
-    }
-    return ret;
-  },
-});
 
 module.exports = mongoose.model('Ride', rideSchema);
