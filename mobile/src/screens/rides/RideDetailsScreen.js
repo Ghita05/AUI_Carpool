@@ -173,7 +173,6 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
       setGender(ride.genderPreference || 'All');
       setDepartureDateTime(ride.departureDateTime);
       setRideStops(ride.stops || []);
-      setNewStop('');
     }
   }, [visible, ride]);
 
