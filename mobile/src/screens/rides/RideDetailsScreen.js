@@ -156,15 +156,15 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
   );
 }
 
-function ManageRideModal({visible,ride,onClose,onUpdated}){
+function ManageRideModal({visible,ride,onClose,onUpdated,onOpenAddStop,externalStops,setExternalStops}){
   const [price, setPrice] = useState('');
   const [seats, setSeats] = useState('');
   const [gender, setGender] = useState('All');
   const [saving, setSaving] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [departureDateTime, setDepartureDateTime] = useState(null);
-  const [rideStops, setRideStops] = useState([]);
-  const [showAddStop, setShowAddStop] = useState(false);
+  const rideStops = externalStops || [];
+  const setRideStops = setExternalStops || (() => {});
 
   useEffect(() => {
     if (visible && ride) {
@@ -295,7 +295,7 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
             <Text style={st.mngLabel}>Stops</Text>
             <TouchableOpacity
               style={{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:Colors.primaryBg,borderRadius:Radius.md,padding:Spacing.md,borderWidth:1,borderColor:'rgba(27,94,32,0.15)',marginBottom:rideStops.length ? 8 : Spacing.lg}}
-              onPress={() => setShowAddStop(true)}
+              onPress={() => { if (onOpenAddStop) onOpenAddStop(); }}
             >
               <Ionicons name="map-outline" size={20} color={Colors.primary}/>
               <View style={{flex:1}}>
@@ -332,13 +332,6 @@ function ManageRideModal({visible,ride,onClose,onUpdated}){
         time={departureDateTime ? new Date(departureDateTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: false}) : '09:00'}
         onClose={() => setShowDateTimePicker(false)}
         onConfirm={(isoDateTime, timeStr) => setDepartureDateTime(isoDateTime)}
-      />
-      <AddStopMapModal
-        visible={showAddStop}
-        ride={ride}
-        existingStops={rideStops}
-        onClose={() => setShowAddStop(false)}
-        onStopAdded={(name) => { if (!rideStops.includes(name)) setRideStops([...rideStops, name]); }}
       />
     </Modal>
   );
@@ -965,6 +958,8 @@ export default function RideDetailsScreen({ navigation, route }) {
   const [showProfile,setShowProfile]=useState(false);
   const [showManagePax,setShowManagePax]=useState(false);
   const [showManageRide,setShowManageRide]=useState(false);
+  const [showAddStop,setShowAddStop]=useState(false);
+  const [manageRideStops,setManageRideStops]=useState([]);
   const [showCancelRide,setShowCancelRide]=useState(false);
   const [showStopRequests,setShowStopRequests]=useState(false);
   const [hasBooking, setHasBooking] = useState(false);
@@ -1417,6 +1412,16 @@ export default function RideDetailsScreen({ navigation, route }) {
         ride={ride}
         onClose={() => setShowManageRide(false)}
         onUpdated={fetchRide}
+        onOpenAddStop={() => setShowAddStop(true)}
+        externalStops={manageRideStops}
+        setExternalStops={setManageRideStops}
+      />
+      <AddStopMapModal
+        visible={showAddStop}
+        ride={ride}
+        existingStops={manageRideStops}
+        onClose={() => setShowAddStop(false)}
+        onStopAdded={(name) => { if (!manageRideStops.includes(name)) setManageRideStops([...manageRideStops, name]); }}
       />
       <CancelRideModal
         visible={showCancelRide}
