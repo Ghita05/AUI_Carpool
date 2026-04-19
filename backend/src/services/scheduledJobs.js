@@ -51,6 +51,12 @@ const scheduleRideReminders = () => {
       });
 
       for (const ride of rides) {
+        // Only remind rides that have confirmed passengers
+        const confirmedBookings = ride.bookings
+          ? ride.bookings.filter(b => b.status === 'Confirmed')
+          : [];
+        if (confirmedBookings.length === 0) continue;
+
         // Check if reminder already sent (avoid duplicates)
         const existingReminder = await Notification.findOne({
           userId: ride.driverId,
@@ -68,12 +74,7 @@ const scheduleRideReminders = () => {
           type: 'Reminder',
         });
 
-        // Notify all confirmed passengers (embedded bookings)
-        const confirmedBookings = ride.bookings
-          ? ride.bookings.filter(b => b.status === 'Confirmed')
-          : [];
-
-        for (const booking of confirmedBookings) {
+        // Notify all confirmed passengers
           await Notification.create({
             userId: booking.passengerId,
             title: 'Departure Reminder',
@@ -220,6 +221,45 @@ const scheduleLateDriverAutoCancel = () => {
 };
 
 /**
+ * Job 5: Silently dismiss empty rides at departure time
+ * Runs every 5 minutes.
+ *
+ * If a ride's departure time has passed and it has 0 confirmed passengers,
+ * silently cancel it without notifying the driver. This keeps the ride list
+ * clean and avoids bothering drivers about rides nobody joined.
+ */
+const scheduleEmptyRideDismissal = () => {
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const now = new Date();
+      const emptyRides = await Ride.find({
+        type: 'Offer',
+        state: { $in: ['Active'] },
+        departureDateTime: { $lt: now },
+      });
+
+      for (const ride of emptyRides) {
+        const confirmedCount = (ride.bookings || []).filter(b => b.status === 'Confirmed').length;
+        if (confirmedCount > 0) continue; // has passengers — let late-driver job handle it
+
+        await Ride.findByIdAndUpdate(ride._id, {
+          $set: {
+            state: 'Cancelled',
+            cancellationReason: 'Auto-dismissed: no passengers at departure time',
+            cancellationDate: new Date(),
+          },
+        });
+
+        console.log(`[CRON] Silently dismissed empty ride ${ride._id} to ${ride.destination}.`);
+      }
+    } catch (err) {
+      console.error('[CRON] Empty ride dismissal error:', err.message);
+    }
+  });
+  console.log('[CRON] Empty ride dismissal scheduled (every 5min).');
+};
+
+/**
  * Initialize all scheduled jobs
  */
 const initScheduledJobs = () => {
@@ -227,6 +267,7 @@ const initScheduledJobs = () => {
   scheduleRideReminders();
   scheduleOngoingSafetyNet();
   scheduleLateDriverAutoCancel();
+  scheduleEmptyRideDismissal();
 };
 
 module.exports = initScheduledJobs;
