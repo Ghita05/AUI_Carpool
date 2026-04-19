@@ -235,7 +235,14 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
   const distFromDest = haversineDistance(driverLat, driverLng, destLat, destLng);
 
   // ── Check A: Active/Full → OnGoing ────────────────────────────────────────
-  if (['Active', 'Full'].includes(ride.state) && distFromDep >= DEPARTURE_THRESHOLD_M) {
+  // Only allow the transition within 10 minutes of the scheduled departure time.
+  const now = Date.now();
+  const depTime = new Date(ride.departureDateTime).getTime();
+  const EARLY_DEPARTURE_BUFFER_MS = 10 * 60 * 1000; // 10 min before scheduled time
+
+  if (['Active', 'Full'].includes(ride.state)
+      && distFromDep >= DEPARTURE_THRESHOLD_M
+      && now >= depTime - EARLY_DEPARTURE_BUFFER_MS) {
     await Ride.findByIdAndUpdate(rideId, {
       $set: { state: 'OnGoing', ongoingStartedAt: new Date() },
     });
@@ -265,8 +272,6 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
 
   // ── Check C: Departure-window alerts (repeated every ~5min) ────────────────
   if (['Active', 'Full'].includes(ride.state)) {
-    const now           = Date.now();
-    const depTime       = new Date(ride.departureDateTime).getTime();
     const msSinceDepart = now - depTime;
 
     if (msSinceDepart > 0 && msSinceDepart <= LATE_WINDOW_MS) {
