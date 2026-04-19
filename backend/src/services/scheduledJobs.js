@@ -75,6 +75,7 @@ const scheduleRideReminders = () => {
         });
 
         // Notify all confirmed passengers
+        for (const booking of confirmedBookings) {
           await Notification.create({
             userId: booking.passengerId,
             title: 'Departure Reminder',
