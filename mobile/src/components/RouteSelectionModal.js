@@ -4,7 +4,7 @@ import {
   Dimensions, FlatList, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Polyline, Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Polyline, Marker, Callout, PROVIDER_GOOGLE } from '../utils/MapView';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 import { getRouteAlternatives } from '../services/rideService';
@@ -120,7 +120,7 @@ export default function RouteSelectionModal({ visible, origin, destination, stop
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             style={{ marginRight: 14 }}
           >
-            <Ionicons name="arrow-back" size={26} color={Colors.textPrimary} />
+            <Ionicons name="arrow-back" size={26} color={Colors.textWhite} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Choose Route</Text>
         </View>
@@ -250,16 +250,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingVertical: 18,
+    backgroundColor: Colors.primary,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: 'PlusJakartaSans_700Bold',
-    color: Colors.textPrimary,
+    color: Colors.textWhite,
   },
   loadingContainer: {
     flex: 1,

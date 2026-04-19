@@ -61,7 +61,10 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
  * Exported so the HTTP completeRide controller can call it for manual completions.
  */
 async function emitReviewPrompts(io, ride) {
-  const confirmedBookings = (ride.bookings || []).filter(b => b.status === 'Completed' || b.status === 'Confirmed');
+  // Only include attendees: bookings that are Completed/Confirmed AND not marked Absent
+  const confirmedBookings = (ride.bookings || []).filter(
+    b => (b.status === 'Completed' || b.status === 'Confirmed') && b.attendanceStatus !== 'Absent'
+  );
   const memberIds = [
     ride.driverId.toString(),
     ...confirmedBookings.map(b => b.passengerId.toString()),
@@ -70,13 +73,15 @@ async function emitReviewPrompts(io, ride) {
   const participants = await User.find({ _id: { $in: memberIds } })
     .select('firstName lastName role _id');
 
+  const driverId = ride.driverId.toString();
+
   const payload = {
     rideId: ride._id.toString(),
     destination: ride.destination,
     participants: participants.map(u => ({
       userId: u._id.toString(),
       name: `${u.firstName} ${u.lastName}`.trim(),
-      role: u.role,
+      role: u._id.toString() === driverId ? 'Driver' : 'Passenger',
     })),
   };
 
@@ -87,6 +92,7 @@ async function emitReviewPrompts(io, ride) {
       title: 'Ride Complete — Rate Your Experience',
       content: `Your ride to ${ride.destination} is done. Tap to rate your fellow travellers.`,
       type: 'Alert',
+      rideId: ride._id,
     });
   }
 }

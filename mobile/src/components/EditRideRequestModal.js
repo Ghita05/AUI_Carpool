@@ -1,14 +1,13 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Input from './common/Input';
 import { Colors, Spacing, Radius, Typography } from '../theme';
 import DateTimePickerModal from './DateTimePickerModal';
 import RouteSelectionModal from './RouteSelectionModal';
-import { searchUsers, validateStopOnRoute, getRouteAlternatives } from '../services/rideService';
-import { autocompleteLocation } from '../utils/mapsService';
+import { searchUsers } from '../services/rideService';
 
-export default function EditRideRequestModal({ visible, onClose, onSave, request, currentUser, onCancelRequest }) {
+export default function EditRideRequestModal({ visible, onClose, onSave, request, currentUser, onCancelRequest, onOpenAddStop, externalStops, setExternalStops }) {
   const [maxPrice, setMaxPrice] = useState(request?.maxPrice?.toString() || '');
   const [notes, setNotes] = useState(request?.notes || '');
   const [loading, setLoading] = useState(false);
@@ -28,19 +27,13 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
   const [userSearch, setUserSearch] = useState('');
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
-  const [stops, setStops] = useState(request?.stops || []);
-  const [newStop, setNewStop] = useState('');
+  const [stops, setStopsInternal] = useState(request?.stops || []);
+  const rideStops = externalStops || stops;
+  const setRideStops = setExternalStops || setStopsInternal;
 
   // Route state
   const [selectedRoute, setSelectedRoute] = useState(request?.route || null);
   const [showRouteModal, setShowRouteModal] = useState(false);
-  const [validatingStop, setValidatingStop] = useState(false);
-  const [stopValidations, setStopValidations] = useState({});
-
-  // Places autocomplete for stops
-  const [stopSuggestions, setStopSuggestions] = useState([]);
-  const sessionToken = useRef(Math.random().toString(36).substring(2));
-  const debounceTimer = useRef(null);
 
   // Reset modal state when request changes
   React.useEffect(() => {
@@ -52,105 +45,12 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
     setGroupUsers(request?.groupUsers || []);
     setUserSearch('');
     setUserSearchResults([]);
-    setStops(request?.stops || []);
-    setNewStop('');
+    setRideStops(request?.stops || []);
     setSelectedRoute(request?.route || null);
-    setStopValidations({});
-    setStopSuggestions([]);
   }, [request]);
 
-  const refetchRoute = async (currentStops) => {
-    const dep = request?.departureLocation?.trim();
-    const dest = request?.destination?.trim();
-    if (!dep || !dest) return;
-    try {
-      const res = await getRouteAlternatives(dep, dest, currentStops);
-      const fetched = res.data?.routes || res.routes || [];
-      if (fetched.length > 0) {
-        setSelectedRoute(fetched[0]);
-      } else {
-        setSelectedRoute(null);
-      }
-    } catch {
-      setSelectedRoute(null);
-    }
-  };
-
-  const handleStopInputChange = useCallback((text) => {
-    setNewStop(text);
-    clearTimeout(debounceTimer.current);
-    if (text.trim().length < 2) {
-      setStopSuggestions([]);
-      return;
-    }
-    debounceTimer.current = setTimeout(async () => {
-      const results = await autocompleteLocation(text, sessionToken.current);
-      setStopSuggestions(results);
-    }, 300);
-  }, []);
-
-  const addAndValidateStop = async (stopName) => {
-    const updatedStops = [...stops, stopName];
-    setStops(updatedStops);
-    setSelectedRoute(null);
-
-    const dep = request?.departureLocation?.trim();
-    const dest = request?.destination?.trim();
-    if (!dep || !dest) return;
-
-    setValidatingStop(true);
-    try {
-      const res = await validateStopOnRoute(dep, dest, stopName);
-      const validation = res.data || res;
-      setStopValidations(prev => ({ ...prev, [stopName]: validation }));
-
-      if (validation.onRoute) {
-        await refetchRoute(updatedStops);
-        Alert.alert('Route updated', `Route adjusted to include "${stopName}".`);
-      } else {
-        Alert.alert(
-          'Stop off route',
-          `"${stopName}" adds ${validation.deviationKM} km detour. The route will be adjusted, but the ride will be longer.`,
-          [
-            { text: 'Keep & update route', onPress: async () => {
-              await refetchRoute(updatedStops);
-            }},
-            { text: 'Remove', style: 'destructive', onPress: () => {
-              setStops(prev => prev.filter(s => s !== stopName));
-              setStopValidations(prev => { const copy = {...prev}; delete copy[stopName]; return copy; });
-              refetchRoute(updatedStops.filter(s => s !== stopName));
-            }},
-          ]
-        );
-      }
-    } catch (e) {
-      console.warn('Stop validation failed:', e.message);
-      await refetchRoute(updatedStops);
-    } finally {
-      setValidatingStop(false);
-    }
-  };
-
-  const handleStopSelect = (suggestion) => {
-    const value = suggestion.mainText;
-    const trimmed = value.trim();
-    if (trimmed && !stops.includes(trimmed)) {
-      setNewStop('');
-      setStopSuggestions([]);
-      addAndValidateStop(trimmed);
-    } else {
-      setNewStop('');
-      setStopSuggestions([]);
-    }
-    sessionToken.current = Math.random().toString(36).substring(2);
-  };
-
   const handleRemoveStop = (index) => {
-    const removed = stops[index];
-    const updatedStops = stops.filter((_, i) => i !== index);
-    setStops(updatedStops);
-    setStopValidations(prev => { const copy = {...prev}; delete copy[removed]; return copy; });
-    refetchRoute(updatedStops);
+    setRideStops(rideStops.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
@@ -158,7 +58,7 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
     const payload = {
       maxPrice: Number(maxPrice),
       notes,
-      stops,
+      stops: rideStops,
     };
     // Include route if updated
     if (selectedRoute) {
@@ -275,55 +175,33 @@ export default function EditRideRequestModal({ visible, onClose, onSave, request
             <Text style={{ color: Colors.textSecondary, fontSize: 13, marginBottom: 8 }}>To add group members, this must be a group request (more than 1 member).</Text>
           )}
 
-          {/* Stops Section with Google Places Autocomplete */}
+          {/* Stops Section — map-based stop management */}
           <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.md, marginBottom: 6, color: Colors.textPrimary }}>Stops (Optional)</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: stopSuggestions.length ? 0 : (stops.length ? 8 : 0) }}>
-            <TextInput
-              style={{ flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, padding: 8, fontSize: 15, color: Colors.textPrimary }}
-              value={newStop}
-              onChangeText={handleStopInputChange}
-              placeholder="Search for a stop along the way"
-              placeholderTextColor={Colors.textDisabled}
-            />
-            {validatingStop && <ActivityIndicator size="small" color={Colors.primary} style={{ marginLeft: 4 }} />}
-          </View>
-          {stopSuggestions.length > 0 && (
-            <View style={{ backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 8, marginBottom: 8, maxHeight: 150 }}>
-              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                {stopSuggestions.map((s, i) => (
-                  <TouchableOpacity
-                    key={s.placeId || i}
-                    style={{ padding: 10, borderBottomWidth: i < stopSuggestions.length - 1 ? 1 : 0, borderBottomColor: Colors.border }}
-                    onPress={() => handleStopSelect(s)}
-                  >
-                    <Text style={{ fontSize: 14, color: Colors.textPrimary, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s.mainText}</Text>
-                    <Text style={{ fontSize: 12, color: Colors.textSecondary }}>{s.secondaryText}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+          {request?.route ? (
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.primaryBg, borderRadius: Radius.md, padding: Spacing.md, borderWidth: 1, borderColor: 'rgba(27,94,32,0.15)', marginBottom: rideStops.length ? 8 : 12 }}
+              onPress={() => { if (onOpenAddStop) onOpenAddStop(); }}
+            >
+              <Ionicons name="map-outline" size={20} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.primary }}>Add Stop on Route</Text>
+                <Text style={{ fontSize: 11, color: Colors.textSecondary }}>Search & validate stops on the map</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={{ color: Colors.textSecondary, fontSize: 13, marginBottom: 8 }}>Choose a route first to add stops on the map.</Text>
           )}
-          {stops.length > 0 && (
+          {rideStops.length > 0 && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-              {stops.map((s, i) => {
-                const v = stopValidations[s];
-                return (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
-                    {v && (
-                      <Ionicons
-                        name={v.onRoute ? 'checkmark-circle' : 'warning'}
-                        size={13}
-                        color={v.onRoute ? '#059669' : '#EA580C'}
-                        style={{ marginRight: 4 }}
-                      />
-                    )}
-                    <Text style={{ color: Colors.primary, fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s}</Text>
-                    <TouchableOpacity onPress={() => handleRemoveStop(i)} style={{ marginLeft: 6 }}>
-                      <Ionicons name="close-circle" size={14} color={Colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+              {rideStops.map((s, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
+                  <Text style={{ color: Colors.primary, fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{s}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveStop(i)} style={{ marginLeft: 6 }}>
+                    <Ionicons name="close-circle" size={14} color={Colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
 

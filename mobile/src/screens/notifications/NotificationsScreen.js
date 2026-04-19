@@ -59,6 +59,10 @@ export default function NotificationsScreen({ navigation }) {
         setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, readStatus: true } : n));
       } catch {}
     }
+    // Navigate to ride review screen if this is a review notification with a rideId
+    if (item.rideId && item.title?.includes('Rate')) {
+      navigation.navigate('RideDetails', { rideId: item.rideId, showReview: true });
+    }
   };
 
   // Group notifications by type for display

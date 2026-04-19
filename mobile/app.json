@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
-    "privacy":"public",
+    "name": "AUI Carpool",
+    "slug": "aui-carpool",
+    "privacy": "public",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,37 +10,40 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1B5E20"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ghita123.auicarpool"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1B5E20",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.ghita123.mobile"
+      "package": "com.ghita123.auicarpool"
     },
     "web": {
+      "name": "AUI Carpool",
+      "shortName": "AUI Carpool",
+      "description": "A Peer-to-Peer Ride-Sharing Platform",
+      "themeColor": "#1B5E20",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "d5e11e2c-2d9f-4526-b62e-47a3161304e7"
-      }
-    },
-    "owner": "ghita123",
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/d5e11e2c-2d9f-4526-b62e-47a3161304e7"
-    }
+    "assetBundlePatterns": [
+      "**/*",
+      "assets/fonts/*"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6f3bae35-3fa1-4485-a677-4be999809abc"
+      }
+    },
+    "owner": "ghita05"
   }
 }

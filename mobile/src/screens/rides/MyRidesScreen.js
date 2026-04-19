@@ -12,6 +12,7 @@ import { getCurrentBookings, getBookingHistory } from '../../services/bookingSer
 import CancelBookingModal from '../../components/CancelBookingModal';
 import { getMyRideRequests, modifyRideRequest, deleteRideRequest, leaveGroupRideRequest, transferGroupOwner, getUsersByIds, cancelGroupRideRequest } from '../../services/rideService';
 import EditRideRequestModal from '../../components/EditRideRequestModal';
+import AddStopMapModal from '../../components/AddStopMapModal';
 import PostRideReviewModal from '../../components/PostRideReviewModal';
 
 // Data fetched from API — see useEffect below
@@ -264,6 +265,8 @@ export default function MyRidesScreen({ navigation }) {
   const [pastRequests, setPastRequests] = useState([]);
   const [editingRequest, setEditingRequest] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
+  const [showAddStop, setShowAddStop] = useState(false);
+  const [editRequestStops, setEditRequestStops] = useState([]);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [ownerTransferRequest, setOwnerTransferRequest] = useState(null);
   const [ownerCandidates, setOwnerCandidates] = useState([]);
@@ -334,6 +337,7 @@ export default function MyRidesScreen({ navigation }) {
       if (request.passenger && !groupUsers.some(u => u && u._id === request.passenger._id)) {
         groupUsers = [request.passenger, ...groupUsers];
       }
+      setEditRequestStops(request.stops || []);
       setEditingRequest({ ...request, groupUsers });
     } else {
       alert('Only the group owner can edit this request.');
@@ -541,6 +545,16 @@ export default function MyRidesScreen({ navigation }) {
         onSave={handleSaveEdit}
         currentUser={user}
         onCancelRequest={handleSimpleCancelRequest}
+        onOpenAddStop={() => setShowAddStop(true)}
+        externalStops={editRequestStops}
+        setExternalStops={setEditRequestStops}
+      />
+      <AddStopMapModal
+        visible={showAddStop}
+        ride={editingRequest}
+        existingStops={editRequestStops}
+        onClose={() => setShowAddStop(false)}
+        onStopAdded={(name) => { if (!editRequestStops.includes(name)) setEditRequestStops([...editRequestStops, name]); }}
       />
 
       <Modal visible={showOwnerModal} transparent animationType="fade">

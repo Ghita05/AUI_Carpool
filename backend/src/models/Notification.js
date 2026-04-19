@@ -25,6 +25,11 @@ const notificationSchema = new mongoose.Schema(
       },
       required: true,
     },
+    rideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ride',
+      default: null,
+    },
     date: {
       type: Date,
       default: Date.now,

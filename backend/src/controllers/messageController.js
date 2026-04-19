@@ -191,16 +191,20 @@ const getChannels = async (req, res, next) => {
 
     // Build channel info for each
     const channels = await Promise.all(groupRideIds.map(async (rideId) => {
-      const ride = await Ride.findById(rideId).select('destination driverId bookings');
+      const ride = await Ride.findById(rideId).select('departureLocation destination departureDateTime driverId bookings');
       const confirmedBookings = (ride.bookings || []).filter(b => b.status === 'Confirmed');
       const memberIds = [ride.driverId, ...confirmedBookings.map(b => b.passengerId)];
       const members = await User.find({ _id: { $in: memberIds } }).select('firstName lastName profilePicture');
       const lastMsg = await Message.findOne({ groupRideId: rideId })
         .sort({ date: -1 })
         .populate('senderId', 'firstName lastName');
+      const datePart = ride.departureDateTime
+        ? new Date(ride.departureDateTime).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' })
+        : '';
+      const channelName = [ride.departureLocation, ride.destination, datePart].filter(Boolean).join(' - ');
       return {
         _id: rideId.toString(),
-        name: ride.destination,
+        name: channelName,
         rideId,
         members,
         lastMessage: lastMsg?.content || '',
