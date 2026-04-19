@@ -41,7 +41,7 @@ const postRideOffer = async (req, res, next) => {
     const now = new Date();
     const depTime = new Date(departureDateTime);
     if (depTime <= now) return error(res, 400, 'Departure time cannot be in the past.');
-    if (depTime - now < 60 * 60 * 1000) return error(res, 400, 'Departure time must be at least 1 hour from now.');
+    if (depTime - now < 30 * 60 * 1000) return error(res, 400, 'Departure time must be at least 30 minutes from now.');
 
     let routeData = null;
     if (selectedRoute && selectedRoute.polyline) {
@@ -111,7 +111,7 @@ const modifyRide = async (req, res, next) => {
       const oldTime = new Date(ride.departureDateTime);
       if ((ride.timeChangeCount || 0) >= 10) return error(res, 400, 'Maximum time changes (10) reached for this ride.');
       if (newTime <= now) return error(res, 400, 'Departure time cannot be in the past.');
-      if (newTime - now < 60 * 60 * 1000) return error(res, 400, 'Departure time must be at least 1 hour from now.');
+      if (newTime - now < 30 * 60 * 1000) return error(res, 400, 'Departure time must be at least 30 minutes from now.');
       if (Math.abs(newTime - oldTime) > 24 * 60 * 60 * 1000) return error(res, 400, 'Time can only be changed within ±24 hours of the original departure time.');
     }
 

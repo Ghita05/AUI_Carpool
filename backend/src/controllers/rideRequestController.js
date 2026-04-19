@@ -194,15 +194,15 @@ const postRideRequest = async (req, res, next) => {
       passengerCount, maxPrice, notes, groupPassengerIds, stops, selectedRoute
     } = req.body;
 
-    // Validate travel time is in the future (at least 1 hour from now)
+    // Validate travel time is in the future (at least 30 minutes from now)
     const now = new Date();
     const travelTime = new Date(travelDateTime);
-    const minTimeFromNow = 60 * 60 * 1000; // 1 hour
+    const minTimeFromNow = 30 * 60 * 1000; // 30 minutes
     if (travelTime <= now) {
       return error(res, 400, 'Travel time cannot be in the past.');
     }
     if (travelTime - now < minTimeFromNow) {
-      return error(res, 400, 'Travel time must be at least 1 hour from now.');
+      return error(res, 400, 'Travel time must be at least 30 minutes from now.');
     }
 
     // If groupPassengerIds is present and is an array, treat as group request
@@ -389,13 +389,13 @@ const modifyRideRequest = async (req, res, next) => {
     if (req.body.travelDateTime) {
       const now = new Date();
       const newTime = new Date(req.body.travelDateTime);
-      const minTimeFromNow = 60 * 60 * 1000;
+      const minTimeFromNow = 30 * 60 * 1000;
 
       if (newTime <= now) {
         return error(res, 400, 'Travel time cannot be in the past.');
       }
       if (newTime - now < minTimeFromNow) {
-        return error(res, 400, 'Travel time must be at least 1 hour from now.');
+        return error(res, 400, 'Travel time must be at least 30 minutes from now.');
       }
     }
 
