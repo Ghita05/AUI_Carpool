@@ -368,21 +368,13 @@ export default function UserProfileScreen({ navigation, route }) {
                       <Text style={s.routeFrom} numberOfLines={1}>
                         {r.from?.split(',')[0]} → {r.to?.split(',')[0]}
                       </Text>
-                      <Text style={s.routeMeta}>{r.count} ride{r.count !== 1 ? 's' : ''} · avg {r.avgPrice} MAD</Text>
+                      <Text style={s.routeMeta}>{r.count} ride{r.count !== 1 ? 's' : ''}</Text>
                     </View>
                     <View style={s.routeBadge}>
                       <Text style={s.routeBadgeText}>#{i + 1}</Text>
                     </View>
                   </View>
                 ))}
-                {analytics.totalEarned > 0 && (
-                  <View style={s.earningsBanner}>
-                    <Ionicons name="cash-outline" size={14} color={Colors.primary} />
-                    <Text style={s.earningsText}>
-                      {analytics.totalPassengers} passengers · {analytics.totalEarned} MAD earned
-                    </Text>
-                  </View>
-                )}
               </>
             ) : (
               <Text style={s.emptySub}>No completed rides yet.</Text>
@@ -551,12 +543,6 @@ const s = StyleSheet.create({
     paddingVertical: 3, paddingHorizontal: 8, marginLeft: Spacing.sm,
   },
   routeBadgeText: { fontSize: Typography.xs, color: Colors.primary, fontFamily: 'PlusJakartaSans_700Bold' },
-  earningsBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: Spacing.sm, backgroundColor: Colors.primaryBg,
-    borderRadius: Radius.md, padding: Spacing.sm,
-  },
-  earningsText: { fontSize: Typography.xs, color: Colors.primary, fontFamily: 'PlusJakartaSans_600SemiBold' },
 
   roleFilterRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
   roleChip: {
