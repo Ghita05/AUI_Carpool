@@ -105,7 +105,7 @@ async function emitReviewPrompts(io, ride) {
  */
 async function autoMarkAttendance(io, rideId, passengerId, passengerLat, passengerLng) {
   let ride;
-  try { ride = await Ride.findById(rideId); } catch { return; }
+  try { ride = await Ride.findById(rideId).populate('route'); } catch { return; }
   if (!ride || ride.type !== 'Offer') return;
   if (!['Active', 'Full', 'OnGoing'].includes(ride.state)) return;
 
@@ -217,7 +217,7 @@ async function cancelAbsentPassengers(io, rideId) {
 async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
   let ride;
   try {
-    ride = await Ride.findById(rideId);
+    ride = await Ride.findById(rideId).populate('route');
   } catch {
     return;
   }

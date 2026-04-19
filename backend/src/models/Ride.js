@@ -1,18 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-// ── Route sub-document ────────────────────────────────────────────────────
-const routeSchema = new Schema({
-  originLatitude:       { type: Number },
-  originLongitude:      { type: Number },
-  destinationLatitude:  { type: Number },
-  destinationLongitude: { type: Number },
-  distanceKM:           { type: Number },
-  durationMinutes:      { type: Number },
-  polyline:             { type: String, default: null },
-  summary:              { type: String, default: null },
-}, { _id: false });
-
 // ── Booking sub-document (embedded in Offer documents) ───────────────────
 const bookingSubSchema = new Schema({
   passengerId:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -93,11 +81,11 @@ const rideSchema = new Schema({
   totalSeats:      { type: Number, min: 1, default: null },
   availableSeats:  { type: Number, min: 0, default: null },
   timeChangeCount: { type: Number, default: 0 },
-  route:           { type: routeSchema, default: null },
+  route:           { type: Schema.Types.ObjectId, ref: 'Route', default: null },
   bookings:        { type: [bookingSubSchema], default: [] },
 
   // ── Stops (used by both Offer and Request) ────────────────────────────
-  stops:             { type: [String], default: [] },
+  stops:             [{ type: Schema.Types.ObjectId, ref: 'Location' }],
 
   // ── Request-only fields ───────────────────────────────────────────────
   passengerId:       { type: Schema.Types.ObjectId, ref: 'User', default: null },
@@ -131,5 +119,32 @@ rideSchema.index({ destination: 'text', departureLocation: 'text' });
 
 rideSchema.index({ pricePerSeat: 1 });
 rideSchema.index({ availableSeats: -1 });
+
+// ── toJSON transform ──────────────────────────────────────────────────────
+// When populated stops (Location docs) are serialised, flatten them to
+// plain string names so the mobile app keeps working without changes.
+rideSchema.set('toJSON', {
+  virtuals: true,
+  transform(_doc, ret) {
+    if (Array.isArray(ret.stops)) {
+      ret.stops = ret.stops.map(s =>
+        (s && typeof s === 'object' && s.name) ? s.name : s
+      );
+    }
+    return ret;
+  },
+});
+
+rideSchema.set('toObject', {
+  virtuals: true,
+  transform(_doc, ret) {
+    if (Array.isArray(ret.stops)) {
+      ret.stops = ret.stops.map(s =>
+        (s && typeof s === 'object' && s.name) ? s.name : s
+      );
+    }
+    return ret;
+  },
+});
 
 module.exports = mongoose.model('Ride', rideSchema);

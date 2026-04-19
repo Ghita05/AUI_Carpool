@@ -4,5 +4,7 @@ const Vehicle      = require('./Vehicle');
 const Review       = require('./Review');
 const Notification = require('./Notification');
 const Message      = require('./Message');
+const Route        = require('./Route');
+const Location     = require('./Location');
 
-module.exports = { Ride, User, Vehicle, Review, Notification, Message };
+module.exports = { Ride, User, Vehicle, Review, Notification, Message, Route, Location };

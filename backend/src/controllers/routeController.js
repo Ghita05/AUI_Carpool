@@ -36,7 +36,7 @@ const getRouteForRide = async (req, res, next) => {
     const ride = await Ride.findOne(
       { _id: req.params.rideId, type: 'Offer' },
       { route: 1, departureLocation: 1, destination: 1 }
-    );
+    ).populate('route');
     if (!ride) return error(res, 404, 'Ride not found.');
     return success(res, 200, 'Route retrieved.', { route: ride.route });
   } catch (err) { next(err); }

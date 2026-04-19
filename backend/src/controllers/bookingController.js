@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Ride, Notification, User, Message, Review } = require('../models');
+const { Ride, Notification, User, Message, Review, Route } = require('../models');
 const { success, error } = require('../utils/responses');
 const { isStopOnRoute, getDirections } = require('../utils/maps');
 
@@ -343,6 +343,8 @@ const getCurrentBookings = async (req, res, next) => {
     })
       .populate('driverId', 'firstName lastName averageRating profilePicture')
       .populate('vehicleId', 'brand model color sizeCategory')
+      .populate('route')
+      .populate('stops')
       .sort({ departureDateTime: -1 });
 
     // Map each ride to its matching booking sub-document(s)
@@ -377,6 +379,8 @@ const getBookingHistory = async (req, res, next) => {
     })
       .populate('driverId', 'firstName lastName')
       .populate('vehicleId', 'brand model')
+      .populate('route')
+      .populate('stops')
       .sort({ departureDateTime: -1 });
 
     // Check which rides the user has already reviewed
@@ -486,13 +490,13 @@ const respondToStopRequest = async (req, res, next) => {
           stops.push(booking.requestedStop);
         }
         const directions = await getDirections(ride.departureLocation, ride.destination, stops);
-        await Ride.findByIdAndUpdate(ride._id, {
-          $set: {
-            'route.distanceKM': directions.distanceKM,
-            'route.durationMinutes': directions.durationMinutes,
-            'route.polyline': directions.polyline,
-          },
-        });
+        if (ride.route) {
+          await Route.findByIdAndUpdate(ride.route, {
+            distanceKM: directions.distanceKM,
+            durationMinutes: directions.durationMinutes,
+            polyline: directions.polyline,
+          });
+        }
       } catch (mapsErr) {
         console.warn('[respondToStopRequest] Route recalculation failed, keeping existing route:', mapsErr.message);
       }
