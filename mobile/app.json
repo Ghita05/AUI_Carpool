@@ -5,10 +5,10 @@
     "privacy": "public",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/image.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/image.png",
       "resizeMode": "contain",
       "backgroundColor": "#1B5E20"
     },
@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#1B5E20",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "foregroundImage": "./assets/image.png"
       },
       "package": "com.ghita123.auicarpool"
     },
@@ -30,7 +30,7 @@
       "themeColor": "#1B5E20",
       "backgroundColor": "#ffffff",
       "display": "standalone",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/image.png"
     },
     "runtimeVersion": {
       "policy": "appVersion"
