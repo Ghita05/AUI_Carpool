@@ -375,6 +375,10 @@ const getBookingHistory = async (req, res, next) => {
     const rides = await Ride.find({
       type: 'Offer',
       'bookings.passengerId': req.user._id,
+      $or: [
+        { state: { $in: ['Completed', 'Cancelled'] } },
+        { 'bookings': { $elemMatch: { passengerId: req.user._id, status: 'Cancelled' } } },
+      ],
     })
       .populate('driverId', 'firstName lastName')
       .populate('vehicleId', 'brand model')
