@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, FlatList, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 
@@ -260,7 +260,7 @@ export default function DateTimePickerModal({ visible, date, time, mode = 'datet
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollContent} bounces={false}>
+          <View style={[styles.scrollContent, { flex: 1 }]}>
             {showDate && <DatePicker date={selectedDate} onDateChange={setSelectedDate} minDate={minDate} />}
             {showTime && (
               <>
@@ -268,7 +268,7 @@ export default function DateTimePickerModal({ visible, date, time, mode = 'datet
                 <TimePicker time={selectedTime} onTimeChange={setSelectedTime} />
               </>
             )}
-          </ScrollView>
+          </View>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>

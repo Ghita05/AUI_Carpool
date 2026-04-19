@@ -37,7 +37,7 @@ import PostRideReviewModal from '../components/PostRideReviewModal';
 
 // Must match the backend BASE_URL — imported from api.js indirectly but
 // duplicated here to keep the socket client independent of the Axios instance.
-const SOCKET_URL = 'http://10.126.130.29:5001';
+const SOCKET_URL = 'https://auicarpool-production-46f2.up.railway.app';
 
 const AuthContext = createContext(null);
 
@@ -181,6 +181,7 @@ export function AuthProvider({ children }) {
         rideId={reviewModal.rideId}
         destination={reviewModal.destination}
         participants={reviewModal.participants}
+        userId={user?._id?.toString()}
         onDone={() => setReviewModal(prev => ({ ...prev, visible: false }))}
       />
     </AuthContext.Provider>

@@ -31,11 +31,11 @@ import React, { useState, useCallback } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, ScrollView, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 import { writeReview } from '../services/reviewService';
-import { useAuth } from '../context/AuthContext';
 
 // ── Star rating widget ────────────────────────────────────────────────────────
 function StarPicker({ value, onChange, size = 36 }) {
@@ -72,11 +72,9 @@ function Avatar({ name, size = 64 }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function PostRideReviewModal({ visible, rideId, destination, participants, onDone }) {
-  const { user } = useAuth();
-
+export default function PostRideReviewModal({ visible, rideId, destination, participants, userId, onDone }) {
   // Filter out the current user from the list of people to rate
-  const toRate = (participants || []).filter(p => p.userId !== user?._id?.toString());
+  const toRate = (participants || []).filter(p => p.userId !== userId);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [rating, setRating]         = useState(0);
@@ -136,7 +134,10 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDone}>
-      <View style={s.overlay}>
+      <KeyboardAvoidingView
+        style={s.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={s.sheet}>
           {/* Header */}
           <View style={s.header}>
@@ -206,7 +207,7 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
