@@ -144,7 +144,7 @@ function FilterModal({ visible, onClose, onApply }) {
     driverDebounce.current = setTimeout(async () => {
       setDriverLoading(true);
       try {
-        const res = await searchUsers(txt);
+        const res = await searchUsers(txt, { driversOnly: true });
         setDriverResults(res.users || []);
       } catch { setDriverResults([]); }
       setDriverLoading(false);

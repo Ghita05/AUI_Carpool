@@ -27,8 +27,10 @@ export const transferGroupOwner = async (requestId, newOwnerId) => {
 // ═══════════════════════════════════════════
 // USER SEARCH (for group ride requests)
 // ═══════════════════════════════════════════
-export const searchUsers = async (query) => {
-  const { data } = await api.get('/rides/users/search', { params: { q: query } });
+export const searchUsers = async (query, { driversOnly } = {}) => {
+  const params = { q: query };
+  if (driversOnly) params.driversOnly = 'true';
+  const { data } = await api.get('/rides/users/search', { params });
   return data;
 };
 import api from './api';

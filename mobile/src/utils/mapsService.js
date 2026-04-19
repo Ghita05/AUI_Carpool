@@ -133,3 +133,43 @@ export async function geocodePlace(placeId, sessionToken = '') {
     return null;
   }
 }
+
+/**
+ * geocodeAddress
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Converts an address string into lat/lng coordinates using the Geocoding API.
+ * Used when we only have a place name (e.g. stops stored as strings) and need
+ * to plot it on the map.
+ *
+ * @param {string} address
+ * @returns {Promise<{ lat: number, lng: number, formattedAddress: string } | null>}
+ */
+export async function geocodeAddress(address) {
+  if (!address || !MAPS_KEY) return null;
+
+  const url =
+    `https://maps.googleapis.com/maps/api/geocode/json` +
+    `?address=${encodeURIComponent(address)}` +
+    `&components=country:MA` +
+    `&key=${MAPS_KEY}`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results?.length) {
+      console.warn('[mapsService] geocodeAddress status:', data.status);
+      return null;
+    }
+
+    const loc = data.results[0].geometry.location;
+    return {
+      lat: loc.lat,
+      lng: loc.lng,
+      formattedAddress: data.results[0].formatted_address,
+    };
+  } catch (err) {
+    console.warn('[mapsService] geocodeAddress fetch failed:', err.message);
+    return null;
+  }
+}

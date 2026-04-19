@@ -29,12 +29,13 @@ router.put('/requests/:requestId/leave', authenticate, rideRequest.leaveRideRequ
 // ═══════════════════════════════════════════
 // USER SEARCH (for group ride requests)
 // ═══════════════════════════════════════════
+const Ride = require('../models/Ride');
 router.get('/users/search', authenticate, async (req, res) => {
   try {
-    const { q } = req.query;
+    const { q, driversOnly } = req.query;
     if (!q || q.length < 2) return res.json({ users: [] });
     const regex = new RegExp(q, 'i');
-    const users = await User.find({
+    const filter = {
       $or: [
         { firstName: regex },
         { lastName: regex },
@@ -42,7 +43,12 @@ router.get('/users/search', authenticate, async (req, res) => {
         { auiId: regex },
       ],
       accountStatus: 'Active',
-    })
+    };
+    if (driversOnly === 'true') {
+      const driverIds = await Ride.distinct('driverId', { type: 'Offer' });
+      filter._id = { $in: driverIds };
+    }
+    const users = await User.find(filter)
       .limit(10)
       .select('firstName lastName email auiId profilePicture _id');
     res.json({ users });
