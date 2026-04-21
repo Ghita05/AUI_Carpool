@@ -396,17 +396,14 @@ const getAvailableRides = async (req, res, next) => {
       Ride.find(
         { type: 'Offer', state: 'Completed', 'bookings.passengerId': req.user._id },
         {
-          destination:       1,
-          departureLocation: 1,
           departureDateTime: 1,
-          pricePerSeat:      1,
-          driverId:          1,
-          route:             1,
-          'bookings.passengerId':       1,
-          'bookings.status':            1,
+          pricePerSeat:1,
+          driverId:1,
+          stops:1,
+          'bookings.passengerId':1,
+          'bookings.status':1,
         }
-      ).populate('route', 'originLatitude originLongitude destinationLatitude destinationLongitude')
-       .limit(50),
+      ).limit(50),
     ]);
 
     let scored = scoreRides(rides, userHistory, req.user);

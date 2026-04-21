@@ -592,7 +592,7 @@ const getMyRideRequests = async (req, res, next) => {
         { passengerId: req.user._id },
         { groupPassengerIds: { $in: [req.user._id] } },
       ],
-    }).populate('route').sort({ createdAt: -1 });
+    }).populate('route').populate('acceptedRideId', 'driverId').sort({ createdAt: -1 });
     return success(res, 200, `${requests.length} request(s).`, { requests });
   } catch (err) {
     next(err);
