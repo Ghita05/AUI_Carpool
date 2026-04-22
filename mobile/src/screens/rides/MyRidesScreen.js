@@ -28,6 +28,7 @@ const STATUS_STYLES = {
   completed:   { bg: Colors.background,  text: Colors.textSecondary,  label: 'Completed' },
   cancelled:   { bg: '#FEF2F2',          text: Colors.error,          label: 'Cancelled' },
   expired:     { bg: '#FEF2F2',          text: Colors.error,          label: 'Expired' },
+  dismissed:   { bg: '#F3F4F6',          text: '#6B7280',             label: 'Dismissed' },
 };
 
 function StatusBadge({ status }) {
@@ -197,7 +198,7 @@ function DriverRideCard({ ride, navigation, onRate }) {
   );
 }
 
-function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
+function RideRequestCard({ request, currentUser, onEdit, onCancel, onRate, isPast }) {
   // Always show Cancel for owner
   const userIsOwner = currentUser && (
     (request.passengerId && request.passengerId === currentUser._id) ||
@@ -218,7 +219,13 @@ function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
             <Text style={styles.routeCity}>{request.destination}</Text>
           </View>
         </View>
-        <StatusBadge status={request.state} />
+        <StatusBadge status={
+          isPast && request.state === 'Open' && new Date(request.departureDateTime) < new Date()
+            ? 'expired'
+            : isPast && request.state === 'Accepted' && new Date(request.departureDateTime) < new Date()
+            ? 'expired'
+            : request.state
+        } />
       </View>
       <View style={styles.metaRow}>
         <View style={styles.metaItem}>
@@ -236,7 +243,7 @@ function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
       </View>
       <View style={styles.cardBottom}>
         <Text style={styles.driverName}>Requested for {request.passengerCount} {request.passengerCount > 1 ? 'people' : 'person'}</Text>
-        {userIsOwner && (
+        {userIsOwner && !isPast && (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => onEdit?.(request)}>
               <Ionicons name="create-outline" size={14} color={Colors.primary} />
@@ -247,6 +254,12 @@ function RideRequestCard({ request, currentUser, onEdit, onCancel }) {
               <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        )}
+        {isPast && request.state === 'Completed' && onRate && (
+          <TouchableOpacity style={styles.actionBtn} onPress={() => onRate(request)}>
+            <Ionicons name="star-outline" size={14} color={Colors.accent} />
+            <Text style={[styles.actionBtnText, { color: Colors.accent }]}>Rate</Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -320,6 +333,36 @@ export default function MyRidesScreen({ navigation }) {
           })),
         });
       }
+    }
+  };
+  // Rate a completed ride request (rate the driver of the accepted ride)
+  const handleRateRequest = async (request) => {
+    if (request.state !== 'Completed' || !request.acceptedRideId) return;
+    const acceptedRide = request.acceptedRideId;
+    const driverId = typeof acceptedRide === 'object' ? acceptedRide.driverId : acceptedRide;
+    if (!driverId) return;
+    try {
+      const res = await getUsersByIds([driverId]);
+      const driver = (res.users || [])[0];
+      setReviewTarget({
+        rideId: typeof acceptedRide === 'object' ? acceptedRide._id : acceptedRide,
+        destination: request.destination || 'destination',
+        participants: [{
+          userId: driver?._id || driverId.toString(),
+          name: driver ? `${driver.firstName} ${driver.lastName || ''}`.trim() : 'Driver',
+          role: 'Driver',
+        }],
+      });
+    } catch {
+      setReviewTarget({
+        rideId: typeof acceptedRide === 'object' ? acceptedRide._id : acceptedRide,
+        destination: request.destination || 'destination',
+        participants: [{
+          userId: driverId.toString(),
+          name: 'Driver',
+          role: 'Driver',
+        }],
+      });
     }
   };
   // Edit ride request handler: open modal
@@ -452,7 +495,9 @@ export default function MyRidesScreen({ navigation }) {
             cost: b.price,
             driver: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}` : '',
             driverInitials: driver.firstName ? (driver.firstName[0] + (driver.lastName ? driver.lastName[0] : '')).toUpperCase() : '',
-            driverRating: driver.rating || '',
+            driverRating: driver.averageRating || driver.rating || '',
+            driverId: driver._id,
+            driverName: driver.firstName ? `${driver.firstName} ${driver.lastName || ''}`.trim() : '',
             rated: b.rated,
             status: b.status,
             _booking: b,
@@ -463,22 +508,23 @@ export default function MyRidesScreen({ navigation }) {
         // Ride requests
         const now = new Date();
         const requests = requestsRes.data?.requests || [];
-        // Upcoming requests: status 'Open' and future date
+        // Upcoming requests: Open with future date, or Accepted with future date
         const upcomingRequests = requests.filter(r => {
           const travelDate = new Date(r.departureDateTime);
-          return r.state === 'Open' && travelDate >= now;
+          return (r.state === 'Open' || r.state === 'Accepted') && travelDate >= now;
         });
-        // Past/expired requests: all others
+        // Past requests: Completed, Cancelled, Expired, or Open/Accepted with past date
         const expiredRequests = requests.filter(r => {
           const travelDate = new Date(r.departureDateTime);
-          return r.state !== 'Open' || travelDate < now;
+          if (['Completed', 'Cancelled', 'Expired'].includes(r.state)) return true;
+          return (r.state === 'Open' || r.state === 'Accepted') && travelDate < now;
         });
         setPendingRequests(upcomingRequests);
         setPastRequests(expiredRequests);
 
         if (tab === 'upcoming') {
           // Show bookings with status 'Confirmed' and future ride date
-          setData(bookings.filter(b => b.status === 'Confirmed' && new Date(b.date.split('/').reverse().join('-')) >= now));
+          setData(bookings.filter(b => b.status === 'Confirmed' && new Date(b._ride?.departureDateTime) >= now));
         } else {
           // For past tab, fetch booking history
           const historyRes = await getBookingHistory();
@@ -502,8 +548,7 @@ export default function MyRidesScreen({ navigation }) {
               status: b.status,
             };
           });
-          // Show bookings with status 'Completed' or 'Cancelled', or past ride date
-          setData(pastBookings.filter(b => b.status === 'Completed' || b.status === 'Cancelled' || new Date(b.date.split('/').reverse().join('-')) < now));
+          setData(pastBookings);
         }
       } else {
         // Driver view
@@ -539,7 +584,7 @@ export default function MyRidesScreen({ navigation }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
       <EditRideRequestModal
-        visible={!!editingRequest}
+        visible={!!editingRequest && !showAddStop}
         request={editingRequest}
         onClose={() => setEditingRequest(null)}
         onSave={handleSaveEdit}
@@ -704,7 +749,7 @@ export default function MyRidesScreen({ navigation }) {
                 )}
                 {pendingRequests.length > 0 && (
                   <View style={{ marginBottom: Spacing.lg }}>
-                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Pending Ride Requests</Text>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Ride Requests</Text>
                     {pendingRequests.map(req => (
                       <RideRequestCard
                         key={req._id}
@@ -736,12 +781,13 @@ export default function MyRidesScreen({ navigation }) {
                 )}
                 {pastRequests.length > 0 && (
                   <View style={{ marginBottom: Spacing.lg }}>
-                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Expired Ride Requests</Text>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: Typography.lg, marginBottom: 8, color: Colors.primary }}>Past Ride Requests</Text>
                     {pastRequests.map(req => (
                       <RideRequestCard
                         key={req._id}
                         request={req}
                         isPast={true}
+                        onRate={handleRateRequest}
                       />
                     ))}
                   </View>

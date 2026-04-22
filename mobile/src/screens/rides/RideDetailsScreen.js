@@ -1219,7 +1219,7 @@ export default function RideDetailsScreen({ navigation, route }) {
       <ManagePassengersModal visible={showManagePax} rideId={ride._id} totalSeats={ride.totalSeats} onClose={()=>setShowManagePax(false)}/>
       <StopRequestsModal visible={showStopRequests} rideId={ride._id} onClose={()=>setShowStopRequests(false)}/>
       <ManageRideModal
-        visible={showManageRide}
+        visible={showManageRide && !showAddStop}
         ride={ride}
         onClose={() => setShowManageRide(false)}
         onUpdated={fetchRide}

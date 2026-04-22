@@ -193,7 +193,7 @@ export default function BookRideScreen({ navigation, route }) {
           <Card>
             <View style={st.rowBetween}><Text style={st.cardLabel}>Suggest a Stop</Text></View>
             <Text style={st.stopsHint}>
-              Suggest a stop along the route — this is not your pickup or dropoff point, just a waypoint you'd like the driver to pass through. Only locations on the ride's route will be accepted.
+              You can suggest a stop along the route. The driver will be notified and may accept or decline your request.
             </Text>
             <View style={{position:'relative',zIndex:10}}>
               <TextInput 
@@ -241,8 +241,6 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
 
           <Card>
-            <View style={st.totalRow}><Text style={st.totalLabel}>{seats} seat{seats>1?'s':''} × {ride.pricePerSeat} MAD</Text><Text style={st.totalVal}>{total} MAD</Text></View>
-            <View style={[st.divider,{marginVertical:8}]}/>
             <View style={st.totalRow}><Text style={[st.totalLabel,{fontFamily:'PlusJakartaSans_700Bold',fontSize:16}]}>Total</Text><Text style={[st.totalVal,{fontSize:18}]}>{total} MAD</Text></View>
           </Card>
           <View style={{height:20}}/>

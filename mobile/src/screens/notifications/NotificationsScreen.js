@@ -63,6 +63,10 @@ export default function NotificationsScreen({ navigation }) {
     if (item.rideId && item.title?.includes('Rate')) {
       navigation.navigate('RideDetails', { rideId: item.rideId, showReview: true });
     }
+    // Navigate driver to the ride's stop requests panel
+    if (item.rideId && item.title === 'Stop Request') {
+      navigation.navigate('RideDetails', { rideId: item.rideId, openStops: true });
+    }
   };
 
   // Group notifications by type for display

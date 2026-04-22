@@ -17,7 +17,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, ActivityIndicator, Alert, Modal, TextInput,
+  StatusBar, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -27,7 +27,6 @@ import { useAuth } from '../../context/AuthContext';
 import {
   getUserReviews, getUserRatings, getDriverAnalytics,
 } from '../../services/reviewService';
-import { sendMessage } from '../../services/messageService';
 import { getUserProfile } from '../../services/authService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,62 +101,6 @@ function ReviewCard({ review }) {
   );
 }
 
-// ── Message modal (shown when viewing another user's profile) ─────────────────
-function MessageModal({ visible, onClose, recipientName, recipientId }) {
-  const [text, setText]       = useState('');
-  const [sending, setSending] = useState(false);
-
-  const handleSend = async () => {
-    if (!text.trim()) return;
-    setSending(true);
-    try {
-      await sendMessage({ receiverId: recipientId, content: text.trim() });
-      Alert.alert('Sent', `Your message to ${recipientName} was sent.`);
-      setText('');
-      onClose();
-    } catch {
-      Alert.alert('Error', 'Could not send message.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={s.modalOv}>
-        <View style={s.modalContent}>
-          <View style={s.modalH}>
-            <Text style={s.modalTitle}>Message {recipientName}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={22} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          <TextInput
-            style={s.msgInput}
-            placeholder="Write your message..."
-            placeholderTextColor={Colors.textDisabled}
-            value={text}
-            onChangeText={setText}
-            multiline
-            numberOfLines={4}
-            maxLength={500}
-          />
-          <TouchableOpacity
-            style={[s.sendBtn, !text.trim() && { opacity: 0.4 }]}
-            onPress={handleSend}
-            disabled={!text.trim() || sending}
-          >
-            {sending
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.sendBtnText}>Send Message</Text>
-            }
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function UserProfileScreen({ navigation, route }) {
   const { user: me, isDriver, logout } = useAuth();
@@ -177,7 +120,7 @@ export default function UserProfileScreen({ navigation, route }) {
   const [loadingReviews,  setLoadingReviews]  = useState(true);
   const [loadingAnalytics,setLoadingAnalytics]= useState(false);
 
-  const [showMsgModal, setShowMsgModal] = useState(false);
+
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
@@ -261,7 +204,7 @@ export default function UserProfileScreen({ navigation, route }) {
             </TouchableOpacity>
           : <View style={{ width: 40 }} />
         }
-        <Text style={s.navTitle}>{isOwnProfile ? 'My Profile' : `${firstName}'s Profile`}</Text>
+        <Text style={s.navTitle}>{isOwnProfile ? 'My Profile' : `${firstName} ${lastName}`.trim()}</Text>
         {isOwnProfile
           ? <TouchableOpacity onPress={() => navigation.navigate('AccountSettings')} style={s.backBtn}>
               <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
@@ -425,7 +368,7 @@ export default function UserProfileScreen({ navigation, route }) {
           </TouchableOpacity>
         ) : (
           <View style={s.actionRow}>
-            <TouchableOpacity style={s.msgBtn} onPress={() => setShowMsgModal(true)}>
+            <TouchableOpacity style={s.msgBtn} onPress={() => navigation.navigate('Messages', { driverId: targetUserId, driverName: `${firstName} ${lastName}`.trim() })}>
               <Ionicons name="chatbubble-outline" size={16} color={Colors.primary} />
               <Text style={s.msgBtnText}>Message</Text>
             </TouchableOpacity>
@@ -456,13 +399,7 @@ export default function UserProfileScreen({ navigation, route }) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Message modal */}
-      <MessageModal
-        visible={showMsgModal}
-        onClose={() => setShowMsgModal(false)}
-        recipientId={targetUserId}
-        recipientName={`${firstName} ${lastName}`.trim()}
-      />
+
     </SafeAreaView>
   );
 }

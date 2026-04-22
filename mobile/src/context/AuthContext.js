@@ -101,6 +101,14 @@ export function AuthProvider({ children }) {
       );
     });
 
+    // ── new-stop-request: alert driver of an incoming stop request ─────────
+    socket.on('new-stop-request', (data) => {
+      Alert.alert(
+        'Stop Request',
+        `${data.passengerName} requested a stop at ${data.stopLocation} on your ride to ${data.destination}. Open the ride to accept or decline.`
+      );
+    });
+
     socketRef.current = socket;
   }, []);
 
