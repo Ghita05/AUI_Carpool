@@ -181,6 +181,9 @@ const scheduleLateDriverAutoCancel = () => {
         const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim();
         const confirmed = (ride.bookings || []).filter(b => b.status === 'Confirmed');
 
+        // Empty rides are handled by Job 5 (Dismissed). Only cancel if passengers are waiting.
+        if (confirmed.length === 0) continue;
+
         await Ride.findByIdAndUpdate(ride._id, {
           $set: {
             state: 'Cancelled',
@@ -245,7 +248,7 @@ const scheduleEmptyRideDismissal = () => {
 
         await Ride.findByIdAndUpdate(ride._id, {
           $set: {
-            state: 'Cancelled',
+            state: 'Dismissed',
             cancellationReason: 'Auto-dismissed: no passengers at departure time',
             cancellationDate: new Date(),
           },

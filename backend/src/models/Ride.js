@@ -46,7 +46,7 @@ const rideSchema = new Schema({
 
   state: {
     type: String,
-    enum: ['Open', 'Active', 'Full', 'Accepted', 'OnGoing', 'Completed', 'Cancelled', 'Expired'],
+    enum: ['Open', 'Active', 'Full', 'Accepted', 'OnGoing', 'Completed', 'Cancelled', 'Expired', 'Dismissed'],
     default: null,
   },
 

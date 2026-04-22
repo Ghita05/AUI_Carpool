@@ -249,7 +249,19 @@ const requestAdditionalStop = async (req, res, next) => {
       title: 'Stop Request',
       content: notifContent,
       type: 'Alert',
+      rideId: ride._id,
     });
+
+    // Real-time push to driver if they're connected
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${ride.driverId.toString()}`).emit('new-stop-request', {
+        rideId: ride._id.toString(),
+        destination: ride.destination,
+        stopLocation,
+        passengerName,
+      });
+    }
 
     await Message.create({
       senderId: req.user._id,
