@@ -58,7 +58,7 @@ function rideStatusBadge(s) {
   const map = {
     Open: 'active', Active: 'active', Full: 'active', Accepted: 'active', OnGoing: 'active',
     Completed: 'completed',
-    Cancelled: 'cancelled', Expired: 'cancelled',
+    Cancelled: 'cancelled', Expired: 'cancelled', Dismissed: 'cancelled',
   };
   return map[s] || (s ? s.toLowerCase() : 'unknown');
 }
