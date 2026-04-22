@@ -29,6 +29,9 @@
  *     → Promise<{ lat, lng, formattedAddress }>
  */
 
+import { Platform } from 'react-native';
+import api from '../services/api';
+
 const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
 
 // Bias autocomplete results toward Morocco (Ifrane area).
@@ -36,6 +39,11 @@ const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
 // This is a bias, not a hard filter — distant results can still appear if
 // the query strongly matches them (e.g. "Casablanca Airport").
 const LOCATION_BIAS = 'location=33.5332,5.1116&radius=200000'; // ~200km from Ifrane
+
+// On web, the Google Maps REST endpoints block direct browser fetch calls with
+// CORS errors. We proxy through our own backend instead, which has no CORS
+// restriction. On native (iOS/Android) the direct REST calls still work fine.
+const IS_WEB = Platform.OS === 'web';
 
 /**
  * autocompleteLocation
@@ -56,6 +64,23 @@ const LOCATION_BIAS = 'location=33.5332,5.1116&radius=200000'; // ~200km from If
  */
 export async function autocompleteLocation(input, sessionToken = '') {
   if (!input || input.trim().length < 2) return [];
+
+  if (IS_WEB) {
+    try {
+      const res = await api.get('/maps/autocomplete', {
+        params: { input: input.trim(), sessiontoken: sessionToken },
+      });
+      return (res.data.predictions || []).map((pred) => ({
+        placeId: pred.place_id,
+        description: pred.description,
+        mainText: pred.structured_formatting?.main_text || pred.description,
+        secondaryText: pred.structured_formatting?.secondary_text || '',
+      }));
+    } catch (err) {
+      console.warn('[mapsService] autocompleteLocation (web) failed:', err.message);
+      return [];
+    }
+  }
 
   if (!MAPS_KEY) {
     console.warn('[mapsService] EXPO_PUBLIC_GOOGLE_MAPS_KEY is not set');
@@ -105,7 +130,21 @@ export async function autocompleteLocation(input, sessionToken = '') {
  * @returns {Promise<{ lat: number, lng: number, formattedAddress: string } | null>}
  */
 export async function geocodePlace(placeId, sessionToken = '') {
-  if (!placeId || !MAPS_KEY) return null;
+  if (!placeId) return null;
+
+  if (IS_WEB) {
+    try {
+      const res = await api.get('/maps/place-details', {
+        params: { placeId, sessiontoken: sessionToken },
+      });
+      return res.data;
+    } catch (err) {
+      console.warn('[mapsService] geocodePlace (web) failed:', err.message);
+      return null;
+    }
+  }
+
+  if (!MAPS_KEY) return null;
 
   const url =
     `https://maps.googleapis.com/maps/api/place/details/json` +
@@ -145,7 +184,19 @@ export async function geocodePlace(placeId, sessionToken = '') {
  * @returns {Promise<{ lat: number, lng: number, formattedAddress: string } | null>}
  */
 export async function geocodeAddress(address) {
-  if (!address || !MAPS_KEY) return null;
+  if (!address) return null;
+
+  if (IS_WEB) {
+    try {
+      const res = await api.get('/maps/geocode', { params: { address } });
+      return res.data;
+    } catch (err) {
+      console.warn('[mapsService] geocodeAddress (web) failed:', err.message);
+      return null;
+    }
+  }
+
+  if (!MAPS_KEY) return null;
 
   const url =
     `https://maps.googleapis.com/maps/api/geocode/json` +

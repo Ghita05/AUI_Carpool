@@ -25,6 +25,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const mapsRoutes = require('./routes/mapsRoutes');
 
 const app = express();
 
@@ -122,6 +123,7 @@ app.use('/api/notifications', notificationRoutes); // BB5: Manage Notifications
 app.use('/api/messages', messageRoutes);     // BB6: Manage Messages
 app.use('/api/routes', routeRoutes);         // BB7: Routes & Locations
 app.use('/api/admin', adminRoutes);          // Admin dashboard API
+app.use('/api/maps', mapsRoutes);             // Maps proxy (CORS-safe)
 
 // Health check
 app.get('/api/health', (req, res) => {
