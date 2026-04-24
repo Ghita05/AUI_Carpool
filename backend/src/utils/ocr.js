@@ -6,16 +6,22 @@ const TESSDATA_PATH = path.join(__dirname, '../../tessdata');
 
 /**
  * Run OCR on an uploaded image and return raw text.
+ * Uses explicit worker lifecycle to ensure langPath is respected in tesseract.js v5.
  * @param {string} imagePath – relative path like /uploads/xxxx.jpg
  * @returns {Promise<string>} extracted text
  */
 async function extractText(imagePath) {
   const fullPath = path.join(__dirname, '../../', imagePath);
-  const { data: { text } } = await Tesseract.recognize(fullPath, 'fra+eng+ara', {
-    logger: () => {}, // silent
+  const worker = await Tesseract.createWorker('fra+eng+ara', 1, {
     langPath: TESSDATA_PATH,
+    cacheMethod: 'none', // never try to download — use only local tessdata
   });
-  return text;
+  try {
+    const { data: { text } } = await worker.recognize(fullPath);
+    return text;
+  } finally {
+    await worker.terminate();
+  }
 }
 
 // ── Helpers ──

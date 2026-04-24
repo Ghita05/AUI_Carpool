@@ -61,6 +61,10 @@ const sendVerificationEmail = async (email, token) => {
                   text-decoration: none; border-radius: 6px; margin: 20px 0;">
           Verify My Email
         </a>
+        <p style="color: #666; font-size: 12px; word-break: break-all;">
+          Or copy this link into your browser:<br>
+          <a href="${verificationUrl}" style="color: #1B5E20;">${verificationUrl}</a>
+        </p>
         <p style="color: #666; font-size: 13px;">This link expires in 24 hours. If you didn't create an account, ignore this email.</p>
       </div>
     `,

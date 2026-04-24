@@ -184,12 +184,15 @@ const verifyEmail = async (req, res, next) => {
     }
 
     user.verificationStatus = true;
-    await user.save();
+    await user.save({ validateModifiedOnly: true });
 
     return renderPage('Email Verified!', 'Your @aui.ma email has been verified successfully. You can now open the app and log in to your account.', true);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return renderPage('Link Expired', 'This verification link has expired. Please open the app and request a new verification email.', false);
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return renderPage('Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
     }
     next(err);
   }
