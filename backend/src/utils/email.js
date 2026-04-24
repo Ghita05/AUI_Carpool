@@ -1,29 +1,17 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT, 10),
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 10000,  // 10s to establish TCP connection
-  greetingTimeout: 10000,    // 10s to receive SMTP greeting
-  socketTimeout: 30000,      // 30s of inactivity before giving up
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const FROM_ADDRESS = process.env.EMAIL_FROM || 'AUI Carpool <onboarding@resend.dev>';
 
 /**
  * Send AUI email verification link
  */
 const sendVerificationEmail = async (email, token) => {
-  // Points to the backend's own verification endpoint — not the frontend.
-  // This ensures the link works even when the web app isn't running (dev/demo).
-  // The backend renders an HTML confirmation page after processing the token.
   const verificationUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/verify-email?token=${token}`;
 
-  await transporter.sendMail({
-    from: `"AUI Carpool" <${process.env.SMTP_USER}>`,
+  await resend.emails.send({
+    from: FROM_ADDRESS,
     to: email,
     subject: 'Verify Your AUI Carpool Account',
     html: `
@@ -47,8 +35,8 @@ const sendVerificationEmail = async (email, token) => {
 const sendPasswordResetEmail = async (email, token) => {
   const resetUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/reset-password-page?token=${token}`;
 
-  await transporter.sendMail({
-    from: `"AUI Carpool" <${process.env.SMTP_USER}>`,
+  await resend.emails.send({
+    from: FROM_ADDRESS,
     to: email,
     subject: 'Reset Your AUI Carpool Password',
     html: `
@@ -67,7 +55,6 @@ const sendPasswordResetEmail = async (email, token) => {
 };
 
 module.exports = {
-  transporter,
   sendVerificationEmail,
   sendPasswordResetEmail,
 };
