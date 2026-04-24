@@ -1,8 +1,47 @@
-const { Resend } = require('resend');
+const https = require('https');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const FROM_NAME = 'AUI Carpool';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'ghitanaf2005@gmail.com';
 
-const FROM_ADDRESS = process.env.EMAIL_FROM || 'AUI Carpool <onboarding@resend.dev>';
+const sendBrevoEmail = ({ to, subject, html }) => {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      sender: { name: FROM_NAME, email: FROM_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    });
+
+    const req = https.request(
+      {
+        hostname: 'api.brevo.com',
+        path: '/v3/smtp/email',
+        method: 'POST',
+        headers: {
+          'api-key': BREVO_API_KEY,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Brevo error ${res.statusCode}: ${data}`));
+          }
+        });
+      }
+    );
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+};
 
 /**
  * Send AUI email verification link
@@ -10,8 +49,7 @@ const FROM_ADDRESS = process.env.EMAIL_FROM || 'AUI Carpool <onboarding@resend.d
 const sendVerificationEmail = async (email, token) => {
   const verificationUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/verify-email?token=${token}`;
 
-  await resend.emails.send({
-    from: FROM_ADDRESS,
+  await sendBrevoEmail({
     to: email,
     subject: 'Verify Your AUI Carpool Account',
     html: `
@@ -35,8 +73,7 @@ const sendVerificationEmail = async (email, token) => {
 const sendPasswordResetEmail = async (email, token) => {
   const resetUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/reset-password-page?token=${token}`;
 
-  await resend.emails.send({
-    from: FROM_ADDRESS,
+  await sendBrevoEmail({
     to: email,
     subject: 'Reset Your AUI Carpool Password',
     html: `
