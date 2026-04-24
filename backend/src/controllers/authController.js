@@ -616,7 +616,7 @@ const updateProfile = async (req, res, next) => {
     }
 
     if (req.file) {
-      updates.profilePicture = `/uploads/${req.file.filename}`;
+      updates.profilePicture = req.file.path; // Cloudinary secure URL
     }
 
     const user = await User.findByIdAndUpdate(
@@ -713,7 +713,7 @@ const uploadCashWallet = async (req, res, next) => {
       return error(res, 400, 'CashWallet image is required.');
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = req.file.path; // Cloudinary secure URL
 
     // Run OCR to extract info from the CashWallet card
     let ocrResult = { verified: false };
@@ -788,7 +788,7 @@ const uploadDriverLicense = async (req, res, next) => {
       return error(res, 400, 'Driver license image is required.');
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = req.file.path; // Cloudinary secure URL
 
     // Run OCR to extract info from the driver license
     let ocrResult = { verified: false };
@@ -857,26 +857,24 @@ const previewOCR = async (req, res, next) => {
       return error(res, 400, 'Image is required.');
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    // OCR preview uses multer memoryStorage — pass buffer directly (no Cloudinary upload)
+    const imageInput = { buffer: req.file.buffer, mimetype: req.file.mimetype };
     const docType = req.body.docType || 'cashwallet';
 
     let ocrResult = { verified: false };
     try {
       if (docType === 'cashwallet') {
-        ocrResult = await processCashWallet(imageUrl);
+        ocrResult = await processCashWallet(imageInput);
       } else if (docType === 'license') {
-        ocrResult = await processDriverLicense(imageUrl);
+        ocrResult = await processDriverLicense(imageInput);
       } else if (docType === 'regcard') {
-        ocrResult = await processRegistrationCard(imageUrl);
+        ocrResult = await processRegistrationCard(imageInput);
       }
     } catch (ocrErr) {
       console.error('Preview OCR failed:', ocrErr.message);
     }
 
-    // Clean up the uploaded file after OCR (it's just a preview)
-    const fs = require('fs');
-    const fullPath = require('path').join(__dirname, '../../', imageUrl);
-    fs.unlink(fullPath, () => {});
+    // No file cleanup needed — memoryStorage keeps the buffer in RAM only, never written to disk.
 
     // Wrong document detection
     if (ocrResult.wrongDocument) {

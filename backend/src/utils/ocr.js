@@ -10,26 +10,62 @@ const fs = require('fs');
 const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash-lite-preview-06-17';
+
+/**
+ * Fetch raw bytes from an HTTPS URL, returning { buffer, mimeType }.
+ */
+function fetchImageUrl(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const ct = res.headers['content-type'] || 'image/jpeg';
+        resolve({ buffer: Buffer.concat(chunks), mimeType: ct.split(';')[0].trim() });
+      });
+      res.on('error', reject);
+    }).on('error', reject);
+  });
+}
 
 /**
  * Send an image + prompt to Gemini and return the parsed JSON object.
- * @param {string} imagePath  – relative path like /uploads/xxxx.jpg
- * @param {string} prompt     – the text instruction
+ *
+ * @param {string|{buffer:Buffer,mimetype:string}} imageInput
+ *   - A Cloudinary/HTTPS URL string → fetched via HTTPS
+ *   - A {buffer, mimetype} object   → used directly (from multer memoryStorage)
+ *   - A local path string (dev only) → read with fs
+ * @param {string} prompt – the text instruction
  * @returns {Promise<object>} – parsed JSON from the model
  */
-async function callGemini(imagePath, prompt) {
+async function callGemini(imageInput, prompt) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
 
-  const fullPath = path.join(__dirname, '../../', imagePath);
-  const imageBuffer = fs.readFileSync(fullPath);
-  const base64Image = imageBuffer.toString('base64');
+  let imageBuffer;
+  let mimeType;
 
-  const ext = path.extname(fullPath).toLowerCase();
-  const mimeType =
-    ext === '.png'  ? 'image/png'  :
-    ext === '.webp' ? 'image/webp' :
-    ext === '.gif'  ? 'image/gif'  : 'image/jpeg';
+  if (imageInput && typeof imageInput === 'object' && imageInput.buffer) {
+    // Memory-storage upload: buffer passed directly
+    imageBuffer = imageInput.buffer;
+    mimeType = (imageInput.mimetype || 'image/jpeg').split(';')[0].trim();
+  } else if (typeof imageInput === 'string' && /^https?:\/\//i.test(imageInput)) {
+    // Cloudinary or any HTTPS URL: download the bytes
+    const fetched = await fetchImageUrl(imageInput);
+    imageBuffer = fetched.buffer;
+    mimeType = fetched.mimeType;
+  } else {
+    // Local file path (dev / legacy)
+    const fullPath = path.join(__dirname, '../../', imageInput);
+    imageBuffer = fs.readFileSync(fullPath);
+    const ext = path.extname(fullPath).toLowerCase();
+    mimeType =
+      ext === '.png'  ? 'image/png'  :
+      ext === '.webp' ? 'image/webp' :
+      ext === '.gif'  ? 'image/gif'  : 'image/jpeg';
+  }
+
+  const base64Image = imageBuffer.toString('base64');
 
   const body = JSON.stringify({
     contents: [{

@@ -20,7 +20,7 @@ const addVehicle = async (req, res, next) => {
     let ocrResult = null;
     let ownerNameMatch = null;
     if (req.file) {
-      vehicleData.registrationCardImage = `/uploads/${req.file.filename}`;
+      vehicleData.registrationCardImage = req.file.path; // Cloudinary secure URL
       try {
         ocrResult = await processRegistrationCard(vehicleData.registrationCardImage);
         // Wrong document check
@@ -96,7 +96,7 @@ const modifyVehicle = async (req, res, next) => {
     let ocrResult = null;
     let ownerNameMatch = null;
     if (req.file) {
-      updates.registrationCardImage = `/uploads/${req.file.filename}`;
+      updates.registrationCardImage = req.file.path; // Cloudinary secure URL
       try {
         ocrResult = await processRegistrationCard(updates.registrationCardImage);
         // Wrong document check

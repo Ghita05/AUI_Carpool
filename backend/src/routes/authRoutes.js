@@ -3,6 +3,8 @@ const router = express.Router();
 const auth = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const multer = require('multer');
+const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ── Public routes (no JWT required) ──
 router.post('/send-verification', auth.sendVerification);
@@ -17,8 +19,8 @@ router.get('/reset-password-page', auth.resetPasswordPage);
 router.post('/reset-password', auth.resetPassword);
 router.post('/refresh-token', auth.refreshAccessToken);
 
-// Pre-auth OCR preview (used during signup to verify cashwallet before registration)
-router.post('/ocr-preview', upload.single('image'), auth.previewOCR);
+// Pre-auth OCR preview — memory storage, no Cloudinary upload
+router.post('/ocr-preview', uploadMemory.single('image'), auth.previewOCR);
 
 // Protected routes (JWT required)
 router.get('/me', authenticate, auth.getMe);
