@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash-lite';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 
 /**
  * Fetch raw bytes from an HTTPS URL, returning { buffer, mimeType }.

@@ -727,7 +727,7 @@ const uploadCashWallet = async (req, res, next) => {
     if (ocrError) {
       // Image was saved to Cloudinary but OCR could not run — return a service error
       // so the user does not see a misleading "better lighting" message
-      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
+      return error(res, 503, `OCR service error: ${ocrError.message}`);
     }
 
     // Wrong document check
@@ -807,7 +807,7 @@ const uploadDriverLicense = async (req, res, next) => {
       console.error('Driver license OCR failed (image saved anyway):', ocrErr.message);
     }
     if (ocrError) {
-      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
+      return error(res, 503, `OCR service error: ${ocrError.message}`);
     }
 
     // Wrong document check
@@ -884,7 +884,7 @@ const previewOCR = async (req, res, next) => {
       }
     } catch (ocrErr) {
       console.error('Preview OCR failed:', ocrErr.message);
-      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
+      return error(res, 503, `OCR service error: ${ocrErr.message}`);
     }
 
     // No file cleanup needed — memoryStorage keeps the buffer in RAM only, never written to disk.
