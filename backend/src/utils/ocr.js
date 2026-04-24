@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash-lite-preview-06-17';
+const GEMINI_MODEL = 'gemini-2.0-flash-lite';
 
 /**
  * Fetch raw bytes from an HTTPS URL, returning { buffer, mimeType }.
@@ -171,8 +171,8 @@ If this is not an AUI CashWallet card still identify the docType and leave name/
       verified: !!(extracted.studentId || holderName),
     };
   } catch (err) {
-    console.error('[OCR:CashWallet] Gemini error:', err.message);
-    return empty;
+    console.error('[OCR:CashWallet] Gemini error:', err.message, err.stack);
+    throw err; // re-throw so caller logs it and returns a clear 500 rather than silent 400
   }
 }
 
@@ -218,8 +218,8 @@ If this is not a driver license still identify the docType and leave the other f
       verified: !!(extracted.licenseNumber || holderName),
     };
   } catch (err) {
-    console.error('[OCR:DriverLicense] Gemini error:', err.message);
-    return empty;
+    console.error('[OCR:DriverLicense] Gemini error:', err.message, err.stack);
+    throw err;
   }
 }
 
@@ -270,8 +270,8 @@ If this is not a registration card still identify the docType and leave the othe
       verified: !!extracted.licensePlate,
     };
   } catch (err) {
-    console.error('[OCR:RegistrationCard] Gemini error:', err.message);
-    return empty;
+    console.error('[OCR:RegistrationCard] Gemini error:', err.message, err.stack);
+    throw err;
   }
 }
 
