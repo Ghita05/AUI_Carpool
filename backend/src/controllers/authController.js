@@ -717,10 +717,17 @@ const uploadCashWallet = async (req, res, next) => {
 
     // Run OCR to extract info from the CashWallet card
     let ocrResult = { verified: false };
+    let ocrError = null;
     try {
       ocrResult = await processCashWallet(imageUrl);
     } catch (ocrErr) {
+      ocrError = ocrErr;
       console.error('CashWallet OCR failed (image saved anyway):', ocrErr.message);
+    }
+    if (ocrError) {
+      // Image was saved to Cloudinary but OCR could not run — return a service error
+      // so the user does not see a misleading "better lighting" message
+      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
     }
 
     // Wrong document check
@@ -792,10 +799,15 @@ const uploadDriverLicense = async (req, res, next) => {
 
     // Run OCR to extract info from the driver license
     let ocrResult = { verified: false };
+    let ocrError = null;
     try {
       ocrResult = await processDriverLicense(imageUrl);
     } catch (ocrErr) {
+      ocrError = ocrErr;
       console.error('Driver license OCR failed (image saved anyway):', ocrErr.message);
+    }
+    if (ocrError) {
+      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
     }
 
     // Wrong document check
@@ -872,6 +884,7 @@ const previewOCR = async (req, res, next) => {
       }
     } catch (ocrErr) {
       console.error('Preview OCR failed:', ocrErr.message);
+      return error(res, 503, 'OCR service is temporarily unavailable. Please try again in a moment.');
     }
 
     // No file cleanup needed — memoryStorage keeps the buffer in RAM only, never written to disk.
