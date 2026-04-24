@@ -48,7 +48,12 @@ const sendVerification = async (req, res, next) => {
     });
 
     const verificationToken = generateVerificationToken(placeholder._id, cleanEmail);
-    await sendVerificationEmail(cleanEmail, verificationToken);
+    try {
+      await sendVerificationEmail(cleanEmail, verificationToken);
+    } catch (emailErr) {
+      await User.findByIdAndDelete(placeholder._id);
+      return error(res, 503, 'Could not send verification email. Please try again in a moment.');
+    }
 
     return success(res, 200, 'Verification link sent.', { email: cleanEmail });
   } catch (err) {

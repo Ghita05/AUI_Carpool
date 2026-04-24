@@ -15,7 +15,7 @@
  *    a 2-3 sentence natural-language summary from all review texts.
  *    Summary is cached in user.reviewSummary and regenerated whenever a new
  *    review pushes the subject past the MIN_REVIEWS_FOR_SUMMARY threshold,
- *    or on explicit request. Uses gemini-1.5-flash (fast, low-cost, free tier).
+ *    or on explicit request. Uses gemini-2.5-flash (fast, low-cost, free tier).
  *
  * 3. Community leaderboard:
  *    GET /api/reviews/community — returns top-rated drivers with generated
@@ -36,11 +36,11 @@ const MIN_DRIVER_RATING       = 0;  // show all rated drivers (sorted by rating 
 // ── Gemini helper ─────────────────────────────────────────────────────────────
 /**
  * generateGeminiSummary
- * Calls the Gemini 1.5 Flash API to produce a concise user review summary.
+ * Calls the Gemini 2.5 Flash API to produce a concise user review summary.
  * Returns a plain string. Falls back to null on any error so the caller can
  * skip saving rather than storing a broken summary.
  *
- * WHY gemini-1.5-flash:
+ * WHY gemini-2.5-flash:
  *   Flash is optimised for short, fast tasks. A review summary is exactly that:
  *   low latency, low token count, and the free tier is sufficient for a capstone.
  */
@@ -71,7 +71,7 @@ Write in third person. Do not include the rating number. Max 60 words.`;
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
