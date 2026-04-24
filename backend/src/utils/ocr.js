@@ -76,7 +76,6 @@ async function callGemini(imageInput, prompt) {
     }],
     generationConfig: {
       temperature: 0,
-      response_mime_type: 'application/json',
     },
   });
 
