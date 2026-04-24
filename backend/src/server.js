@@ -29,6 +29,10 @@ const mapsRoutes = require('./routes/mapsRoutes');
 
 const app = express();
 
+// Trust the first proxy hop (required when deployed behind Render / Railway / nginx reverse proxy)
+// Without this, express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 // ── SSL setup (self-signed cert for dev) ──
 const certPath = path.join(__dirname, '../certs/cert.pem');
 const keyPath = path.join(__dirname, '../certs/key.pem');
