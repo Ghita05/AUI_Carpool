@@ -61,6 +61,10 @@ const vehicleSchema = new mongoose.Schema(
       },
       required: [true, 'Smoking policy is required'],
     },
+    photo: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

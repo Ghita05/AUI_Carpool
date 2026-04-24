@@ -14,14 +14,20 @@ router.post(
   '/',
   authenticate,
   authorize('Driver'),
-  upload.single('registrationCardImage'),
+  upload.fields([
+    { name: 'registrationCardImage', maxCount: 1 },
+    { name: 'vehiclePhoto', maxCount: 1 },
+  ]),
   vehicle.addVehicle
 );
 router.put(
   '/:vehicleId',
   authenticate,
   authorize('Driver'),
-  upload.single('registrationCardImage'),
+  upload.fields([
+    { name: 'registrationCardImage', maxCount: 1 },
+    { name: 'vehiclePhoto', maxCount: 1 },
+  ]),
   vehicle.modifyVehicle
 );
 router.delete(

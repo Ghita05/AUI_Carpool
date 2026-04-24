@@ -19,13 +19,24 @@ const addVehicle = async (req, res, next) => {
 
     let ocrResult = null;
     let ownerNameMatch = null;
-    if (req.file) {
-      vehicleData.registrationCardImage = req.file.path; // Cloudinary secure URL
+    const regCardFile = req.files?.registrationCardImage?.[0];
+    const vehiclePhotoFile = req.files?.vehiclePhoto?.[0];
+
+    if (vehiclePhotoFile) {
+      vehicleData.photo = vehiclePhotoFile.path;
+    }
+
+    if (regCardFile) {
+      vehicleData.registrationCardImage = regCardFile.path; // Cloudinary secure URL
       try {
         ocrResult = await processRegistrationCard(vehicleData.registrationCardImage);
         // Wrong document check
         if (ocrResult.wrongDocument) {
           return error(res, 400, `Wrong document uploaded. This appears to be a ${ocrResult.detectedTypeLabel}. Please upload your vehicle registration card (Carte Grise).`);
+        }
+        // Expiry check
+        if (ocrResult.isExpired) {
+          return error(res, 400, `Your registration card expired on ${ocrResult.expiryDate}. Please upload a valid Carte Grise.`);
         }
         // Require essential fields
         const missingFields = [];
@@ -45,7 +56,7 @@ const addVehicle = async (req, res, next) => {
           ownerNameMatch = namesMatch(ocrResult.ownerName, userFullName);
         }
       } catch (ocrErr) {
-        console.error('Vehicle registration OCR failed (image saved):', ocrErr.message);
+        return error(res, 503, `OCR service error: ${ocrErr.message}`);
       }
     }
 
@@ -83,7 +94,7 @@ const modifyVehicle = async (req, res, next) => {
 
     const allowedFields = [
       'brand', 'model', 'color', 'licensePlate', 'sizeCategory',
-      'luggageCapacity', 'year', 'smokingPolicy',
+      'luggageCapacity', 'year', 'smokingPolicy', 'photo',
     ];
 
     const updates = {};
@@ -95,13 +106,24 @@ const modifyVehicle = async (req, res, next) => {
 
     let ocrResult = null;
     let ownerNameMatch = null;
-    if (req.file) {
-      updates.registrationCardImage = req.file.path; // Cloudinary secure URL
+    const regCardFile = req.files?.registrationCardImage?.[0];
+    const vehiclePhotoFile = req.files?.vehiclePhoto?.[0];
+
+    if (vehiclePhotoFile) {
+      updates.photo = vehiclePhotoFile.path;
+    }
+
+    if (regCardFile) {
+      updates.registrationCardImage = regCardFile.path; // Cloudinary secure URL
       try {
         ocrResult = await processRegistrationCard(updates.registrationCardImage);
         // Wrong document check
         if (ocrResult.wrongDocument) {
           return error(res, 400, `Wrong document uploaded. This appears to be a ${ocrResult.detectedTypeLabel}. Please upload your vehicle registration card (Carte Grise).`);
+        }
+        // Expiry check
+        if (ocrResult.isExpired) {
+          return error(res, 400, `Your registration card expired on ${ocrResult.expiryDate}. Please upload a valid Carte Grise.`);
         }
         // Require essential fields
         const missingRegFields = [];
@@ -120,7 +142,7 @@ const modifyVehicle = async (req, res, next) => {
           ownerNameMatch = namesMatch(ocrResult.ownerName, userFullName);
         }
       } catch (ocrErr) {
-        console.error('Vehicle registration OCR failed (image saved):', ocrErr.message);
+        return error(res, 503, `OCR service error: ${ocrErr.message}`);
       }
     }
 
