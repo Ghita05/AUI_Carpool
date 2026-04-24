@@ -137,63 +137,133 @@ const registerUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Shared HTML page renderer for the email verification flow.
+ */
+const renderVerifyPage = (res, title, message, isSuccess, extraBody = '') => {
+  const icon = isSuccess
+    ? '<div style="width:64px;height:64px;border-radius:50%;background:#E8F5E9;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#1B5E20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M20 6L9 17l-5-5"/></svg></div>'
+    : '<div style="width:64px;height:64px;border-radius:50%;background:#FFEBEE;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#C62828" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg></div>';
+
+  return res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title} — AUI Carpool</title>
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    </head>
+    <body style="margin:0;padding:0;background:#F5F5F5;font-family:'Plus Jakarta Sans',Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">
+      <div style="background:white;border-radius:12px;padding:40px;max-width:420px;width:90%;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+        ${icon}
+        <h1 style="color:#1B5E20;font-size:22px;margin:0 0 8px;font-weight:700">${title}</h1>
+        <p style="color:#555;font-size:15px;line-height:1.5;margin:0 0 24px">${message}</p>
+        ${extraBody}
+        <p style="color:#999;font-size:12px;margin:0">AUI Carpool — A Peer-to-Peer Ride-Sharing Platform</p>
+      </div>
+    </body>
+    </html>
+  `);
+};
+
+/**
+ * GET /api/users/verify-email?token=...
+ * Shows a confirmation page — does NOT verify yet.
+ * Email scanner bots follow GET links automatically; we must NOT mutate state here.
+ */
 const verifyEmail = async (req, res, next) => {
-  const renderPage = (title, message, isSuccess) => {
-    const icon = isSuccess
-      ? '<div style="width:64px;height:64px;border-radius:50%;background:#E8F5E9;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#1B5E20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M20 6L9 17l-5-5"/></svg></div>'
-      : '<div style="width:64px;height:64px;border-radius:50%;background:#FFEBEE;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#C62828" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg></div>';
-
-    return res.send(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title} — AUI Carpool</title>
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-      </head>
-      <body style="margin:0;padding:0;background:#F5F5F5;font-family:'Plus Jakarta Sans',Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">
-        <div style="background:white;border-radius:12px;padding:40px;max-width:420px;width:90%;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-          ${icon}
-          <h1 style="color:#1B5E20;font-size:22px;margin:0 0 8px;font-weight:700">${title}</h1>
-          <p style="color:#555;font-size:15px;line-height:1.5;margin:0 0 24px">${message}</p>
-          <p style="color:#999;font-size:12px;margin:0">AUI Carpool — A Peer-to-Peer Ride-Sharing Platform</p>
-        </div>
-      </body>
-      </html>
-    `);
-  };
-
   try {
     const { token } = req.query;
     if (!token) {
-      return renderPage('Missing Token', 'No verification token was provided. Please use the link from your email.', false);
+      return renderVerifyPage(res, 'Missing Token', 'No verification token was provided. Please use the link from your email.', false);
     }
 
-    const decoded = verifyToken(token, process.env.JWT_VERIFICATION_SECRET);
+    // Validate the token without touching the DB — just make sure it's legit
+    let decoded;
+    try {
+      decoded = verifyToken(token, process.env.JWT_VERIFICATION_SECRET);
+    } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return renderVerifyPage(res, 'Link Expired', 'This verification link has expired. Please open the app and request a new verification email.', false);
+      }
+      return renderVerifyPage(res, 'Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
+    }
+
     if (decoded.purpose !== 'email-verification') {
-      return renderPage('Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
+      return renderVerifyPage(res, 'Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
     }
 
     const user = await User.findById(decoded.userId);
     if (!user) {
-      return renderPage('Account Not Found', 'We could not find an account associated with this link.', false);
+      return renderVerifyPage(res, 'Account Not Found', 'We could not find an account associated with this link.', false);
     }
     if (user.verificationStatus) {
-      return renderPage('Already Verified', 'Your email has already been verified. You can open the app and log in.', true);
+      return renderVerifyPage(res, 'Already Verified', 'Your email has already been verified. You can open the app and log in.', true);
+    }
+
+    // Render a confirmation page — actual verification happens on POST (button click)
+    const apiBase = process.env.API_BASE_URL || 'http://localhost:5000';
+    const confirmButton = `
+      <form method="POST" action="${apiBase}/api/users/verify-email">
+        <input type="hidden" name="token" value="${token}">
+        <button type="submit"
+          style="background:#1B5E20;color:white;border:none;border-radius:8px;padding:14px 36px;
+                 font-size:16px;font-family:inherit;font-weight:700;cursor:pointer;margin-bottom:8px">
+          ✓ Confirm My Email
+        </button>
+      </form>`;
+    return renderVerifyPage(
+      res,
+      'Confirm Your Email',
+      'You\'re one tap away! Click the button below to verify your @aui.ma email address.',
+      true,
+      confirmButton
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/users/verify-email
+ * Actually sets verificationStatus = true. Only triggered by the human pressing
+ * the "Confirm" button — never by bot link prefetching (which only does GET).
+ */
+const confirmEmail = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return renderVerifyPage(res, 'Missing Token', 'No verification token was provided.', false);
+    }
+
+    let decoded;
+    try {
+      decoded = verifyToken(token, process.env.JWT_VERIFICATION_SECRET);
+    } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return renderVerifyPage(res, 'Link Expired', 'This verification link has expired. Please open the app and request a new verification email.', false);
+      }
+      return renderVerifyPage(res, 'Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
+    }
+
+    if (decoded.purpose !== 'email-verification') {
+      return renderVerifyPage(res, 'Invalid Link', 'This verification link is not valid.', false);
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return renderVerifyPage(res, 'Account Not Found', 'We could not find an account associated with this link.', false);
+    }
+    if (user.verificationStatus) {
+      return renderVerifyPage(res, 'Already Verified', 'Your email has already been verified. You can open the app and log in.', true);
     }
 
     user.verificationStatus = true;
     await user.save({ validateModifiedOnly: true });
 
-    return renderPage('Email Verified!', 'Your @aui.ma email has been verified successfully. You can now open the app and log in to your account.', true);
+    return renderVerifyPage(res, 'Email Verified!', 'Your @aui.ma email has been verified successfully. You can now open the app and continue setting up your account.', true);
   } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return renderPage('Link Expired', 'This verification link has expired. Please open the app and request a new verification email.', false);
-    }
-    if (err.name === 'JsonWebTokenError') {
-      return renderPage('Invalid Link', 'This verification link is not valid. Please request a new one from the app.', false);
-    }
     next(err);
   }
 };
@@ -907,6 +977,7 @@ module.exports = {
   checkVerification,
   registerUser,
   verifyEmail,
+  confirmEmail,
   resendVerification,
   login,
   logout,

@@ -9,6 +9,7 @@ router.post('/send-verification', auth.sendVerification);
 router.get('/check-verification', auth.checkVerification);
 router.post('/register', auth.registerUser);
 router.get('/verify-email', auth.verifyEmail);
+router.post('/verify-email', auth.confirmEmail);
 router.post('/resend-verification', auth.resendVerification);
 router.post('/login', auth.login);
 router.post('/recover-password', auth.recoverPassword);
