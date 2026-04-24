@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash-latest';
 
 /**
  * Fetch raw bytes from an HTTPS URL, returning { buffer, mimeType }.
@@ -84,7 +84,7 @@ async function callGemini(imageInput, prompt) {
     const req = https.request(
       {
         hostname: 'generativelanguage.googleapis.com',
-        path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        path: `/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
