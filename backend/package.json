@@ -4,7 +4,7 @@
   "description": "Backend for AUI Carpooling Platform — EGR 4402 Capstone (Sprint 4)",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node --max-old-space-size=460 src/server.js",
     "dev": "nodemon src/server.js"
   },
   "author": "Ghita Nafa",

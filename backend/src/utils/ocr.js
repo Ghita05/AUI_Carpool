@@ -8,11 +8,12 @@ const TESSDATA_PATH = path.join(__dirname, '../../tessdata');
  * Run OCR on an uploaded image and return raw text.
  * Uses explicit worker lifecycle to ensure langPath is respected in tesseract.js v5.
  * @param {string} imagePath – relative path like /uploads/xxxx.jpg
+ * @param {string} [lang='fra'] – tesseract language string, e.g. 'fra' or 'fra+ara'
  * @returns {Promise<string>} extracted text
  */
-async function extractText(imagePath) {
+async function extractText(imagePath, lang = 'fra') {
   const fullPath = path.join(__dirname, '../../', imagePath);
-  const worker = await Tesseract.createWorker('fra+eng+ara', 1, {
+  const worker = await Tesseract.createWorker(lang, 1, {
     langPath: TESSDATA_PATH,
     cacheMethod: 'none', // never try to download — use only local tessdata
   });
@@ -144,7 +145,8 @@ const PLATE_PATTERNS = [
  * Extracts: immatriculation number, owner name (Propriétaire), expiry date (Fin de validité).
  */
 async function processRegistrationCard(imagePath) {
-  const text = await extractText(imagePath);
+  // Registration cards are entirely in French
+  const text = await extractText(imagePath, 'fra');
   const detectedType = detectDocumentType(text);
   const result = {
     rawText: text,
@@ -214,7 +216,8 @@ async function processRegistrationCard(imagePath) {
  * Extracts: holder first/last name, license number (Permis N°), category, CNI.
  */
 async function processDriverLicense(imagePath) {
-  const text = await extractText(imagePath);
+  // Moroccan driver licenses have both French and Arabic text
+  const text = await extractText(imagePath, 'fra+ara');
   const detectedType = detectDocumentType(text);
   const result = {
     rawText: text,
@@ -338,7 +341,8 @@ async function processDriverLicense(imagePath) {
  * Extracts: holder name (firstName + lastName), student ID (auiId).
  */
 async function processCashWallet(imagePath) {
-  const text = await extractText(imagePath);
+  // CashWallet screenshots are in French
+  const text = await extractText(imagePath, 'fra');
   const detectedType = detectDocumentType(text);
   const result = {
     rawText: text,
