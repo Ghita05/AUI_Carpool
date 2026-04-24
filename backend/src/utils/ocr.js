@@ -1,6 +1,9 @@
 const Tesseract = require('tesseract.js');
 const path = require('path');
 
+// Local tessdata directory — avoids downloading language files at runtime on Railway
+const TESSDATA_PATH = path.join(__dirname, '../../tessdata');
+
 /**
  * Run OCR on an uploaded image and return raw text.
  * @param {string} imagePath – relative path like /uploads/xxxx.jpg
@@ -10,6 +13,7 @@ async function extractText(imagePath) {
   const fullPath = path.join(__dirname, '../../', imagePath);
   const { data: { text } } = await Tesseract.recognize(fullPath, 'fra+eng+ara', {
     logger: () => {}, // silent
+    langPath: TESSDATA_PATH,
   });
   return text;
 }
