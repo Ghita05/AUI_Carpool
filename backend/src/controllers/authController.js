@@ -983,6 +983,26 @@ const changePassword = async (req, res, next) => {
   }
 };
 
+const uploadProfilePicture = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return error(res, 400, 'Profile picture is required.');
+    }
+    const imageUrl = req.file.path; // Cloudinary secure URL
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { profilePicture: imageUrl } },
+      { new: true }
+    );
+    return success(res, 200, 'Profile picture updated.', {
+      profilePicture: imageUrl,
+      user: user.toSafeObject(),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   sendVerification,
   checkVerification,
@@ -1007,6 +1027,7 @@ module.exports = {
   issueWarning,
   uploadCashWallet,
   uploadDriverLicense,
+  uploadProfilePicture,
   previewOCR,
   changePassword,
 };

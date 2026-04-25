@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -7,14 +7,19 @@ import ImagePickerModal from '../../components/ImagePickerModal';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import StepIndicator from '../../components/common/StepIndicator';
-import { register, previewCashWalletOCR, previewDriverLicenseOCR, previewRegCardOCR } from '../../services/authService';
+import { register, previewCashWalletOCR, previewDriverLicenseOCR, previewRegCardOCR, uploadDriverLicense } from '../../services/authService';
+import { validatePhone, normalizePhone } from '../../utils/phone';
+import { addVehicle } from '../../services/vehicleService';
+import { storeTokens } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const STEPS_PASSENGER = 3; // Personal → CashWallet → Role
-const STEPS_DRIVER = 5;    // Personal → CashWallet → Role → License → Vehicle Card
+const STEPS_DRIVER = 6;    // Personal → CashWallet → Role → License → Vehicle Card → Vehicle Details
 
 export default function SignupCompleteProfileScreen({ navigation, route }) {
   const email = route?.params?.email || 'yourname@aui.ma';
   const scrollRef = useRef(null);
+  const { setUser } = useAuth();
 
   // Form state
   const [form, setForm] = useState({
@@ -35,12 +40,24 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
   const [licenseOcrLoading, setLicenseOcrLoading] = useState(false);
   const [showLicensePicker, setShowLicensePicker] = useState(false);
   const [licenseData, setLicenseData] = useState({ cni: '', licenseNumber: '' });
+  const [licenseUri, setLicenseUri] = useState(null); // actual file URI for upload
 
   // Vehicle card OCR state
   const [vehicleCardUploaded, setVehicleCardUploaded] = useState(false);
   const [vehicleOcrLoading, setVehicleOcrLoading] = useState(false);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleRegCardUri, setVehicleRegCardUri] = useState(null); // actual file URI for upload
+
+  // Vehicle details state (step 6)
+  const [vehicleBrand, setVehicleBrand] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+  const [vehicleYear, setVehicleYear] = useState('');
+  const [vehicleSize, setVehicleSize] = useState('Medium');
+  const [vehicleLuggage, setVehicleLuggage] = useState('3');
+  const [vehiclePhotoUri, setVehiclePhotoUri] = useState(null);
+  const [showVehiclePhotoPicker, setShowVehiclePhotoPicker] = useState(false);
 
   const update = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: null })); };
   const totalSteps = form.role === 'Driver' ? STEPS_DRIVER : STEPS_PASSENGER;
@@ -55,7 +72,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
       if (!form.lastName.trim()) e.lastName = 'Required';
       if (!form.password || form.password.length < 8) e.password = 'Min. 8 characters';
       if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
-      if (!form.phone.trim()) e.phone = 'Required';
+      const phoneErr = validatePhone(form.phone); if (phoneErr) e.phone = phoneErr;
       if (!form.gender) e.gender = 'Please select your gender';
     } else if (step === 2) {
       if (!cashwalletUploaded) e.cashwallet = 'Please upload your CashWallet scan';
@@ -66,6 +83,11 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
       if (!licenseUploaded) e.license = 'Please upload your driver license';
     } else if (step === 5) {
       if (!vehicleCardUploaded) e.vehicleCard = 'Please upload your vehicle registration card';
+    } else if (step === 6) {
+      if (!vehicleBrand.trim()) e.vehicleBrand = 'Brand is required';
+      if (!vehicleModel.trim()) e.vehicleModel = 'Model is required';
+      if (!vehicleColor.trim()) e.vehicleColor = 'Color is required';
+      if (!vehicleYear.trim() || isNaN(parseInt(vehicleYear))) e.vehicleYear = 'Valid year is required';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -79,8 +101,8 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
       handleSubmit();
       return;
     }
-    // If driver at step 5, submit
-    if (step === 5) {
+    // If driver at step 6, submit
+    if (step === 6) {
       handleSubmit();
       return;
     }
@@ -184,6 +206,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
           }
         }
         setLicenseData({ cni: ocr.cni || '', licenseNumber: ocr.licenseNumber || '' });
+        setLicenseUri(uri);
         setLicenseUploaded(true);
         Alert.alert('License Verified', `Name: ${ocr.holderName || 'N/A'}\nLicense #: ${ocr.licenseNumber || 'N/A'}\nCNI: ${ocr.cni || 'N/A'}`);
       } else {
@@ -208,6 +231,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
 
       if (ocr?.verified && ocr.licensePlate) {
         setVehiclePlate(ocr.licensePlate);
+        setVehicleRegCardUri(uri);
         setVehicleCardUploaded(true);
         Alert.alert('Vehicle Card Verified', `License Plate: ${ocr.licensePlate}${ocr.ownerName ? '\nOwner: ' + ocr.ownerName : ''}${ocr.expiryDate ? '\nValid until: ' + ocr.expiryDate : ''}`);
       } else {
@@ -227,21 +251,65 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await register({
+      // Step 1: Create the account
+      const regResponse = await register({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email,
         password: form.password,
-        phoneNumber: form.phone.trim(),
+        phoneNumber: normalizePhone(form.phone.trim()) || form.phone.trim(),
         auiId: form.auiId.trim(),
         role: form.role,
         gender: form.gender,
       });
-      Alert.alert(
-        'Account Created!',
-        'Please check your @aui.ma inbox and click the verification link, then log in.',
-        [{ text: 'Go to Login', onPress: () => navigation.replace('Login') }]
-      );
+
+      // Step 2: Store tokens returned from registration (auto-login)
+      const { accessToken, refreshToken, user: userData } = regResponse.data || {};
+      if (accessToken && refreshToken) {
+        await storeTokens(accessToken, refreshToken);
+        // Build user object for context (same shape as buildUser in AuthContext)
+        const initials = ((userData?.firstName?.[0] || '') + (userData?.lastName?.[0] || '')).toUpperCase();
+        setUser({ ...userData, initials, isAuthenticated: true });
+      }
+
+      // Step 3: Upload driver license (background — failure is non-blocking)
+      if (licenseUri) {
+        try {
+          const licRes = await uploadDriverLicense(licenseUri);
+          const imageUrl = licRes.data?.imageUrl;
+          const ocr = licRes.data?.ocrResult;
+          if (imageUrl) {
+            setUser(prev => prev ? { ...prev, driverLicenseImage: imageUrl, driverLicenseVerified: ocr?.verified && ocr?.nameMatch !== false } : prev);
+          }
+        } catch (e) {
+          console.warn('Driver license upload failed after registration:', e.message);
+        }
+      }
+
+      // Step 4: Create vehicle for drivers (background — failure is non-blocking)
+      if (form.role === 'Driver' && vehicleRegCardUri) {
+        try {
+          await addVehicle(
+            {
+              brand: vehicleBrand.trim(),
+              model: vehicleModel.trim(),
+              color: vehicleColor.trim(),
+              year: vehicleYear.trim(),
+              sizeCategory: vehicleSize,
+              luggageCapacity: parseInt(vehicleLuggage) || 3,
+              smokingPolicy: 'Not Allowed',
+              licensePlate: vehiclePlate,
+            },
+            vehicleRegCardUri,
+            vehiclePhotoUri || null
+          );
+        } catch (e) {
+          console.warn('Vehicle creation failed after registration:', e.message);
+        }
+      }
+
+      // Step 5: Navigate to main app
+      navigation.replace('MainApp');
     } catch (err) {
       const msg = err.response?.data?.message || 'Registration failed. Please try again.';
       Alert.alert('Registration Error', msg);
@@ -257,12 +325,13 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
     3: 'Choose Your Role',
     4: 'Driver License',
     5: 'Vehicle Registration',
+    6: 'Vehicle Details',
   };
 
   // ── Button label ──
   const getButtonLabel = () => {
     if (step === 3 && form.role === 'Passenger') return 'Create My Account';
-    if (step === 5) return 'Create My Account';
+    if (step === 6) return 'Create My Account';
     return 'Continue';
   };
 
@@ -417,6 +486,66 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
             </>
           )}
 
+          {/* ═══ STEP 6: Vehicle Details ═══ */}
+          {step === 6 && (
+            <>
+              {/* Optional vehicle photo */}
+              <Text style={styles.fieldLabel}>VEHICLE PHOTO (OPTIONAL)</Text>
+              <TouchableOpacity
+                style={[styles.vehiclePhotoArea, vehiclePhotoUri && styles.uploadDone]}
+                onPress={() => setShowVehiclePhotoPicker(true)}
+              >
+                {vehiclePhotoUri ? (
+                  <Image source={{ uri: vehiclePhotoUri }} style={styles.vehiclePhotoThumb} />
+                ) : (
+                  <View style={styles.vehiclePhotoPlaceholder}>
+                    <Ionicons name="camera-outline" size={28} color={Colors.textSecondary} />
+                    <Text style={styles.uploadText}>Add a photo of your car</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.helperText}>You can skip this and add a photo later from your profile settings.</Text>
+
+              {/* License plate (locked from OCR) */}
+              {vehiclePlate ? (
+                <View style={styles.ocrInfoBox}>
+                  <View style={styles.ocrInfoRow}>
+                    <Ionicons name="lock-closed" size={14} color={Colors.primary} />
+                    <Text style={styles.ocrInfoLabel}>License Plate (from Carte Grise):</Text>
+                    <Text style={styles.ocrInfoValue}>{vehiclePlate}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Vehicle fields */}
+              <View style={styles.row}>
+                <View style={styles.halfField}>
+                  <Input label="Brand" placeholder="e.g. Toyota" value={vehicleBrand} onChangeText={setVehicleBrand} error={errors.vehicleBrand} />
+                </View>
+                <View style={styles.halfField}>
+                  <Input label="Model" placeholder="e.g. Corolla" value={vehicleModel} onChangeText={setVehicleModel} error={errors.vehicleModel} />
+                </View>
+              </View>
+              <View style={styles.row}>
+                <View style={styles.halfField}>
+                  <Input label="Color" placeholder="e.g. White" value={vehicleColor} onChangeText={setVehicleColor} error={errors.vehicleColor} />
+                </View>
+                <View style={styles.halfField}>
+                  <Input label="Year" placeholder="e.g. 2020" value={vehicleYear} onChangeText={setVehicleYear} keyboardType="number-pad" error={errors.vehicleYear} />
+                </View>
+              </View>
+              <Text style={styles.fieldLabel}>VEHICLE SIZE</Text>
+              <View style={styles.roleRow}>
+                {['Small', 'Medium', 'Large'].map(size => (
+                  <TouchableOpacity key={size} style={[styles.rolePill, vehicleSize === size && styles.rolePillActive]} onPress={() => setVehicleSize(size)}>
+                    <Text style={[styles.rolePillText, vehicleSize === size && styles.rolePillTextActive]}>{size}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Input label="Luggage Capacity (bags)" placeholder="e.g. 3" value={vehicleLuggage} onChangeText={setVehicleLuggage} keyboardType="number-pad" />
+            </>
+          )}
+
           {/* ── Navigation buttons ── */}
           <View style={styles.navRow}>
             {step > 1 && (
@@ -443,6 +572,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
       <ImagePickerModal visible={showCashwalletPicker} onClose={() => setShowCashwalletPicker(false)} onImage={processCashwalletImage} aspect={[86, 54]} title="Upload CashWallet" />
       <ImagePickerModal visible={showLicensePicker} onClose={() => setShowLicensePicker(false)} onImage={processLicenseImage} aspect={[86, 54]} title="Upload Driver License" />
       <ImagePickerModal visible={showVehiclePicker} onClose={() => setShowVehiclePicker(false)} onImage={processVehicleCardImage} aspect={[86, 54]} title="Upload Registration Card" />
+      <ImagePickerModal visible={showVehiclePhotoPicker} onClose={() => setShowVehiclePhotoPicker(false)} onImage={(uri) => { setVehiclePhotoUri(uri); setShowVehiclePhotoPicker(false); }} aspect={[4, 3]} title="Add Vehicle Photo" />
     </KeyboardAvoidingView>
   );
 }
@@ -489,4 +619,7 @@ const styles = StyleSheet.create({
   signinRow: { flexDirection: 'row', justifyContent: 'center', marginTop: Spacing.lg },
   signinText: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_400Regular', color: Colors.textSecondary },
   signinLink: { fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_700Bold', color: Colors.primaryLight, textDecorationLine: 'underline' },
+  vehiclePhotoArea: { height: 120, borderWidth: 1.5, borderStyle: 'dashed', borderColor: Colors.border, borderRadius: Radius.sm, overflow: 'hidden', marginBottom: 4 },
+  vehiclePhotoThumb: { width: '100%', height: '100%', resizeMode: 'cover' },
+  vehiclePhotoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
 });

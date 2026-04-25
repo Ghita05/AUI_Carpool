@@ -46,6 +46,12 @@ router.post(
   upload.single('driverLicenseImage'),
   auth.uploadDriverLicense
 );
+router.post(
+  '/upload/profile-picture',
+  authenticate,
+  upload.single('profilePicture'),
+  auth.uploadProfilePicture
+);
 
 // ── Admin routes ──
 router.put('/:userId/suspend', authenticate, authorize('Admin'), auth.suspendAccount);

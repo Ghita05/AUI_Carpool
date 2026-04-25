@@ -1,10 +1,10 @@
 const https = require('https');
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-const FROM_NAME = 'AUI Carpool';
-const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'ghitanaf2005@gmail.com';
+const FROM_NAME  = 'AUI Carpool';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'auicarpool@outlook.com';
 
-const sendBrevoEmail = ({ to, subject, html }) => {
+const sendEmail = ({ to, subject, html }) => {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       sender: { name: FROM_NAME, email: FROM_EMAIL },
@@ -49,7 +49,7 @@ const sendBrevoEmail = ({ to, subject, html }) => {
 const sendVerificationEmail = async (email, token) => {
   const verificationUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/verify-email?token=${token}`;
 
-  await sendBrevoEmail({
+  await sendEmail({
     to: email,
     subject: 'Verify Your AUI Carpool Account',
     html: `
@@ -77,7 +77,7 @@ const sendVerificationEmail = async (email, token) => {
 const sendPasswordResetEmail = async (email, token) => {
   const resetUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/reset-password-page?token=${token}`;
 
-  await sendBrevoEmail({
+  await sendEmail({
     to: email,
     subject: 'Reset Your AUI Carpool Password',
     html: `

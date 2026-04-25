@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, Modal, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, Modal, ActivityIndicator, Image, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -7,6 +7,7 @@ import ImagePickerModal from '../../components/ImagePickerModal';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, updatePreferences, changePassword as changePasswordAPI, deactivateAccount, uploadDriverLicense } from '../../services/authService';
 import { getVehicles, addVehicle, modifyVehicle } from '../../services/vehicleService';
+import { validatePhone, normalizePhone } from '../../utils/phone';
 
 function Card({title,children,action}){return(<View style={st.card}><View style={st.cardH}><Text style={st.cardTitle}>{title}</Text>{action}</View>{children}</View>);}
 function Pills({options,selected,onSelect,disabled}){return(<View style={st.pillRow}>{options.map(o=>(<TouchableOpacity key={o} style={[st.pill,selected===o&&st.pillActive]} onPress={()=>!disabled&&onSelect(o)} disabled={disabled}><Text style={[st.pillText,selected===o&&st.pillTextActive]}>{o}</Text></TouchableOpacity>))}</View>);}
@@ -49,17 +50,20 @@ export default function AccountSettingsScreen({ navigation }) {
   const [vehicle, setVehicle] = useState(null);
   const [vehicleLoading, setVehicleLoading] = useState(false);
   const [vBrand,setVBrand]=useState('');const [vModel,setVModel]=useState('');const [vColor,setVColor]=useState('');const [vYear,setVYear]=useState('');const [vPlate,setVPlate]=useState('');const [vSize,setVSize]=useState('Medium');const [vLug,setVLug]=useState(3);
+  const [vPhoto, setVPhoto] = useState(null); // URL from API
+  const [newVehiclePhotoUri, setNewVehiclePhotoUri] = useState(null); // local URI for new photo
   const [regCardUri, setRegCardUri] = useState(null);
 
   // Document upload state
   const [driverLicenseUri, setDriverLicenseUri] = useState(user?.driverLicenseImage || null);
   const [driverLicenseVerified, setDriverLicenseVerified] = useState(user?.driverLicenseVerified || false);
-  const [uploading, setUploading] = useState(null); // 'license' | 'regcard' | null
+  const [uploading, setUploading] = useState(null); // 'license' | 'regcard' | 'vehiclephoto' | null
 
+  const [editingPrefs, setEditingPrefs] = useState(false);
   const [showPwModal,setShowPwModal]=useState(false);const [showDeactivate,setShowDeactivate]=useState(false);
   const [saveStatus,setSaveStatus]=useState('');
   // Image picker modal state: which upload is requesting a photo
-  const [pickerFor, setPickerFor] = useState(null); // 'license' | 'regcard' | null
+  const [pickerFor, setPickerFor] = useState(null); // 'license' | 'regcard' | 'vehiclephoto' | null
 
   // Load driver's vehicle on mount
   useEffect(() => {
@@ -73,6 +77,7 @@ export default function AccountSettingsScreen({ navigation }) {
           setVBrand(v.brand || ''); setVModel(v.model || ''); setVColor(v.color || '');
           setVYear(String(v.year || '')); setVPlate(v.licensePlate || '');
           setVSize(v.sizeCategory || 'Medium'); setVLug(v.luggageCapacity || 3);
+          setVPhoto(v.photo || null);
         }
       }).catch(() => {}).finally(() => setVehicleLoading(false));
     }
@@ -82,15 +87,19 @@ export default function AccountSettingsScreen({ navigation }) {
     if (!uri || !pickerFor) return;
     if (pickerFor === 'license') processDriverLicenseImage(uri);
     else if (pickerFor === 'regcard') processRegCardImage(uri);
+    else if (pickerFor === 'vehiclephoto') { setNewVehiclePhotoUri(uri); setPickerFor(null); }
   };
 
   const processDriverLicenseImage = async (uri) => {
     setUploading('license');
     try {
       const res = await uploadDriverLicense(uri);
-      setDriverLicenseUri(uri);
+      const imageUrl = res.data?.imageUrl || uri; // prefer Cloudinary URL
       const ocr = res.data?.ocrResult;
-      setDriverLicenseVerified(ocr?.verified && ocr?.nameMatch !== false);
+      const verified = !!(ocr?.verified && ocr?.nameMatch !== false);
+      setDriverLicenseUri(imageUrl);
+      setDriverLicenseVerified(verified);
+      setUser(prev => prev ? { ...prev, driverLicenseImage: imageUrl, driverLicenseVerified: verified } : prev);
 
       if (ocr?.verified) {
         // Name mismatch check
@@ -126,25 +135,45 @@ export default function AccountSettingsScreen({ navigation }) {
   const handleRegCardUpload = () => setPickerFor('regcard');
 
   const handleSave=async()=>{
+  const phoneErr = validatePhone(phone); if (phoneErr) { Alert.alert('Invalid Phone', phoneErr); return; }
+  const normalizedPhone = normalizePhone(phone);
   try{
-    await updateProfile({phoneNumber:phone});
-    await updatePreferences({smokingPreference:smoking,drivingStyle:driving});
-    setUser(prev => prev ? {...prev, phoneNumber:phone, smokingPreference:smoking, drivingStyle:driving} : prev);
+    await updateProfile({phoneNumber:normalizedPhone});
+    setUser(prev => prev ? {...prev, phoneNumber:normalizedPhone} : prev);
+    setPhone(normalizedPhone);
     setEditing(false);setSaveStatus('Saved!');setTimeout(()=>setSaveStatus(''),2000);
   }catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to save');}
 };
 
+  const handleSavePrefs = async () => {
+    try {
+      await updatePreferences({ smokingPreference: smoking, drivingStyle: driving });
+      setUser(prev => prev ? { ...prev, smokingPreference: smoking, drivingStyle: driving } : prev);
+      setEditingPrefs(false);
+    } catch (err) { Alert.alert('Error', err.response?.data?.message || 'Failed to save preferences'); }
+  };
+
   const handleVehicleSave = async () => {
-    const vehicleData = { brand: vBrand, model: vModel, color: vColor, year: vYear, licensePlate: vPlate, sizeCategory: vSize, luggageCapacity: vLug };
+    // Registration card is required to add a new vehicle
+    if (!vehicle?._id && !regCardUri) {
+      Alert.alert('Registration Card Required', 'Please upload your vehicle registration card (Carte Grise) to add your vehicle. The license plate will be extracted automatically.');
+      return;
+    }
+    const vehicleData = { brand: vBrand, model: vModel, color: vColor, year: vYear, licensePlate: vPlate, sizeCategory: vSize, luggageCapacity: vLug, smokingPolicy: vehicle?.smokingPolicy || 'Not Allowed' };
     try {
       let res;
       if (vehicle?._id) {
-        res = await modifyVehicle(vehicle._id, vehicleData, regCardUri);
+        res = await modifyVehicle(vehicle._id, vehicleData, regCardUri, newVehiclePhotoUri);
       } else {
-        res = await addVehicle(vehicleData, regCardUri);
+        res = await addVehicle(vehicleData, regCardUri, newVehiclePhotoUri);
       }
       const v = res.data?.vehicle;
-      if (v) { setVehicle(v); setVPlate(v.licensePlate || vPlate); }
+      if (v) {
+        setVehicle(v);
+        setVPlate(v.licensePlate || vPlate);
+        setVPhoto(v.photo || vPhoto);
+        setNewVehiclePhotoUri(null);
+      }
       const ocr = res.data?.ocrResult;
       if (ocr) {
         // Check if registration card is expired
@@ -212,16 +241,42 @@ export default function AccountSettingsScreen({ navigation }) {
           <TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={phone} onChangeText={setPhone} editable={editing}/>
         </Card>
 
-        <Card title="Travel Preferences">
+        <Card title="Travel Preferences" action={
+          editingPrefs
+            ? <TouchableOpacity onPress={handleSavePrefs}><Text style={[st.editLink,{color:Colors.primary}]}>Save</Text></TouchableOpacity>
+            : <TouchableOpacity onPress={()=>setEditingPrefs(true)}><Text style={st.editLink}>Edit</Text></TouchableOpacity>
+        }>
           <Text style={st.fLabel}>Smoking</Text>
-          <Pills options={['Non-smoker','Smoker']} selected={smoking} onSelect={setSmoking} disabled={!editing}/>
+          <Pills options={['Non-smoker','Smoker']} selected={smoking} onSelect={setSmoking} disabled={!editingPrefs}/>
           <Text style={[st.fLabel,{marginTop:12}]}>Driving Style</Text>
-          <Pills options={['Calm','Moderate','Fast']} selected={driving} onSelect={setDriving} disabled={!editing}/>
+          <Pills options={['Calm','Moderate','Fast']} selected={driving} onSelect={setDriving} disabled={!editingPrefs}/>
+          {editingPrefs && <TouchableOpacity onPress={()=>{setSmoking(user?.smokingPreference||'Non-smoker');setDriving(user?.drivingStyle||'Calm');setEditingPrefs(false);}}><Text style={{fontSize:12,color:Colors.textSecondary,textAlign:'center',marginTop:8}}>Cancel</Text></TouchableOpacity>}
         </Card>
 
         {isDriver && (
           <Card title="My Vehicle" action={<TouchableOpacity onPress={()=>setEditing(e=>!e)}><Text style={st.editLink}>{editing?'Lock':'Edit'}</Text></TouchableOpacity>}>
             {vehicleLoading ? <ActivityIndicator color={Colors.primary}/> : <>
+            {/* Vehicle photo */}
+            <View style={st.vehiclePhotoRow}>
+              {(newVehiclePhotoUri || vPhoto) ? (
+                <Image source={{ uri: newVehiclePhotoUri || vPhoto }} style={st.vehiclePhotoThumb} />
+              ) : (
+                <View style={st.vehiclePhotoEmpty}>
+                  <Ionicons name="car-outline" size={32} color={Colors.textDisabled}/>
+                  <Text style={{fontSize:11,color:Colors.textDisabled,marginTop:4}}>No photo</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[st.vehiclePhotoEditBtn, !editing && {opacity:0.4}]}
+                onPress={() => editing && setPickerFor('vehiclephoto')}
+                disabled={!editing}
+              >
+                <Ionicons name="camera-outline" size={16} color={Colors.primary}/>
+                <Text style={{fontSize:12,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary}}>
+                  {newVehiclePhotoUri ? 'Change photo' : vPhoto ? 'Update photo' : 'Add photo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <View style={{flexDirection:'row',gap:12}}>
               <View style={{flex:1}}><Text style={st.fLabel}>Brand</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vBrand} onChangeText={setVBrand} editable={editing}/></View>
               <View style={{flex:1}}><Text style={st.fLabel}>Model</Text><TextInput style={[st.fInput,!editing&&st.fInputDisabled]} value={vModel} onChangeText={setVModel} editable={editing}/></View>
@@ -244,6 +299,7 @@ export default function AccountSettingsScreen({ navigation }) {
                 <Text style={{fontSize:13,color:editing?Colors.primary:Colors.textDisabled}}>{regCardUri ? 'New photo selected' : vehicle?.registrationCardImage ? 'Re-upload registration card' : 'Upload registration card photo'}</Text>
               </>}
             </TouchableOpacity>
+            {!(vehicle?.id || vehicle?._id) && !regCardUri && <Text style={{fontSize:10,color:Colors.warning||Colors.primary,marginTop:2}}>Registration card is required to add a new vehicle.</Text>}
             {editing && (
               <TouchableOpacity style={[st.saveFab, {marginTop: Spacing.md}]} onPress={handleVehicleSave}>
                 <Text style={st.saveFabText}>Save Vehicle</Text>
@@ -256,21 +312,39 @@ export default function AccountSettingsScreen({ navigation }) {
         {/* Document Verification (driver only — license & vehicle card can expire) */}
         {isDriver && (
           <Card title="Document Verification">
+            {/* ── Driver License ── */}
             <Text style={st.fLabel}>Driver License</Text>
-            <TouchableOpacity style={[st.docUploadRow, driverLicenseVerified && st.docVerified]} onPress={handleDriverLicenseUpload}>
+            {driverLicenseUri ? (
+              <View style={[st.docPreviewRow, driverLicenseVerified && st.docVerified]}>
+                <Image source={{ uri: driverLicenseUri }} style={st.docThumb} />
+                <View style={{flex:1,gap:4}}>
+                  <Text style={{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:driverLicenseVerified?Colors.primary:Colors.textPrimary}}>
+                    {driverLicenseVerified ? 'License Verified' : 'License Uploaded'}
+                  </Text>
+                  <Text style={{fontSize:11,color:Colors.textSecondary}}>Tap View to see full image</Text>
+                </View>
+                <View style={{gap:6,alignItems:'flex-end'}}>
+                  {driverLicenseVerified && <View style={st.verifiedChip}><Text style={st.verifiedChipText}>✓ Verified</Text></View>}
+                  <TouchableOpacity onPress={() => Linking.openURL(driverLicenseUri)} style={st.viewBtn}>
+                    <Ionicons name="eye-outline" size={14} color={Colors.primary}/>
+                    <Text style={st.viewBtnText}>View</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+            <TouchableOpacity style={[st.docUploadRow, driverLicenseVerified && !driverLicenseUri && st.docVerified]} onPress={handleDriverLicenseUpload}>
               {uploading === 'license' ? <ActivityIndicator size="small" color={Colors.primary}/> :
               <>
                 <Ionicons name={driverLicenseVerified ? 'checkmark-circle' : 'cloud-upload-outline'} size={20} color={driverLicenseVerified ? Colors.primary : Colors.textSecondary}/>
                 <View style={{flex:1}}>
                   <Text style={{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:driverLicenseVerified?Colors.primary:Colors.textPrimary}}>
-                    {driverLicenseVerified ? 'License Verified' : driverLicenseUri ? 'Re-upload License' : 'Upload Driver License'}
+                    {driverLicenseUri ? 'Re-upload License' : 'Upload Driver License'}
                   </Text>
                   <Text style={{fontSize:11,color:Colors.textSecondary}}>OCR extracts license number, name & CNI</Text>
                 </View>
-                {driverLicenseVerified && <View style={st.verifiedChip}><Text style={st.verifiedChipText}>✓ Verified</Text></View>}
               </>}
             </TouchableOpacity>
-            <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:2,marginBottom:8}}>You can re-upload your license if it expires or needs updating</Text>
+            <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:2,marginBottom:4}}>You can re-upload your license if it expires or needs updating</Text>
           </Card>
         )}
 
@@ -297,8 +371,8 @@ export default function AccountSettingsScreen({ navigation }) {
         visible={!!pickerFor}
         onClose={() => setPickerFor(null)}
         onImage={handleImagePicked}
-        aspect={[86, 54]}
-        title={pickerFor === 'license' ? 'Upload Driver License' : 'Upload Registration Card'}
+        aspect={pickerFor === 'vehiclephoto' ? [4, 3] : [86, 54]}
+        title={pickerFor === 'license' ? 'Upload Driver License' : pickerFor === 'vehiclephoto' ? 'Add Vehicle Photo' : 'Upload Registration Card'}
       />
     </SafeAreaView>
   );
@@ -333,6 +407,14 @@ const st = StyleSheet.create({
   docVerified:{borderColor:Colors.primary,backgroundColor:Colors.primaryBg},
   verifiedChip:{backgroundColor:Colors.primary,paddingHorizontal:8,paddingVertical:3,borderRadius:12},
   verifiedChipText:{fontSize:10,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  vehiclePhotoRow:{flexDirection:'row',alignItems:'center',gap:12,marginBottom:12},
+  vehiclePhotoThumb:{width:80,height:60,borderRadius:8,resizeMode:'cover',borderWidth:1,borderColor:Colors.border},
+  vehiclePhotoEmpty:{width:80,height:60,borderRadius:8,borderWidth:1.5,borderStyle:'dashed',borderColor:Colors.border,alignItems:'center',justifyContent:'center'},
+  vehiclePhotoEditBtn:{flex:1,flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:12,paddingVertical:10,borderWidth:1,borderColor:Colors.primary,borderRadius:8},
+  docPreviewRow:{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:10,paddingHorizontal:12,borderWidth:1,borderColor:Colors.border,borderRadius:8,marginBottom:6},
+  docThumb:{width:64,height:44,borderRadius:6,resizeMode:'cover',borderWidth:1,borderColor:Colors.border},
+  viewBtn:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:10,paddingVertical:5,borderWidth:1,borderColor:Colors.primary,borderRadius:20},
+  viewBtnText:{fontSize:11,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
   secRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:14},
   secRowText:{flex:1,fontSize:14,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
   secDivider:{height:1,backgroundColor:Colors.divider},
