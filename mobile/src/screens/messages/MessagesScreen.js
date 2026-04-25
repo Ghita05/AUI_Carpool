@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator
+  TextInput, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import * as msgService from '../../services/messageService';
+import ReportUserModal from '../../components/ReportUserModal';
 
 function timeLabel(dateStr) {
   if (!dateStr) return '';
@@ -47,6 +48,8 @@ function ChatView({ conv, onBack, navigation }) {
   const [msg, setMsg] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reportVisible, setReportVisible]   = useState(false);
+  const [reportMessage, setReportMessage]   = useState(null);
 
   const otherId = conv._id;
 
@@ -86,6 +89,13 @@ function ChatView({ conv, onBack, navigation }) {
         <View style={{ flex: 1, marginLeft: Spacing.sm }}>
           <Text style={s.chatName}>{name}</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => { setReportMessage(null); setReportVisible(true); }}
+          style={s.headerBtn}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -99,7 +109,12 @@ function ChatView({ conv, onBack, navigation }) {
             const isMe = item.senderId === user?._id || item.senderId?._id === user?._id;
             const hasAction = item.action?.type === 'stop_request';
             return (
-              <View style={[s.bubbleRow, isMe && s.bubbleRowMe]}>
+              <TouchableOpacity
+                style={[s.bubbleRow, isMe && s.bubbleRowMe]}
+                onLongPress={!isMe ? () => { setReportMessage(item); setReportVisible(true); } : undefined}
+                delayLongPress={500}
+                activeOpacity={isMe ? 1 : 0.85}
+              >
                 <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem, hasAction && s.bubbleWithAction]}>
                   <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>{item.content}</Text>
                   {hasAction && !isMe && (
@@ -120,7 +135,7 @@ function ChatView({ conv, onBack, navigation }) {
                     {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
@@ -132,6 +147,20 @@ function ChatView({ conv, onBack, navigation }) {
           <Ionicons name="send" size={16} color={Colors.textWhite} />
         </TouchableOpacity>
       </View>
+
+      {/* Report modal */}
+      <ReportUserModal
+        visible={reportVisible}
+        onClose={() => { setReportVisible(false); setReportMessage(null); }}
+        subjectId={otherId}
+        subjectName={name}
+        context="Message"
+        messageSnapshot={
+          reportMessage
+            ? { messageId: reportMessage._id, content: reportMessage.content, sentAt: reportMessage.date }
+            : null
+        }
+      />
     </KeyboardAvoidingView>
   );
 }

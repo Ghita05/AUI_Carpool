@@ -18,7 +18,7 @@ function ForgotPasswordModal({ visible, onClose }) {
 
   const handleSend = async () => {
     if (!email) { setError('Email is required'); return; }
-    if (!isAuiEmail(email)) { setError('Please use your AUI email (@aui.ma)'); return; }
+    if (!isAuiEmail(email)) { setError('Please use your AUI email '); return; }
     setLoading(true);
     try {
       await recoverPassword(email.trim());
@@ -51,7 +51,7 @@ function ForgotPasswordModal({ visible, onClose }) {
                 <TouchableOpacity onPress={handleClose}><Ionicons name="close" size={24} color={Colors.textSecondary} /></TouchableOpacity>
               </View>
               <Text style={styles.modalSub}>Enter your AUI email and we'll send you a link to reset your password.</Text>
-              <Input label="AUI Email" placeholder="yourname@aui.ma" value={email} onChangeText={(t) => { setEmail(t); setError(''); }} keyboardType="email-address" error={error} />
+              <Input label="AUI Email" placeholder="youremail@aui.ma" value={email} onChangeText={(t) => { setEmail(t); setError(''); }} keyboardType="email-address" error={error} />
               <Button label="Send Reset Link" onPress={handleSend} loading={loading} style={{ marginTop: Spacing.md }} />
             </>
           )}
@@ -112,7 +112,7 @@ export default function LoginScreen({ navigation }) {
         </LinearGradient>
 
         <View style={styles.card}>
-          <Input label="AUI Email" placeholder="yourname@aui.ma" value={email} onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: null }); }} keyboardType="email-address" error={errors.email} />
+          <Input label="AUI Email" placeholder="youremail@aui.ma" value={email} onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: null }); }} keyboardType="email-address" error={errors.email} />
           <Input label="Password" placeholder="Enter your password" value={password} onChangeText={(t) => { setPassword(t); if (errors.password) setErrors({ ...errors, password: null }); }} secureTextEntry error={errors.password} />
 
           <TouchableOpacity onPress={() => setShowForgot(true)} style={styles.forgotRow}>

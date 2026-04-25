@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import ImagePickerModal from '../../components/ImagePickerModal';
+import VehicleSizeGuideModal from '../../components/VehicleSizeGuideModal';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile, updatePreferences, changePassword as changePasswordAPI, deactivateAccount, uploadDriverLicense } from '../../services/authService';
+import { updateProfile, updatePreferences, changePassword as changePasswordAPI, deactivateAccount, uploadDriverLicense, uploadProfilePicture } from '../../services/authService';
 import { getVehicles, addVehicle, modifyVehicle } from '../../services/vehicleService';
 import { validatePhone, normalizePhone } from '../../utils/phone';
 
@@ -25,15 +26,16 @@ function ChangePasswordModal({visible,onClose}){
 }
 
 function DeactivateModal({visible,onClose}){
+  const { logout } = useAuth();
   const [confirmed,setConfirmed]=useState(false);
   return(<Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={st.modalOv}><View style={st.modalContent}>
-    <View style={st.modalH}><Text style={[st.modalTitle,{color:Colors.error}]}>Deactivate Account</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
-    <Text style={{fontSize:13,color:Colors.textSecondary,marginBottom:16,lineHeight:20}}>This action cannot be undone. Your account and all data will be permanently deleted.</Text>
+    <View style={st.modalH}><Text style={[st.modalTitle,{color:Colors.error}]}>Delete Account</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.textSecondary}/></TouchableOpacity></View>
+    <Text style={{fontSize:13,color:Colors.textSecondary,marginBottom:16,lineHeight:20}}>This is permanent and cannot be undone. Your account, vehicle, and all personal data will be deleted. Any upcoming rides you are part of will be cancelled.</Text>
     <TouchableOpacity style={{flexDirection:'row',alignItems:'center',gap:8,marginBottom:16}} onPress={()=>setConfirmed(c=>!c)}>
       <Ionicons name={confirmed?'checkbox':'square-outline'} size={20} color={confirmed?Colors.error:Colors.border}/>
-      <Text style={{fontSize:13,color:Colors.textPrimary,flex:1}}>I understand and want to deactivate my account</Text>
+      <Text style={{fontSize:13,color:Colors.textPrimary,flex:1}}>I understand this is permanent and cannot be undone</Text>
     </TouchableOpacity>
-    <View style={{flexDirection:'row',gap:10}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[st.saveBtn,{backgroundColor:confirmed?Colors.error:Colors.border}]} disabled={!confirmed} onPress={async()=>{try{await deactivateAccount();onClose();Alert.alert('Account Deactivated','Your account has been deactivated.');}catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to deactivate');}}}><Text style={st.saveBtnText}>Deactivate</Text></TouchableOpacity></View>
+    <View style={{flexDirection:'row',gap:10}}><TouchableOpacity style={st.cancelBtn} onPress={onClose}><Text style={st.cancelBtnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[st.saveBtn,{backgroundColor:confirmed?Colors.error:Colors.border}]} disabled={!confirmed} onPress={async()=>{try{await deactivateAccount();await logout();}catch(err){Alert.alert('Error',err.response?.data?.message||'Failed to delete account');}}}><Text style={st.saveBtnText}>Delete Account</Text></TouchableOpacity></View>
   </View></View></Modal>);
 }
 
@@ -58,9 +60,10 @@ export default function AccountSettingsScreen({ navigation }) {
   const [driverLicenseUri, setDriverLicenseUri] = useState(user?.driverLicenseImage || null);
   const [driverLicenseVerified, setDriverLicenseVerified] = useState(user?.driverLicenseVerified || false);
   const [uploading, setUploading] = useState(null); // 'license' | 'regcard' | 'vehiclephoto' | null
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [editingPrefs, setEditingPrefs] = useState(false);
-  const [showPwModal,setShowPwModal]=useState(false);const [showDeactivate,setShowDeactivate]=useState(false);
+  const [showPwModal,setShowPwModal]=useState(false);const [showDeactivate,setShowDeactivate]=useState(false);const [showSizeGuide,setShowSizeGuide]=useState(false);
   const [saveStatus,setSaveStatus]=useState('');
   // Image picker modal state: which upload is requesting a photo
   const [pickerFor, setPickerFor] = useState(null); // 'license' | 'regcard' | 'vehiclephoto' | null
@@ -88,6 +91,21 @@ export default function AccountSettingsScreen({ navigation }) {
     if (pickerFor === 'license') processDriverLicenseImage(uri);
     else if (pickerFor === 'regcard') processRegCardImage(uri);
     else if (pickerFor === 'vehiclephoto') { setNewVehiclePhotoUri(uri); setPickerFor(null); }
+    else if (pickerFor === 'avatar') processAvatarImage(uri);
+  };
+
+  const processAvatarImage = async (uri) => {
+    setPickerFor(null);
+    setUploadingAvatar(true);
+    try {
+      const res = await uploadProfilePicture(uri);
+      const url = res.data?.profilePicture || uri;
+      setUser(prev => prev ? { ...prev, profilePicture: url } : prev);
+    } catch (err) {
+      Alert.alert('Upload Failed', err.response?.data?.message || 'Could not upload profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const processDriverLicenseImage = async (uri) => {
@@ -221,8 +239,21 @@ export default function AccountSettingsScreen({ navigation }) {
       <ScrollView style={st.scroll} showsVerticalScrollIndicator={false}>
         {/* Avatar */}
         <View style={st.avatarSection}>
-          <View style={st.avatarWrap}><Text style={st.avatarText}>{user.initials||'GN'}</Text></View>
-          <TouchableOpacity onPress={()=>Alert.alert('Change Photo','Photo picker will open in the full version')}><Text style={st.changePhoto}>Change photo</Text></TouchableOpacity>
+          <TouchableOpacity style={st.avatarWrap} onPress={() => setPickerFor('avatar')} disabled={uploadingAvatar}>
+            {uploadingAvatar ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : user?.profilePicture ? (
+              <Image source={{ uri: user.profilePicture }} style={st.avatarImg} />
+            ) : (
+              <Text style={st.avatarText}>{user.initials || 'GN'}</Text>
+            )}
+            <View style={st.avatarEditBadge}>
+              <Ionicons name="camera" size={11} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setPickerFor('avatar')} disabled={uploadingAvatar}>
+            <Text style={st.changePhoto}>{uploadingAvatar ? 'Uploading...' : 'Change photo'}</Text>
+          </TouchableOpacity>
         </View>
 
         <Card title="Personal Information" action={<TouchableOpacity onPress={()=>setEditing(e=>!e)}><Text style={st.editLink}>{editing?'Lock':'Edit'}</Text></TouchableOpacity>}>
@@ -290,7 +321,14 @@ export default function AccountSettingsScreen({ navigation }) {
               {vehicle?.registrationCardVerified && <Text style={{fontSize:11,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary}}>✓ Verified</Text>}
             </View>
             <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:2,marginBottom:4}}>License plate is extracted from your registration card via OCR</Text>
-            <Text style={[st.fLabel,{marginTop:8}]}>Vehicle Size</Text><Pills options={['Small','Medium','Large']} selected={vSize} onSelect={setVSize} disabled={!editing}/>
+            <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:8,marginBottom:0}}>
+              <Text style={st.fLabel}>Vehicle Size</Text>
+              <TouchableOpacity onPress={()=>setShowSizeGuide(true)} style={{flexDirection:'row',alignItems:'center',gap:4}}>
+                <Ionicons name="information-circle-outline" size={16} color={Colors.primary}/>
+                <Text style={{fontSize:Typography.xs,color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'}}>Size guide</Text>
+              </TouchableOpacity>
+            </View>
+            <Pills options={['Small','Medium','Large']} selected={vSize} onSelect={setVSize} disabled={!editing}/>
             <Text style={[st.fLabel,{marginTop:8}]}>Registration Card</Text>
             <TouchableOpacity style={[st.carUpload, regCardUri && st.uploadDone]} onPress={editing ? handleRegCardUpload : undefined} disabled={!editing}>
               {uploading === 'regcard' ? <ActivityIndicator size="small" color={Colors.primary}/> :
@@ -367,6 +405,7 @@ export default function AccountSettingsScreen({ navigation }) {
 
       <ChangePasswordModal visible={showPwModal} onClose={()=>setShowPwModal(false)}/>
       <DeactivateModal visible={showDeactivate} onClose={()=>setShowDeactivate(false)}/>
+      <VehicleSizeGuideModal visible={showSizeGuide} onClose={()=>setShowSizeGuide(false)}/>
       <ImagePickerModal
         visible={!!pickerFor}
         onClose={() => setPickerFor(null)}
@@ -385,7 +424,9 @@ const st = StyleSheet.create({
   headerTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
   scroll:{flex:1,padding:Spacing.lg},
   avatarSection:{alignItems:'center',marginBottom:Spacing.lg},
-  avatarWrap:{width:72,height:72,borderRadius:36,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',marginBottom:8},
+  avatarWrap:{width:72,height:72,borderRadius:36,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',marginBottom:8,overflow:'hidden',position:'relative'},
+  avatarImg:{width:72,height:72,borderRadius:36},
+  avatarEditBadge:{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:11,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:'#fff'},
   avatarText:{fontSize:24,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
   changePhoto:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
   card:{backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.lg,marginBottom:Spacing.md,...Shadows.card},

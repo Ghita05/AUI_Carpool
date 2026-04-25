@@ -36,6 +36,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 import { writeReview } from '../services/reviewService';
+import ReportUserModal from './ReportUserModal';
 
 // ── Star rating widget ────────────────────────────────────────────────────────
 function StarPicker({ value, onChange, size = 36 }) {
@@ -81,6 +82,7 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
   const [content, setContent]       = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState({}); // { [userId]: true }
+  const [reportVisible, setReportVisible] = useState(false);
 
   const current = toRate[currentIdx];
   const total   = toRate.length;
@@ -131,8 +133,10 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
   if (!visible || !current) return null;
 
   const roleLabel = current.role === 'Driver' ? 'Driver' : 'Passenger';
+  const firstName  = current.name.split(' ')[0];
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDone}>
       <KeyboardAvoidingView
         style={s.overlay}
@@ -188,6 +192,16 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
               maxLength={300}
             />
             <Text style={s.charCount}>{content.length}/300</Text>
+
+            {/* Report link */}
+            <TouchableOpacity
+              onPress={() => setReportVisible(true)}
+              style={s.reportLink}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            >
+              <Ionicons name="flag-outline" size={13} color={Colors.error} />
+              <Text style={s.reportLinkText}>Report {firstName}</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {/* Actions */}
@@ -209,6 +223,17 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    {/* Report modal — sits outside the review sheet so it can overlay independently */}
+    <ReportUserModal
+      visible={reportVisible}
+      onClose={() => setReportVisible(false)}
+      subjectId={current?.userId}
+      subjectName={current?.name}
+      context="Ride"
+      rideId={rideId}
+    />
+  </>
   );
 }
 
@@ -324,6 +349,19 @@ const s = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_400Regular',
     textAlign: 'right',
     marginTop: 4,
+  },
+  reportLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
+    marginTop: Spacing.sm,
+    paddingVertical: 4,
+  },
+  reportLinkText: {
+    fontSize: Typography.xs,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    color: Colors.error,
   },
   actions: {
     flexDirection: 'row',

@@ -163,6 +163,22 @@ export const uploadDriverLicense = async (imageUri) => {
 };
 
 /**
+ * POST /api/users/upload/profile-picture
+ */
+export const uploadProfilePicture = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('profilePicture', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'profile.jpg',
+  });
+  const { data } = await api.post('/users/upload/profile-picture', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+/**
  * POST /api/users/ocr-preview  (pre-auth, no JWT needed)
  * Runs OCR on an image during signup and returns extracted data without storing.
  */

@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import ImagePickerModal from '../../components/ImagePickerModal';
+import VehicleSizeGuideModal from '../../components/VehicleSizeGuideModal';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import StepIndicator from '../../components/common/StepIndicator';
@@ -17,7 +18,7 @@ const STEPS_PASSENGER = 3; // Personal → CashWallet → Role
 const STEPS_DRIVER = 6;    // Personal → CashWallet → Role → License → Vehicle Card → Vehicle Details
 
 export default function SignupCompleteProfileScreen({ navigation, route }) {
-  const email = route?.params?.email || 'yourname@aui.ma';
+  const email = route?.params?.email || 'youremail@aui.ma';
   const scrollRef = useRef(null);
   const { setUser } = useAuth();
 
@@ -58,6 +59,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
   const [vehicleLuggage, setVehicleLuggage] = useState('3');
   const [vehiclePhotoUri, setVehiclePhotoUri] = useState(null);
   const [showVehiclePhotoPicker, setShowVehiclePhotoPicker] = useState(false);
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
 
   const update = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: null })); };
   const totalSteps = form.role === 'Driver' ? STEPS_DRIVER : STEPS_PASSENGER;
@@ -304,12 +306,15 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
             vehiclePhotoUri || null
           );
         } catch (e) {
-          console.warn('Vehicle creation failed after registration:', e.message);
+          // 409 = vehicle already exists (e.g. retry after partial failure) — not an error
+          if (e.response?.status !== 409) {
+            console.warn('Vehicle creation failed after registration:', e.message);
+          }
         }
       }
 
       // Step 5: Navigate to main app
-      navigation.replace('MainApp');
+      navigation.replace('Main');
     } catch (err) {
       const msg = err.response?.data?.message || 'Registration failed. Please try again.';
       Alert.alert('Registration Error', msg);
@@ -534,7 +539,13 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
                   <Input label="Year" placeholder="e.g. 2020" value={vehicleYear} onChangeText={setVehicleYear} keyboardType="number-pad" error={errors.vehicleYear} />
                 </View>
               </View>
-              <Text style={styles.fieldLabel}>VEHICLE SIZE</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 0 }}>
+                <Text style={styles.fieldLabel}>VEHICLE SIZE</Text>
+                <TouchableOpacity onPress={() => setShowSizeGuide(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="information-circle-outline" size={16} color={Colors.primary} />
+                  <Text style={{ fontSize: Typography.xs, color: Colors.primary, fontFamily: 'PlusJakartaSans_600SemiBold' }}>Size guide</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.roleRow}>
                 {['Small', 'Medium', 'Large'].map(size => (
                   <TouchableOpacity key={size} style={[styles.rolePill, vehicleSize === size && styles.rolePillActive]} onPress={() => setVehicleSize(size)}>
@@ -573,6 +584,7 @@ export default function SignupCompleteProfileScreen({ navigation, route }) {
       <ImagePickerModal visible={showLicensePicker} onClose={() => setShowLicensePicker(false)} onImage={processLicenseImage} aspect={[86, 54]} title="Upload Driver License" />
       <ImagePickerModal visible={showVehiclePicker} onClose={() => setShowVehiclePicker(false)} onImage={processVehicleCardImage} aspect={[86, 54]} title="Upload Registration Card" />
       <ImagePickerModal visible={showVehiclePhotoPicker} onClose={() => setShowVehiclePhotoPicker(false)} onImage={(uri) => { setVehiclePhotoUri(uri); setShowVehiclePhotoPicker(false); }} aspect={[4, 3]} title="Add Vehicle Photo" />
+      <VehicleSizeGuideModal visible={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
     </KeyboardAvoidingView>
   );
 }
