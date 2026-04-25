@@ -6,6 +6,10 @@ import {
   fetchUsers,
   fetchRides,
   fetchReviews,
+  fetchReports,
+  fetchReportDetail,
+  updateReport,
+  contactReporter,
   suspendUser,
   unsuspendUser,
   warnUser,
@@ -28,6 +32,7 @@ const MailIcon    = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="
 const StarIcon    = ({filled}) => <svg width="12" height="12" viewBox="0 0 24 24" fill={filled?'#F59E0B':'#ddd'} stroke={filled?'#F59E0B':'#ddd'} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 const TrashIcon   = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>;
 const RefreshIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>;
+const FlagIcon    = ({size=14}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>;
 
 // ── Bar chart (overview) ──────────────────────────────────────────────────────
 function MiniBarChart({ data }) {
@@ -75,10 +80,12 @@ function fmtTime(d) {
 
 // ── User Detail Modal ─────────────────────────────────────────────────────────
 function UserDetailModal({ user, token, onClose, onAction }) {
-  const [msg, setMsg]           = useState('');
-  const [sending, setSending]   = useState(false);
-  const [sent, setSent]         = useState(false);
-  const [actLoading, setActLoading] = useState(false);
+  const [msg, setMsg]                   = useState('');
+  const [sending, setSending]           = useState(false);
+  const [sent, setSent]                 = useState(false);
+  const [actLoading, setActLoading]     = useState(false);
+  const [suspendReason, setSuspendReason] = useState('');
+  const [showSuspendForm, setShowSuspendForm] = useState(false);
 
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() || '?';
   const status   = userStatus(user);
@@ -96,9 +103,10 @@ function UserDetailModal({ user, token, onClose, onAction }) {
   };
 
   const handleSuspend = async () => {
+    const reason = suspendReason.trim() || 'Suspended by admin';
     setActLoading(true);
     try {
-      await suspendUser(token, user._id, 'Suspended by admin');
+      await suspendUser(token, user._id, reason);
       onAction('suspended', user._id);
       onClose();
     } catch (e) { alert(e.message); }
@@ -181,14 +189,229 @@ function UserDetailModal({ user, token, onClose, onAction }) {
         {/* Actions */}
         <div className="ad-user-detail-actions">
           {status !== 'suspended' && (
-            <button className="ad-action-btn-lg ad-action-ban-lg" disabled={actLoading} onClick={handleSuspend}>
-              <BanIcon /> Suspend Account
-            </button>
+            showSuspendForm ? (
+              <div style={{width:'100%',display:'flex',flexDirection:'column',gap:8}}>
+                <input
+                  className="ad-user-msg-input"
+                  style={{resize:'none',minHeight:'unset',padding:'8px 12px',fontSize:13}}
+                  placeholder="Suspension reason (optional)…"
+                  value={suspendReason}
+                  onChange={e => setSuspendReason(e.target.value)}
+                />
+                <div style={{display:'flex',gap:8}}>
+                  <button className="ad-action-btn-lg ad-action-ban-lg" disabled={actLoading} onClick={handleSuspend}>
+                    <BanIcon /> Confirm Suspend
+                  </button>
+                  <button className="ad-action-btn-lg" style={{flex:1,background:'var(--color-border)',color:'var(--color-text-secondary)',border:'none'}} onClick={() => setShowSuspendForm(false)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="ad-action-btn-lg ad-action-ban-lg" disabled={actLoading} onClick={() => setShowSuspendForm(true)}>
+                <BanIcon /> Suspend Account
+              </button>
+            )
           )}
           {status === 'suspended' && (
             <button className="ad-action-btn-lg ad-action-verify-lg" disabled={actLoading} onClick={handleUnsuspend}>
               <CheckIcon /> Reactivate Account
             </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Report Detail Modal ───────────────────────────────────────────────────────
+function ReportDetailModal({ reportId, token, onClose, onAction }) {
+  const [report, setReport]             = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [adminNote, setAdminNote]       = useState('');
+  const [suspendReason, setSuspendReason] = useState('');
+  const [showSuspendInput, setShowSuspendInput] = useState(false);
+  const [contactMsg, setContactMsg]     = useState('');
+  const [showContactInput, setShowContactInput] = useState(false);
+  const [saving, setSaving]             = useState(false);
+
+  useEffect(() => {
+    if (!reportId) return;
+    setLoading(true);
+    fetchReportDetail(token, reportId)
+      .then(d => { setReport(d.report); setAdminNote(d.report.adminNote || ''); })
+      .catch(e => { alert(e.message); onClose(); })
+      .finally(() => setLoading(false));
+  }, [reportId, token, onClose]);
+
+  const handleMarkReviewed = async () => {
+    setSaving(true);
+    try { await updateReport(token, reportId, 'Reviewed', adminNote); onAction('reviewed', reportId); onClose(); }
+    catch (e) { alert(e.message); } finally { setSaving(false); }
+  };
+
+  const handleResolve = async () => {
+    setSaving(true);
+    try { await updateReport(token, reportId, 'Resolved', adminNote); onAction('resolved', reportId); onClose(); }
+    catch (e) { alert(e.message); } finally { setSaving(false); }
+  };
+
+  const handleContact = async () => {
+    if (!contactMsg.trim()) return;
+    setSaving(true);
+    try {
+      await contactReporter(token, reportId, contactMsg.trim());
+      setShowContactInput(false); setContactMsg('');
+      onAction('contacted', reportId);
+    } catch (e) { alert(e.message); } finally { setSaving(false); }
+  };
+
+  const handleSuspend = async () => {
+    if (!suspendReason.trim()) { alert('Please enter a suspension reason.'); return; }
+    setSaving(true);
+    try {
+      await suspendUser(token, report.subjectId._id, suspendReason.trim());
+      await updateReport(token, reportId, 'Resolved', adminNote || 'Subject account suspended.');
+      onAction('resolved', reportId);
+      onClose();
+    } catch (e) { alert(e.message); } finally { setSaving(false); }
+  };
+
+  if (loading) return (
+    <div className="ad-modal-overlay">
+      <div className="ad-report-modal" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+        <p style={{ color: 'var(--color-text-secondary)' }}>Loading report…</p>
+      </div>
+    </div>
+  );
+  if (!report) return null;
+
+  const reporter = report.reporterId || {};
+  const subject  = report.subjectId  || {};
+  const isSuspended = subject.accountStatus === 'Suspended';
+  const isResolved  = report.status === 'Resolved';
+
+  const statusColor = { Open: 'cancelled', Reviewed: 'active', Resolved: 'completed' }[report.status] || 'active';
+
+  return (
+    <div className="ad-modal-overlay" onClick={onClose}>
+      <div className="ad-report-modal" onClick={e => e.stopPropagation()}>
+        <div className="ad-modal-header">
+          <span className="ad-modal-title"><FlagIcon size={16} /> &nbsp;Report Details</span>
+          <button className="ad-modal-close" onClick={onClose}><XIcon size={18} /></button>
+        </div>
+
+        <div className="ad-report-modal-body">
+          {/* Reporter → Subject */}
+          <div className="ad-report-users-row">
+            <div className="ad-report-user-card">
+              <span className="ad-report-user-role-label">Reporter</span>
+              <div className="ad-user-detail-avatar" style={{ width: 42, height: 42, fontSize: 15 }}>
+                {`${reporter.firstName?.[0] || ''}${reporter.lastName?.[0] || ''}`.toUpperCase() || '?'}
+              </div>
+              <span className="ad-report-user-name">{reporter.firstName} {reporter.lastName}</span>
+              <span className="ad-report-user-email">{reporter.email}</span>
+            </div>
+            <div className="ad-report-users-arrow">→</div>
+            <div className="ad-report-user-card">
+              <span className="ad-report-user-role-label">Subject</span>
+              <div className="ad-user-detail-avatar" style={{ width: 42, height: 42, fontSize: 15, background: isSuspended ? '#fee2e2' : '' }}>
+                {`${subject.firstName?.[0] || ''}${subject.lastName?.[0] || ''}`.toUpperCase() || '?'}
+              </div>
+              <span className="ad-report-user-name">{subject.firstName} {subject.lastName}</span>
+              <span className="ad-report-user-email">{subject.email}</span>
+              {isSuspended && <span className="ad-badge ad-badge-suspended" style={{ fontSize: 10, marginTop: 2 }}>suspended</span>}
+            </div>
+          </div>
+
+          {/* Meta row */}
+          <div className="ad-report-meta-row">
+            <span className="ad-badge" style={{ background: '#f1f5f9', color: '#475569' }}>{report.category}</span>
+            <span className="ad-badge" style={{ background: '#f1f5f9', color: '#475569' }}>{report.context}</span>
+            <span className={`ad-badge ad-badge-${statusColor}`}>{report.status}</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginLeft: 'auto' }}>{fmtDate(report.createdAt)}</span>
+          </div>
+
+          {/* Description */}
+          {report.description && (
+            <div className="ad-report-section">
+              <p className="ad-report-section-label">Description</p>
+              <p className="ad-report-description">{report.description}</p>
+            </div>
+          )}
+
+          {/* Ride details */}
+          {report.context === 'Ride' && report.rideId && (
+            <div className="ad-report-section">
+              <p className="ad-report-section-label">Ride</p>
+              <p style={{ fontSize: 13, color: 'var(--color-text-primary)', fontWeight: 500 }}>
+                {report.rideId.departureLocation} → {report.rideId.destination}
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                {fmtDate(report.rideId.departureDateTime)} · {report.rideId.state}
+              </p>
+            </div>
+          )}
+
+          {/* Message snapshot */}
+          {report.context === 'Message' && report.messageSnapshot?.content && (
+            <div className="ad-report-section">
+              <p className="ad-report-section-label">Reported Message</p>
+              <div className="ad-message-bubble">
+                <p>{report.messageSnapshot.content}</p>
+                {report.messageSnapshot.sentAt && (
+                  <span className="ad-msg-time">{fmtDate(report.messageSnapshot.sentAt)} {fmtTime(report.messageSnapshot.sentAt)}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Admin note */}
+          <div className="ad-report-section">
+            <p className="ad-report-section-label">Admin Note</p>
+            <textarea
+              className="ad-admin-note-input"
+              rows={2}
+              placeholder="Add a note (optional)…"
+              value={adminNote}
+              onChange={e => setAdminNote(e.target.value)}
+              disabled={isResolved}
+            />
+          </div>
+
+          {/* Actions */}
+          {!isResolved && (
+            <div className="ad-report-actions">
+              {/* Contact reporter */}
+              {showContactInput ? (
+                <div className="ad-report-inline-form">
+                  <input className="ad-admin-note-input" style={{ flex: 1 }} placeholder="Message to reporter…" value={contactMsg} onChange={e => setContactMsg(e.target.value)} />
+                  <button className="ad-action-btn-lg" style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', flexShrink: 0 }} onClick={handleContact} disabled={saving || !contactMsg.trim()}><MailIcon /> Send</button>
+                  <button className="ad-action-btn-lg" style={{ background: 'var(--color-border)', color: 'var(--color-text-secondary)', border: 'none', flexShrink: 0 }} onClick={() => setShowContactInput(false)}>Cancel</button>
+                </div>
+              ) : (
+                <button className="ad-action-btn-lg" onClick={() => setShowContactInput(true)} disabled={saving}><MailIcon /> Contact Reporter</button>
+              )}
+
+              {/* Mark reviewed */}
+              {report.status === 'Open' && (
+                <button className="ad-action-btn-lg" onClick={handleMarkReviewed} disabled={saving}><CheckIcon /> Mark Reviewed</button>
+              )}
+
+              {/* Resolve */}
+              <button className="ad-action-btn-lg ad-action-verify-lg" onClick={handleResolve} disabled={saving}><CheckIcon /> Resolve</button>
+
+              {/* Suspend subject */}
+              {!isSuspended && (
+                showSuspendInput ? (
+                  <div className="ad-report-inline-form">
+                    <input className="ad-admin-note-input" style={{ flex: 1 }} placeholder="Suspension reason (required)…" value={suspendReason} onChange={e => setSuspendReason(e.target.value)} />
+                    <button className="ad-action-btn-lg ad-action-ban-lg" onClick={handleSuspend} disabled={saving || !suspendReason.trim()}><BanIcon /> Confirm</button>
+                    <button className="ad-action-btn-lg" style={{ background: 'var(--color-border)', color: 'var(--color-text-secondary)', border: 'none', flexShrink: 0 }} onClick={() => setShowSuspendInput(false)}>Cancel</button>
+                  </div>
+                ) : (
+                  <button className="ad-action-btn-lg ad-action-ban-lg" onClick={() => setShowSuspendInput(true)} disabled={saving}><BanIcon /> Suspend Subject</button>
+                )
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -226,6 +449,12 @@ export default function AdminDashboard() {
   const [reviews, setReviews]               = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewSearch, setReviewSearch]     = useState('');
+
+  // ── Reports state ──
+  const [reports, setReports]               = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportStatusFilter, setReportStatusFilter] = useState('all');
+  const [selectedReport, setSelectedReport] = useState(null);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -272,6 +501,16 @@ export default function AdminDashboard() {
       .finally(() => setReviewsLoading(false));
   }, [tab, token, reviewSearch, showToast]);
 
+  // ── Fetch reports when tab or filter changes ──
+  useEffect(() => {
+    if (tab !== 'reports' || !token) return;
+    setReportsLoading(true);
+    fetchReports(token, reportStatusFilter !== 'all' ? { status: reportStatusFilter.charAt(0).toUpperCase() + reportStatusFilter.slice(1) } : {})
+      .then(d => setReports(d.reports || []))
+      .catch(e => showToast(`Reports error: ${e.message}`))
+      .finally(() => setReportsLoading(false));
+  }, [tab, token, reportStatusFilter, showToast]);
+
   // ── Handlers ──
   const handleLogout = async () => {
     await logout();
@@ -296,6 +535,18 @@ export default function AdminDashboard() {
     } catch (e) { showToast(`Error: ${e.message}`); }
   };
 
+  const handleReportAction = (action, reportId) => {
+    setReports(prev => prev.map(r => {
+      if (r._id !== reportId) return r;
+      if (action === 'reviewed') return { ...r, status: 'Reviewed' };
+      if (action === 'resolved') return { ...r, status: 'Resolved' };
+      return r;
+    }));
+    if (action === 'resolved') showToast('Report resolved');
+    if (action === 'reviewed') showToast('Report marked as reviewed');
+    if (action === 'contacted') showToast('Reporter notified');
+  };
+
   const handleUserAction = (action, userId) => {
     setUsers(prev => prev.map(u => {
       if (u._id !== userId) return u;
@@ -306,13 +557,13 @@ export default function AdminDashboard() {
     showToast(action === 'suspended' ? 'Account suspended' : 'Account reactivated');
   };
 
-  const TABS = ['overview', 'users', 'rides', 'reviews'];
+  const TABS = ['overview', 'users', 'rides', 'reviews', 'reports'];
 
   const statCards = stats ? [
-    { icon: <UsersIcon size={22} color="#1b5e20" />, label: 'Total Users',    val: stats.totalUsers,  accent: 'green' },
-    { icon: <CarIcon   size={22} color="#1b5e20" />, label: 'Total Rides',    val: stats.totalRides,  accent: 'green' },
-    { icon: <ChartIcon size={22} color="#f59e0b" />, label: 'Active Now',     val: stats.activeRides, accent: 'amber' },
-    { icon: <AlertIcon size={22} color="#ef4444" />, label: 'Cancelled Rides', val: stats.openReports, accent: 'red'   },
+    { icon: <UsersIcon size={22} color="#1b5e20" />, label: 'Total Users',  val: stats.totalUsers,  accent: 'green' },
+    { icon: <CarIcon   size={22} color="#1b5e20" />, label: 'Total Rides',  val: stats.totalRides,  accent: 'green' },
+    { icon: <ChartIcon size={22} color="#f59e0b" />, label: 'Active Now',   val: stats.activeRides, accent: 'amber' },
+    { icon: <AlertIcon size={22} color="#ef4444" />, label: 'Open Reports', val: stats.openReports, accent: 'red'   },
   ] : [];
 
   return (
@@ -558,6 +809,68 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* ── REPORTS ── */}
+        {tab === 'reports' && (
+          <div>
+            <div className="ad-toolbar">
+              <div className="ad-filter-group">
+                <span className="ad-filter-label">Status:</span>
+                {['all', 'open', 'reviewed', 'resolved'].map(s => (
+                  <button key={s} className={`ad-filter-btn ${reportStatusFilter === s ? 'active' : ''}`} onClick={() => setReportStatusFilter(s)}>
+                    {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <button
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family)' }}
+                onClick={() => {
+                  setReportsLoading(true);
+                  fetchReports(token, reportStatusFilter !== 'all' ? { status: reportStatusFilter.charAt(0).toUpperCase() + reportStatusFilter.slice(1) } : {})
+                    .then(d => setReports(d.reports || []))
+                    .catch(e => showToast(e.message))
+                    .finally(() => setReportsLoading(false));
+                }}
+              >
+                <RefreshIcon /> Refresh
+              </button>
+              <span className="ad-toolbar-count">{reportsLoading ? '…' : `${reports.length} reports`}</span>
+            </div>
+
+            {reportsLoading
+              ? <p style={{ color: 'var(--color-text-secondary)' }}>Loading reports…</p>
+              : reports.length === 0
+                ? <p style={{ color: 'var(--color-text-secondary)', padding: '24px 0' }}>No reports found.</p>
+                : <table className="ad-table">
+                  <thead>
+                    <tr><th>Reporter</th><th>Subject</th><th>Category</th><th>Context</th><th>Date</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {reports.map(rp => {
+                      const reporter = rp.reporterId || {};
+                      const subject  = rp.subjectId  || {};
+                      const statusColor = { Open: 'cancelled', Reviewed: 'active', Resolved: 'completed' }[rp.status] || 'active';
+                      return (
+                        <tr key={rp._id} className="ad-clickable-row" onClick={() => setSelectedReport(rp._id)}>
+                          <td>{reporter.firstName} {reporter.lastName}</td>
+                          <td>{subject.firstName} {subject.lastName}</td>
+                          <td>{rp.category}</td>
+                          <td>{rp.context}</td>
+                          <td>{fmtDate(rp.createdAt)}</td>
+                          <td><span className={`ad-badge ad-badge-${statusColor}`}>{rp.status}</span></td>
+                          <td onClick={e => e.stopPropagation()}>
+                            <button className="ad-action-btn" title="View report" onClick={() => setSelectedReport(rp._id)}>
+                              <FlagIcon />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+            }
+          </div>
+        )}
+
       </div>
 
       {/* User detail modal */}
@@ -567,6 +880,16 @@ export default function AdminDashboard() {
           token={token}
           onClose={() => setSelectedUser(null)}
           onAction={handleUserAction}
+        />
+      )}
+
+      {/* Report detail modal */}
+      {selectedReport && (
+        <ReportDetailModal
+          reportId={selectedReport}
+          token={token}
+          onClose={() => setSelectedReport(null)}
+          onAction={handleReportAction}
         />
       )}
 

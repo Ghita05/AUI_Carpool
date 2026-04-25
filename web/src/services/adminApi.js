@@ -72,3 +72,25 @@ export const fetchReviews = (token, params = {}) => {
 
 export const removeReview = (token, reviewId) =>
   request(`/api/admin/reviews/${reviewId}`, token, { method: 'DELETE' });
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+export const fetchReports = (token, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/api/admin/reports${qs ? `?${qs}` : ''}`, token);
+};
+
+export const fetchReportDetail = (token, reportId) =>
+  request(`/api/admin/reports/${reportId}`, token);
+
+export const updateReport = (token, reportId, status, adminNote) =>
+  request(`/api/admin/reports/${reportId}`, token, {
+    method: 'PUT',
+    body: JSON.stringify({ status, adminNote }),
+  });
+
+export const contactReporter = (token, reportId, message) =>
+  request(`/api/admin/reports/${reportId}/contact-reporter`, token, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+
