@@ -110,12 +110,27 @@ const contactReporter = async (req, res, next) => {
     const report = await Report.findById(req.params.reportId).populate('reporterId', '_id firstName');
     if (!report) return error(res, 404, 'Report not found.');
 
-    await Notification.create({
-      userId:  report.reporterId._id,
-      title:   'Admin Follow-up on Your Report',
-      content: message.trim(),
-      type:    'System',
+    const admin = req.user;
+
+    const notification = await Notification.create({
+      userId:   report.reporterId._id,
+      title:    'Admin Follow-up on Your Report',
+      content:  message.trim(),
+      type:     'System',
+      metadata: {
+        adminId:   admin._id.toString(),
+        adminName: `${admin.firstName} ${admin.lastName}`.trim(),
+        fromAdmin: true,
+      },
     });
+
+    // Push real-time notification to the reporter's socket room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${report.reporterId._id.toString()}`).emit('new-notification', {
+        notification: notification.toObject(),
+      });
+    }
 
     // Mark as Reviewed if still Open
     if (report.status === 'Open') {

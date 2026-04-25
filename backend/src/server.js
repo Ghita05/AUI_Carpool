@@ -175,8 +175,8 @@ const startServer = async () => {
         });
       }
 
-      // Start scheduled jobs after DB is connected
-      initScheduledJobs();
+      // Start scheduled jobs after DB is connected (pass io for real-time socket push)
+      initScheduledJobs(io);
     });
   } catch (err) {
     console.error('Failed to start server:', err);

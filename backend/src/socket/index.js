@@ -29,6 +29,7 @@
 
 const jwt = require('jsonwebtoken');
 const { Ride, Notification, User } = require('../models');
+const { sendNotification } = require('../utils/notify');
 
 const ATTENDANCE_THRESHOLD_M = 300;
 const DEPARTURE_THRESHOLD_M  = 200;
@@ -87,7 +88,7 @@ async function emitReviewPrompts(io, ride) {
 
   for (const memberId of memberIds) {
     io.to(`user:${memberId}`).emit('ride-completed', payload);
-    await Notification.create({
+    await sendNotification(io, {
       userId: memberId,
       title: 'Ride Complete — Rate Your Experience',
       content: `Your ride to ${ride.destination} is done. Tap to rate your fellow travellers.`,
@@ -181,7 +182,7 @@ async function cancelAbsentPassengers(io, rideId) {
 
     await User.findByIdAndUpdate(bk.passengerId, { $inc: { cancellationCount: 1 } });
 
-    await Notification.create({
+    await sendNotification(io, {
       userId: bk.passengerId,
       title: 'Booking Auto-Cancelled',
       content: `Your booking for the ride to ${ride.destination} was cancelled because you were not present at the departure point when the ride started.`,
@@ -253,7 +254,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
         rideId: ride._id.toString(),
         destination: ride.destination,
       });
-      await Notification.create({
+      await sendNotification(io, {
         userId: bk.passengerId,
         title: 'Your Ride Has Started',
         content: `Your ride to ${ride.destination} is on its way.`,
@@ -288,7 +289,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
           if (!pos) continue;
           const dist = haversineDistance(pos.lat, pos.lng, depLat, depLng);
           if (dist > LATE_THRESHOLD_M) {
-            await Notification.create({
+            await sendNotification(io, {
               userId: mid,
               title: 'Departure Time Has Passed',
               content: `Your ride to ${ride.destination} was scheduled to depart. Make your way to the pickup point.`,
@@ -330,7 +331,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
       await User.findByIdAndUpdate(ride.driverId, { $inc: { cancellationCount: 1 } });
 
       for (const bk of confirmed) {
-        await Notification.create({
+        await sendNotification(io, {
           userId: bk.passengerId,
           title: 'Ride Auto-Cancelled',
           content: `The ride to ${ride.destination} by ${driverName} was cancelled because the driver did not show up within 15 minutes of the scheduled departure.`,
@@ -343,7 +344,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
       }
 
       // Notify driver too
-      await Notification.create({
+      await sendNotification(io, {
         userId: ride.driverId,
         title: 'Ride Auto-Cancelled',
         content: `Your ride to ${ride.destination} was automatically cancelled because you did not depart within 15 minutes of the scheduled time.`,

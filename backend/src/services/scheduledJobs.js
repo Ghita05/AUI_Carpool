@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { User, Ride, Notification } = require('../models');
+const { sendNotification } = require('../utils/notify');
 
 /**
  * Job 1: Clean up unverified accounts
@@ -38,7 +39,7 @@ const scheduleUnverifiedCleanup = () => {
  * Finds rides departing within the next 2 hours that haven't been
  * reminded yet, then notifies the driver and all confirmed passengers.
  */
-const scheduleRideReminders = () => {
+const scheduleRideReminders = (io = null) => {
   cron.schedule('*/30 * * * *', async () => {
     try {
       const now = new Date();
@@ -67,7 +68,7 @@ const scheduleRideReminders = () => {
         if (existingReminder) continue;
 
         // Notify driver
-        await Notification.create({
+        await sendNotification(io, {
           userId: ride.driverId,
           title: 'Ride Reminder',
           content: `Your ride to ${ride.destination} departs at ${ride.departureDateTime.toLocaleTimeString()}. Ride ID: ${ride._id}`,
@@ -76,7 +77,7 @@ const scheduleRideReminders = () => {
 
         // Notify all confirmed passengers
         for (const booking of confirmedBookings) {
-          await Notification.create({
+          await sendNotification(io, {
             userId: booking.passengerId,
             title: 'Departure Reminder',
             content: `Your ride to ${ride.destination} departs at ${ride.departureDateTime.toLocaleTimeString()}. Ride ID: ${ride._id}`,
@@ -103,7 +104,7 @@ const scheduleRideReminders = () => {
  * being stuck in OnGoing state permanently.
  * 6 hours is generous enough to cover the longest AUI → Casablanca route.
  */
-const scheduleOngoingSafetyNet = () => {
+const scheduleOngoingSafetyNet = (io = null) => {
   cron.schedule('*/30 * * * *', async () => {
     try {
       const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000);
@@ -135,10 +136,9 @@ const scheduleOngoingSafetyNet = () => {
           { $inc: { totalCompletedRides: 1 } }
         );
 
-        // Notify all members (no io available from cron — use Notification only)
         const memberIds = [completed.driverId, ...presentIds];
         for (const mid of memberIds) {
-          await Notification.create({
+          await sendNotification(io, {
             userId:  mid,
             title:   'Ride Completed — Rate Your Experience',
             content: `Your ride to ${completed.destination} has been completed. Open the app to leave a review.`,
@@ -165,7 +165,7 @@ const scheduleOngoingSafetyNet = () => {
  * The socket state machine handles the same check in real-time when the
  * driver is online.
  */
-const scheduleLateDriverAutoCancel = () => {
+const scheduleLateDriverAutoCancel = (io = null) => {
   cron.schedule('*/5 * * * *', async () => {
     try {
       const cutoff = new Date(Date.now() - 15 * 60 * 1000); // 15 min ago
@@ -199,7 +199,7 @@ const scheduleLateDriverAutoCancel = () => {
 
         // Notify all confirmed passengers
         for (const bk of confirmed) {
-          await Notification.create({
+          await sendNotification(io, {
             userId: bk.passengerId,
             title: 'Ride Auto-Cancelled',
             content: `The ride to ${ride.destination} by ${driverName} was cancelled because the driver did not show up within 15 minutes of the scheduled departure.`,
@@ -208,7 +208,7 @@ const scheduleLateDriverAutoCancel = () => {
         }
 
         // Notify driver
-        await Notification.create({
+        await sendNotification(io, {
           userId: ride.driverId,
           title: 'Ride Auto-Cancelled',
           content: `Your ride to ${ride.destination} was automatically cancelled because you did not depart within 15 minutes of the scheduled time.`,
@@ -266,11 +266,11 @@ const scheduleEmptyRideDismissal = () => {
 /**
  * Initialize all scheduled jobs
  */
-const initScheduledJobs = () => {
+const initScheduledJobs = (io = null) => {
   scheduleUnverifiedCleanup();
-  scheduleRideReminders();
-  scheduleOngoingSafetyNet();
-  scheduleLateDriverAutoCancel();
+  scheduleRideReminders(io);
+  scheduleOngoingSafetyNet(io);
+  scheduleLateDriverAutoCancel(io);
   scheduleEmptyRideDismissal();
 };
 
