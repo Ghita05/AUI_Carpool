@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const admin = require('../controllers/adminController');
-const auth = require('../controllers/authController');
+const admin  = require('../controllers/adminController');
+const auth   = require('../controllers/authController');
 const review = require('../controllers/reviewController');
+const report = require('../controllers/reportController');
 const { authenticate, authorize } = require('../middleware/auth');
 
 // All admin routes require a valid JWT for a user with role === 'Admin'
@@ -25,5 +26,11 @@ router.delete('/rides/:rideId', ...guard, admin.adminCancelRide);
 // ── Review management ─────────────────────────────────────────────────────────
 router.get('/reviews', ...guard, admin.getAllReviews);
 router.delete('/reviews/:reviewId', ...guard, review.removeInappropriateReview);
+
+// ── Report management ─────────────────────────────────────────────────────────
+router.get('/reports',                           ...guard, report.listReports);
+router.get('/reports/:reportId',                 ...guard, report.getReport);
+router.put('/reports/:reportId',                 ...guard, report.updateReport);
+router.post('/reports/:reportId/contact-reporter', ...guard, report.contactReporter);
 
 module.exports = router;

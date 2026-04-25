@@ -110,8 +110,12 @@ const userSchema = new mongoose.Schema(
     },
     accountStatus: {
       type: String,
-      enum: ['Active', 'Suspended', 'Deactivated'],
+      enum: ['Active', 'Suspended', 'Deactivated', 'Deleted'],
       default: 'Active',
+    },
+    suspensionReason: {
+      type: String,
+      default: null,
     },
     // ── Driver-specific fields ──
     driverLicenseImage: {

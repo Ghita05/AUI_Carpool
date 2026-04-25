@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { User } = require('../models');
+const { User, Vehicle, Ride, Review, Notification, Message } = require('../models');
 const { success, error } = require('../utils/responses');
 const {
   generateAccessToken,
@@ -308,7 +308,10 @@ const login = async (req, res, next) => {
     }
 
     if (user.accountStatus !== 'Active') {
-      return error(res, 403, `Your account is ${user.accountStatus.toLowerCase()}.`);
+      const msg = user.accountStatus === 'Suspended' && user.suspensionReason
+        ? `Your account has been suspended. Reason: ${user.suspensionReason}`
+        : `Your account is ${user.accountStatus.toLowerCase()}.`;
+      return error(res, 403, msg);
     }
 
     const accessToken = generateAccessToken(user._id, user.role);
@@ -653,11 +656,109 @@ const updatePreferences = async (req, res, next) => {
 
 const deactivateAccount = async (req, res, next) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, {
-      accountStatus: 'Deactivated',
-      refreshToken: null,
+    const userId = req.user._id;
+
+    // ── 1. Cancel all upcoming/active Offer rides where user is the driver ──
+    const activeDriverRides = await Ride.find({
+      type: 'Offer',
+      driverId: userId,
+      state: { $nin: ['Completed', 'Cancelled', 'Expired', 'Dismissed'] },
     });
-    return success(res, 200, 'Account deactivated.');
+
+    for (const ride of activeDriverRides) {
+      const confirmedBookings = ride.bookings.filter(b => b.status === 'Confirmed');
+
+      await Ride.findByIdAndUpdate(ride._id, {
+        $set: {
+          state: 'Cancelled',
+          cancellationReason: 'Driver deleted their account',
+          cancellationDate: new Date(),
+          'bookings.$[elem].status': 'Cancelled',
+          'bookings.$[elem].cancellationDate': new Date(),
+          'bookings.$[elem].cancellationReason': 'Driver deleted their account',
+        },
+      }, { arrayFilters: [{ 'elem.status': 'Confirmed' }] });
+
+      for (const booking of confirmedBookings) {
+        await Notification.create({
+          userId: booking.passengerId,
+          title: 'Ride Cancelled',
+          content: `Your ride to ${ride.destination} on ${new Date(ride.departureDateTime).toLocaleDateString()} was cancelled because the driver deleted their account.`,
+          type: 'Cancellation',
+          rideId: ride._id,
+        });
+      }
+    }
+
+    // ── 2. Cancel all pending ride Requests posted by the user ──────────────
+    await Ride.updateMany(
+      {
+        type: 'Request',
+        passengerId: userId,
+        state: { $nin: ['Completed', 'Cancelled', 'Expired', 'Dismissed'] },
+      },
+      {
+        $set: {
+          state: 'Cancelled',
+          cancellationReason: 'Passenger deleted their account',
+          cancellationDate: new Date(),
+        },
+      }
+    );
+
+    // ── 3. Cancel user's confirmed bookings in other drivers' rides ──────────
+    const ridesWithUserBooking = await Ride.find({
+      type: 'Offer',
+      'bookings.passengerId': userId,
+      'bookings.status': 'Confirmed',
+    });
+
+    for (const ride of ridesWithUserBooking) {
+      await Ride.findByIdAndUpdate(ride._id, {
+        $set: {
+          'bookings.$[elem].status': 'Cancelled',
+          'bookings.$[elem].cancellationDate': new Date(),
+          'bookings.$[elem].cancellationReason': 'Passenger deleted their account',
+        },
+        $inc: { availableSeats: 1 },
+      }, { arrayFilters: [{ 'elem.passengerId': userId, 'elem.status': 'Confirmed' }] });
+    }
+
+    // ── 4. Delete vehicle(s) ─────────────────────────────────────────────────
+    await Vehicle.deleteMany({ ownerId: userId });
+
+    // ── 5. Delete user's notifications (private, no longer needed) ───────────
+    await Notification.deleteMany({ userId });
+
+    // ── 6. Delete reviews written by this user ───────────────────────────────
+    await Review.deleteMany({ authorId: userId });
+
+    // ── 7. Wipe all PII — keep the _id shell so ride history references work ─
+    //    Messages are intentionally kept so other users retain their chat history;
+    //    they will show "Deleted User" as sender via the anonymized name fields.
+    await User.findByIdAndUpdate(userId, {
+      firstName: 'Deleted',
+      lastName: 'User',
+      email: `deleted_${userId}@aui.ma`,
+      password: crypto.randomBytes(32).toString('hex'), // bcrypt.compare always fails on non-hash
+      phoneNumber: '',
+      gender: '',
+      auiId: '',
+      profilePicture: null,
+      driverLicenseImage: null,
+      driverLicenseVerified: false,
+      driverLicenseExtracted: null,
+      cashWalletImage: null,
+      cashWalletVerified: false,
+      cashWalletExtracted: null,
+      reviewSummary: '',
+      averageRating: 0,
+      dismissedRideRequests: [],
+      refreshToken: null,
+      accountStatus: 'Deleted',
+    });
+
+    return success(res, 200, 'Account deleted.');
   } catch (err) {
     next(err);
   }
@@ -673,8 +774,9 @@ const suspendAccount = async (req, res, next) => {
       return error(res, 404, 'User not found.');
     }
 
-    user.accountStatus = 'Suspended';
-    user.refreshToken = null;
+    user.accountStatus    = 'Suspended';
+    user.suspensionReason = reason || null;
+    user.refreshToken     = null;
     await user.save({ validateModifiedOnly: true });
 
     return success(res, 200, `Account suspended. Reason: ${reason}`);
@@ -724,9 +826,25 @@ const uploadCashWallet = async (req, res, next) => {
       ocrError = ocrErr;
       console.error('CashWallet OCR failed (image saved anyway):', ocrErr.message);
     }
+    // Always persist the image URL and whatever was extracted to the DB so the admin
+    // can see partial OCR results even when validation later fails.
+    const user = await User.findById(req.user._id);
+    const baseUpdate = {
+      cashWalletImage: imageUrl,
+      cashWalletVerified: false,
+      cashWalletExtracted: ocrError ? null : {
+        holderName: ocrResult.holderName || null,
+        firstName: ocrResult.firstName || null,
+        lastName: ocrResult.lastName || null,
+        studentId: ocrResult.studentId || null,
+        isAuiCard: ocrResult.isAuiCard || false,
+        detectedType: ocrResult.detectedType || null,
+        ocrError: ocrError ? ocrError.message : null,
+      },
+    };
+    await User.findByIdAndUpdate(req.user._id, baseUpdate);
+
     if (ocrError) {
-      // Image was saved to Cloudinary but OCR could not run — return a service error
-      // so the user does not see a misleading "better lighting" message
       return error(res, 503, `OCR service error: ${ocrError.message}`);
     }
 
@@ -744,33 +862,23 @@ const uploadCashWallet = async (req, res, next) => {
     }
 
     // Compare extracted name with user's registered name
-    const user = await User.findById(req.user._id);
     const userFullName = `${user.firstName} ${user.lastName}`;
     let nameMatch = null;
     if (ocrResult.holderName) {
       nameMatch = namesMatch(ocrResult.holderName, userFullName);
-      // Hard reject if name doesn't match
       if (nameMatch === false) {
         return error(res, 400, `The name on this CashWallet (${ocrResult.holderName}) does not match your registered name (${userFullName}). Please upload your own CashWallet.`);
       }
     }
 
-    // Auto-fill auiId from extracted student ID if not already set
-    const updates = {
-      cashWalletImage: imageUrl,
-      cashWalletVerified: ocrResult.verified && nameMatch === true,
-      cashWalletExtracted: ocrResult.verified ? {
-        holderName: ocrResult.holderName,
-        firstName: ocrResult.firstName,
-        lastName: ocrResult.lastName,
-        studentId: ocrResult.studentId,
-        isAuiCard: ocrResult.isAuiCard,
-      } : null,
+    // All validations passed — mark as verified and auto-fill auiId if needed
+    const verifiedUpdate = {
+      cashWalletVerified: true,
     };
     if (ocrResult.studentId && !user.auiId) {
-      updates.auiId = ocrResult.studentId;
+      verifiedUpdate.auiId = ocrResult.studentId;
     }
-    await User.findByIdAndUpdate(req.user._id, updates);
+    await User.findByIdAndUpdate(req.user._id, verifiedUpdate);
 
     return success(res, 200, 'CashWallet image uploaded.', {
       imageUrl,
@@ -810,6 +918,22 @@ const uploadDriverLicense = async (req, res, next) => {
       return error(res, 503, `OCR service error: ${ocrError.message}`);
     }
 
+    // Persist image URL and raw extracted data immediately so admin can always see what was extracted,
+    // even if validation fails below.
+    const user = await User.findById(req.user._id);
+    await User.findByIdAndUpdate(req.user._id, {
+      driverLicenseImage: imageUrl,
+      driverLicenseVerified: false,
+      driverLicenseExtracted: {
+        licenseNumber: ocrResult.licenseNumber || null,
+        holderName: ocrResult.holderName || null,
+        firstName: ocrResult.firstName || null,
+        lastName: ocrResult.lastName || null,
+        cni: ocrResult.cni || null,
+        detectedType: ocrResult.detectedType || null,
+      },
+    });
+
     // Wrong document check
     if (ocrResult.wrongDocument) {
       return error(res, 400, `Wrong document uploaded. This appears to be a ${ocrResult.detectedTypeLabel}. Please upload your Moroccan driver license (Permis de Conduire).`);
@@ -824,21 +948,12 @@ const uploadDriverLicense = async (req, res, next) => {
       return error(res, 400, `Could not read ${missingFields.join(', ')} from your driver license. Please take a clearer photo with the card filling the frame and good lighting.`);
     }
 
-    // Compare extracted name with user's registered name
-    const user = await User.findById(req.user._id);
     const userFullName = `${user.firstName} ${user.lastName}`;
     const nameMatch = ocrResult.holderName ? namesMatch(ocrResult.holderName, userFullName) : null;
 
+    // All validations passed — mark as verified
     await User.findByIdAndUpdate(req.user._id, {
-      driverLicenseImage: imageUrl,
       driverLicenseVerified: ocrResult.verified && nameMatch !== false,
-      driverLicenseExtracted: ocrResult.verified ? {
-        licenseNumber: ocrResult.licenseNumber,
-        holderName: ocrResult.holderName,
-        firstName: ocrResult.firstName,
-        lastName: ocrResult.lastName,
-        cni: ocrResult.cni,
-      } : null,
     });
 
     return success(res, 200, 'Driver license image uploaded.', {

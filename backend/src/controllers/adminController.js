@@ -5,7 +5,7 @@
  * authenticate + authorize('Admin') middleware.
  */
 
-const { User, Ride, Review, Notification } = require('../models');
+const { User, Ride, Review, Notification, Report } = require('../models');
 const { success, error } = require('../utils/responses');
 
 // ── GET /api/admin/stats ──────────────────────────────────────────────────────
@@ -15,8 +15,7 @@ const getStats = async (req, res, next) => {
       User.countDocuments({ role: { $ne: 'Admin' } }),
       Ride.countDocuments({ type: 'Offer' }),
       Ride.countDocuments({ state: { $in: ['Active', 'OnGoing', 'Full', 'Accepted'] } }),
-      // Count all cancelled rides
-      Ride.countDocuments({ state: 'Cancelled' }),
+      Report.countDocuments({ status: 'Open' }),
     ]);
 
     // Weekly ride activity (Mon–Sun of current week)
