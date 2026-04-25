@@ -1,4 +1,4 @@
-const { Report, User, Ride, Notification } = require('../models');
+const { Report, User, Ride, Notification, Message } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const CATEGORIES = ['Harassment', 'Inappropriate Behavior', 'Dangerous Driving', 'Fraud or Scam', 'Spam', 'Other'];
@@ -122,6 +122,13 @@ const contactReporter = async (req, res, next) => {
         adminName: `${admin.firstName} ${admin.lastName}`.trim(),
         fromAdmin: true,
       },
+    });
+
+    // Also persist as a real Message so the reporter sees it in their chat
+    await Message.create({
+      senderId:   admin._id,
+      receiverId: report.reporterId._id,
+      content:    message.trim(),
     });
 
     // Push real-time notification to the reporter's socket room
