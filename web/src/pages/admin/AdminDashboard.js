@@ -10,6 +10,8 @@ import {
   fetchReportDetail,
   updateReport,
   contactReporter,
+  fetchConversation,
+  sendAdminMessage,
   suspendUser,
   unsuspendUser,
   warnUser,
@@ -223,7 +225,7 @@ function UserDetailModal({ user, token, onClose, onAction }) {
 }
 
 // ── Report Detail Modal ───────────────────────────────────────────────────────
-function ReportDetailModal({ reportId, token, onClose, onAction }) {
+function ReportDetailModal({ reportId, token, adminId, onClose, onAction }) {
   const [report, setReport]             = useState(null);
   const [loading, setLoading]           = useState(true);
   const [adminNote, setAdminNote]       = useState('');
@@ -232,15 +234,40 @@ function ReportDetailModal({ reportId, token, onClose, onAction }) {
   const [contactMsg, setContactMsg]     = useState('');
   const [showContactInput, setShowContactInput] = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [thread, setThread]             = useState([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadMsg, setThreadMsg]       = useState('');
+  const [threadSending, setThreadSending] = useState(false);
 
   useEffect(() => {
     if (!reportId) return;
     setLoading(true);
     fetchReportDetail(token, reportId)
-      .then(d => { setReport(d.report); setAdminNote(d.report.adminNote || ''); })
+      .then(d => {
+        const r = d.report;
+        setReport(r);
+        setAdminNote(r.adminNote || '');
+        if (r.reporterId?._id) {
+          setThreadLoading(true);
+          fetchConversation(token, r.reporterId._id)
+            .then(t => setThread(t.messages || []))
+            .catch(() => {})
+            .finally(() => setThreadLoading(false));
+        }
+      })
       .catch(e => { alert(e.message); onClose(); })
       .finally(() => setLoading(false));
   }, [reportId, token, onClose]);
+
+  const handleSendThreadMsg = async () => {
+    if (!threadMsg.trim()) return;
+    setThreadSending(true);
+    try {
+      const res = await sendAdminMessage(token, report.reporterId._id, threadMsg.trim());
+      setThread(prev => [...prev, res.message]);
+      setThreadMsg('');
+    } catch (e) { alert(e.message); } finally { setThreadSending(false); }
+  };
 
   const handleMarkReviewed = async () => {
     setSaving(true);
@@ -377,7 +404,52 @@ function ReportDetailModal({ reportId, token, onClose, onAction }) {
             />
           </div>
 
-          {/* Actions */}
+          {/* Conversation thread */}
+          <div className="ad-report-section">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <p className="ad-report-section-label" style={{ margin: 0 }}>Conversation with Reporter</p>
+              {threadLoading && <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Loading…</span>}
+            </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', background: 'var(--color-background)', marginBottom: 8 }}>
+              {thread.length === 0 && !threadLoading
+                ? <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: 0, textAlign: 'center' }}>No messages yet. Use “Contact Reporter” below to start.</p>
+                : thread.map(msg => {
+                    const fromAdmin = (msg.senderId?._id || msg.senderId)?.toString() === adminId?.toString();
+                    return (
+                      <div key={msg._id} style={{ display: 'flex', flexDirection: 'column', alignItems: fromAdmin ? 'flex-end' : 'flex-start' }}>
+                        <div style={{ maxWidth: '78%', background: fromAdmin ? 'var(--color-primary)' : '#fff', color: fromAdmin ? '#fff' : 'var(--color-text-primary)', border: fromAdmin ? 'none' : '1px solid var(--color-border)', borderRadius: fromAdmin ? '12px 12px 4px 12px' : '12px 12px 12px 4px', padding: '8px 12px', fontSize: 13 }}>
+                          <p style={{ margin: 0, lineHeight: 1.5 }}>{msg.content}</p>
+                          <span style={{ fontSize: 10, opacity: 0.65, display: 'block', marginTop: 3 }}>
+                            {fromAdmin ? 'You' : (report.reporterId?.firstName || 'Reporter')} &middot; {new Date(msg.date || msg.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="ad-admin-note-input"
+                style={{ flex: 1 }}
+                placeholder="Send a follow-up message to reporter…"
+                value={threadMsg}
+                onChange={e => setThreadMsg(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSendThreadMsg(); } }}
+                disabled={isResolved}
+              />
+              <button
+                className="ad-action-btn-lg"
+                style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', flexShrink: 0, minWidth: 72 }}
+                onClick={handleSendThreadMsg}
+                disabled={threadSending || !threadMsg.trim() || isResolved}
+              >
+                <MailIcon /> Send
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}}
           {!isResolved && (
             <div className="ad-report-actions">
               {/* Contact reporter */}
@@ -888,6 +960,7 @@ export default function AdminDashboard() {
         <ReportDetailModal
           reportId={selectedReport}
           token={token}
+          adminId={admin?._id}
           onClose={() => setSelectedReport(null)}
           onAction={handleReportAction}
         />

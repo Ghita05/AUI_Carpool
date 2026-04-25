@@ -94,3 +94,13 @@ export const contactReporter = (token, reportId, message) =>
     body: JSON.stringify({ message }),
   });
 
+// ── Direct messaging (admin ↔ reporter thread) ────────────────────────────────
+export const fetchConversation = (token, otherUserId) =>
+  request(`/api/messages/${otherUserId}`, token);
+
+export const sendAdminMessage = (token, receiverId, content) =>
+  request('/api/messages/', token, {
+    method: 'POST',
+    body: JSON.stringify({ receiverId, content }),
+  });
+
