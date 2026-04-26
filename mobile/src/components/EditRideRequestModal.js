@@ -307,7 +307,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     padding: Spacing.xl,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   title: {
     fontFamily: 'PlusJakartaSans_700Bold',

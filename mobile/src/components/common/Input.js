@@ -17,6 +17,7 @@ export default function Input({
   locked = false,
   rightIcon,
   style,
+  testID,
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -81,6 +82,7 @@ export default function Input({
           editable={!locked}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          testID={testID}
         />
 
         {verified && (

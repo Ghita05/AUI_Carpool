@@ -12,6 +12,7 @@ export default function Button({
   fullWidth = true,
   style,
   textStyle,
+  testID,
 }) {
   const buttonStyles = [
     styles.base,
@@ -36,6 +37,7 @@ export default function Button({
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.85}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator

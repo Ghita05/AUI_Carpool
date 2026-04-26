@@ -27,11 +27,11 @@
  *    so the profile shows the new score without a separate fetch.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, ScrollView, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
@@ -130,6 +130,20 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
     }
   }, [isLast, onDone, resetForm]);
 
+  // Animation — runs before the early-return guard (React hook rules)
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(400)).current;
+  useEffect(() => {
+    if (visible && current) {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(400);
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 260, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, damping: 22, stiffness: 200, mass: 1, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible, current]);
+
   if (!visible || !current) return null;
 
   const roleLabel = current.role === 'Driver' ? 'Driver' : 'Passenger';
@@ -137,12 +151,15 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
 
   return (
     <>
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDone}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onDone}>
+      {/* Animated backdrop */}
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)', opacity: fadeAnim }]} pointerEvents="none" />
+      {/* Sheet with keyboard handling */}
       <KeyboardAvoidingView
-        style={s.overlay}
+        style={s.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={s.sheet}>
+        <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
           {/* Header */}
           <View style={s.header}>
             <View style={s.destinationBadge}>
@@ -220,7 +237,7 @@ export default function PostRideReviewModal({ visible, rideId, destination, part
               }
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
 
@@ -241,6 +258,10 @@ const s = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  kav: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {

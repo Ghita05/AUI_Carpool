@@ -817,6 +817,8 @@ export default function HomeScreen({ navigation }) {
   const [filters, setFilters] = useState({});
   const [hasSearched, setHasSearched] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [sortBy, setSortBy] = useState('recommendation');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   // Autocomplete state
   const [depSuggestions, setDepSuggestions] = useState([]);
@@ -892,32 +894,22 @@ export default function HomeScreen({ navigation }) {
   const handleFilterApply = useCallback((newFilters) => {
     setFilters(newFilters);
     if (hasSearched && destination.trim()) {
-      // Re-search with new filters immediately
-      (async () => {
-        setLoading(true);
-        try {
-          const params = {
-            ...newFilters,
-            destination: destination.trim(),
-          };
-          if (departure.trim()) params.departureLocation = departure.trim();
-          if (date) params.date = date;
-          const res = await getAvailableRides(params);
-          setRides(res.data?.rides || []);
-        } catch { setRides([]); }
-        finally { setLoading(false); }
-      })();
+      performSearch(destination, newFilters);
     }
-  }, [hasSearched, destination, departure, date]);
+  }, [hasSearched, destination, performSearch]);
 
-  const performSearch = useCallback(async (dest, overrideFilters) => {
+  const performSearch = useCallback(async (dest, overrideFilters, sortOverride) => {
     if (!dest.trim()) return 0;
     setLoading(true);
     try {
       const activeFilters = overrideFilters !== undefined ? overrideFilters : filters;
+      const activeSortBy = sortOverride?.sortBy ?? sortBy;
+      const activeSortOrder = sortOverride?.order ?? sortOrder;
       const params = {
         ...activeFilters,
         destination: dest.trim(),
+        sortBy: activeSortBy,
+        order: activeSortOrder,
       };
       if (departure.trim()) params.departureLocation = departure.trim();
       if (date) params.date = date;
@@ -931,7 +923,7 @@ export default function HomeScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [filters, departure, date]);
+  }, [filters, departure, date, sortBy, sortOrder]);
 
   const transitionToResults = useCallback(() => {
     setHasSearched(true);
@@ -951,9 +943,24 @@ export default function HomeScreen({ navigation }) {
     performSearch(dest);
   }, [transitionToResults, performSearch]);
 
+  const toggleSort = useCallback((field) => {
+    if (!hasSearched || !destination.trim()) return;
+    let newOrder;
+    if (field === sortBy) {
+      newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      newOrder = field === 'date' ? 'asc' : 'desc';
+    }
+    setSortBy(field);
+    setSortOrder(newOrder);
+    performSearch(destination, undefined, { sortBy: field, order: newOrder });
+  }, [hasSearched, destination, sortBy, sortOrder, performSearch]);
+
   const handleBack = useCallback(() => {
     setHasSearched(false);
     setRides([]);
+    setSortBy('recommendation');
+    setSortOrder('desc');
     landingOpacity.setValue(1);
     resultsOpacity.setValue(1);
     logoScale.setValue(0.85);
@@ -1263,6 +1270,30 @@ export default function HomeScreen({ navigation }) {
               </Text>
               <Text style={st.sheetCount}>{rides.length} found</Text>
             </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.sortBar} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
+              {[
+                { key: 'recommendation', label: 'Recommended', icon: 'star' },
+                { key: 'date', label: 'Date', icon: 'time' },
+                { key: 'price', label: 'Price', icon: 'cash' },
+                { key: 'seats', label: 'Seats', icon: 'people' },
+              ].map(({ key, label, icon }) => {
+                const active = sortBy === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[st.sortChip, active && st.sortChipActive]}
+                    onPress={() => toggleSort(key)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name={`${icon}-outline`} size={12} color={active ? Colors.primary : Colors.textSecondary} />
+                    <Text style={[st.sortChipText, active && st.sortChipTextActive]}>{label}</Text>
+                    {active && key !== 'recommendation' && (
+                      <Ionicons name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} size={10} color={Colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
             {loading ? (
               <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 20 }} />
             ) : rides.length === 0 ? (
@@ -1432,4 +1463,11 @@ const st = StyleSheet.create({
   suggestionRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:10,paddingHorizontal:14,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:Colors.divider},
   suggestionMain:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},
   suggestionSub:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary,marginTop:1},
+
+  /* ── Sort bar ── */
+  sortBar:{marginBottom:Spacing.xs},
+  sortChip:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:10,paddingVertical:5,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.background},
+  sortChipActive:{borderColor:Colors.primary,backgroundColor:Colors.primaryBg},
+  sortChipText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},
+  sortChipTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
 });

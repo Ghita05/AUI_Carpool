@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import * as msgService from '../../services/messageService';
@@ -94,7 +95,7 @@ function ChatView({ conv, onBack, navigation }) {
           style={s.headerBtn}
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
         >
-          <Ionicons name="ellipsis-vertical" size={20} color={Colors.textSecondary} />
+          <Ionicons name="flag" size={20} color="#ef4444" />
         </TouchableOpacity>
       </View>
 
@@ -274,6 +275,7 @@ function ChannelChatView({ channel, onBack }) {
 }
 
 export default function MessagesScreen({ navigation, route }) {
+  const { clearTabBadge } = useAuth();
   const [search, setSearch] = useState('');
   const [activeConv, setActiveConv] = useState(null);
   const [activeChannel, setActiveChannel] = useState(null);
@@ -282,6 +284,8 @@ export default function MessagesScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const driverId = route?.params?.driverId;
   const driverName = route?.params?.driverName;
+  const openConvWithUserId = route?.params?.openConvWithUserId;
+  const openConvName = route?.params?.openConvName;
 
   const fetchAll = useCallback(async () => {
     try {
@@ -303,7 +307,18 @@ export default function MessagesScreen({ navigation, route }) {
         otherUser: { _id: driverId, firstName: driverName?.split(' ')[0] || 'Driver', lastName: driverName?.split(' ')[1] || '' }
       });
     }
-  }, [fetchAll, driverId, driverName]);
+    if (openConvWithUserId) {
+      const nameParts = (openConvName || 'Admin').split(' ');
+      setActiveConv({
+        _id: openConvWithUserId,
+        otherUser: { _id: openConvWithUserId, firstName: nameParts[0] || 'Admin', lastName: nameParts.slice(1).join(' ') || '' }
+      });
+    }
+  }, [fetchAll, driverId, driverName, openConvWithUserId, openConvName]);
+
+  useFocusEffect(useCallback(() => {
+    clearTabBadge('Messages');
+  }, [clearTabBadge]));
 
   // Merge conversations and channels into a unified list sorted by lastDate
   const unified = [

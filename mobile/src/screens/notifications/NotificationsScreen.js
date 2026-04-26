@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 import * as notifService from '../../services/notificationService';
 
 const ICON_CFG = {
@@ -29,6 +31,7 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationsScreen({ navigation }) {
+  const { clearTabBadge, latestNotif, clearLatestNotif } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
@@ -42,6 +45,23 @@ export default function NotificationsScreen({ navigation }) {
   }, []);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+
+  // Instantly prepend a notification received via socket (no network round-trip)
+  useEffect(() => {
+    if (!latestNotif) return;
+    setNotifications(prev => {
+      // avoid duplicates if the screen refetched in the meantime
+      if (prev.some(n => n._id === latestNotif._id)) return prev;
+      return [latestNotif, ...prev];
+    });
+    clearLatestNotif();
+  }, [latestNotif, clearLatestNotif]);
+
+  // Refresh list + clear badge whenever tab comes into focus
+  useFocusEffect(useCallback(() => {
+    clearTabBadge('Notifications');
+    fetchNotifications();
+  }, [clearTabBadge, fetchNotifications]));
 
   const unreadCount = notifications.filter(n => !n.readStatus).length;
 
@@ -58,6 +78,18 @@ export default function NotificationsScreen({ navigation }) {
         await notifService.markAsRead(item._id);
         setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, readStatus: true } : n));
       } catch {}
+    }
+    // Admin follow-up: navigate to Messages and open the admin conversation
+    if (item.metadata?.fromAdmin && item.metadata?.adminId) {
+      navigation.navigate('Main', { screen: 'Messages' });
+      // Small delay so the Messages tab mounts before we try to open a convo
+      setTimeout(() => {
+        navigation.navigate('Main', {
+          screen: 'Messages',
+          params: { openConvWithUserId: item.metadata.adminId, openConvName: item.metadata.adminName || 'Admin' },
+        });
+      }, 150);
+      return;
     }
     // Navigate to ride review screen if this is a review notification with a rideId
     if (item.rideId && item.title?.includes('Rate')) {

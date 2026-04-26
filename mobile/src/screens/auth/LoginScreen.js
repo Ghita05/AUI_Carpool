@@ -112,14 +112,14 @@ export default function LoginScreen({ navigation }) {
         </LinearGradient>
 
         <View style={styles.card}>
-          <Input label="AUI Email" placeholder="youremail@aui.ma" value={email} onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: null }); }} keyboardType="email-address" error={errors.email} />
-          <Input label="Password" placeholder="Enter your password" value={password} onChangeText={(t) => { setPassword(t); if (errors.password) setErrors({ ...errors, password: null }); }} secureTextEntry error={errors.password} />
+          <Input label="AUI Email" placeholder="youremail@aui.ma" value={email} onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: null }); }} keyboardType="email-address" error={errors.email} testID="emailInput" />
+          <Input label="Password" placeholder="Enter your password" value={password} onChangeText={(t) => { setPassword(t); if (errors.password) setErrors({ ...errors, password: null }); }} secureTextEntry error={errors.password} testID="passwordInput" />
 
           <TouchableOpacity onPress={() => setShowForgot(true)} style={styles.forgotRow}>
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          <Button label="Log In" onPress={handleLogin} loading={loading} style={styles.loginButton} />
+          <Button label="Log In" onPress={handleLogin} loading={loading} style={styles.loginButton} testID="loginButton" />
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />

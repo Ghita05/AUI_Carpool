@@ -86,6 +86,7 @@ export default function SignupEmailScreen({ navigation }) {
             keyboardType="email-address"
             error={emailState === 'invalid' ? 'Please use your AUI institutional email (@aui.ma)' : error}
             style={styles.emailInput}
+            testID="emailInput"
           />
 
           <Button
@@ -94,6 +95,7 @@ export default function SignupEmailScreen({ navigation }) {
             loading={loading}
             disabled={emailState === 'invalid'}
             style={styles.sendButton}
+            testID="sendVerificationButton"
           />
 
           {/* Already have account */}

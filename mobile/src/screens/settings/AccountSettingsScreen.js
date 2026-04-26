@@ -382,7 +382,8 @@ export default function AccountSettingsScreen({ navigation }) {
                 </View>
               </>}
             </TouchableOpacity>
-            <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:2,marginBottom:4}}>You can re-upload your license if it expires or needs updating</Text>
+            <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:2,marginBottom:2}}>Your document image is processed by Google Gemini (third-party AI). Google may use API inputs to improve its models per its privacy policy.</Text>
+            <Text style={{fontSize:10,color:Colors.textSecondary,marginTop:0,marginBottom:4}}>You can re-upload your license if it expires or needs updating</Text>
           </Card>
         )}
 

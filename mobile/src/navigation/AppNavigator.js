@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography } from '../theme';
+import { useAuth } from '../context/AuthContext';
 
 // Auth screens
 import SplashScreen               from '../screens/auth/SplashScreen';
@@ -43,6 +44,7 @@ const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
 function TabNavigator() {
+  const { rideBadge, notifBadge, msgBadge } = useAuth();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -71,6 +73,18 @@ function TabNavigator() {
           };
           return <Ionicons name={icons[route.name] || 'ellipse'} size={22} color={color} />;
         },
+        tabBarBadge: (
+          route.name === 'Rides'         && rideBadge   > 0 ? rideBadge   :
+          route.name === 'Messages'      && msgBadge    > 0 ? msgBadge    :
+          route.name === 'Notifications' && notifBadge  > 0 ? notifBadge  :
+          undefined
+        ),
+        tabBarBadgeStyle: (
+          route.name === 'Rides'         ? { backgroundColor: '#10B981' } :
+          route.name === 'Messages'      ? { backgroundColor: Colors.primary } :
+          route.name === 'Notifications' ? { backgroundColor: '#EF4444' } :
+          undefined
+        ),
       })}
     >
       <Tab.Screen name="Home"          component={HomeScreen} />

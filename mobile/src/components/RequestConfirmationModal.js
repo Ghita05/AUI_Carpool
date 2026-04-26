@@ -42,10 +42,8 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     width: '90%',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   title: {
     fontSize: Typography['2xl'],

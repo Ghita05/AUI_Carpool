@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, Platform, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius } from '../theme';
@@ -17,6 +17,26 @@ import { Colors, Typography, Spacing, Radius } from '../theme';
  *   title     – optional header text
  */
 export default function ImagePickerModal({ visible, onClose, onImage, aspect, quality = 0.8, title = 'Upload Photo' }) {
+  const [localVisible, setLocalVisible] = useState(false);
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(300)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setLocalVisible(true);
+      fadeAnim.setValue(0);
+      slideAnim.setValue(300);
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, damping: 22, stiffness: 200, mass: 1, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 300, duration: 200, useNativeDriver: true }),
+      ]).start(() => setLocalVisible(false));
+    }
+  }, [visible]);
 
   const launch = async (mode) => {
     try {
@@ -57,9 +77,14 @@ export default function ImagePickerModal({ visible, onClose, onImage, aspect, qu
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.sheet}>
+    <Modal visible={localVisible} transparent animationType="none" onRequestClose={onClose}>
+      {/* Animated backdrop — tap outside to dismiss */}
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', opacity: fadeAnim }]}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+      </Animated.View>
+      {/* Sliding sheet */}
+      <View style={styles.sheetContainer} pointerEvents="box-none">
+        <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
 
@@ -86,8 +111,8 @@ export default function ImagePickerModal({ visible, onClose, onImage, aspect, qu
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -96,6 +121,10 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {

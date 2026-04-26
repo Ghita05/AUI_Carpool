@@ -162,6 +162,11 @@ export const dismissRideRequest = async (requestId) => {
   return data;
 };
 
+export const mergeRideRequests = async (offerRideId, requestIds) => {
+  const { data } = await api.post('/rides/requests/merge', { offerRideId, requestIds });
+  return data;
+};
+
 // ═══════════════════════════════════════════
 // PASSENGERS
 // ═══════════════════════════════════════════

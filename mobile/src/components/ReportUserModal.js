@@ -17,11 +17,11 @@
  * messageSnapshot { messageId, content, sentAt }? — optional for Message context
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, ScrollView, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
@@ -52,6 +52,27 @@ export default function ReportUserModal({
   const [category, setCategory]       = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting]   = useState(false);
+  const [localVisible, setLocalVisible] = useState(false);
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(400)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setLocalVisible(true);
+      fadeAnim.setValue(0);
+      slideAnim.setValue(400);
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 260, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, damping: 22, stiffness: 200, mass: 1, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 400, duration: 200, useNativeDriver: true }),
+      ]).start(() => setLocalVisible(false));
+    }
+  }, [visible]);
 
   const firstName = (subjectName || 'this user').split(' ')[0];
   const categories = getCategories(context);
@@ -100,12 +121,15 @@ export default function ReportUserModal({
   }, [category, description, subjectId, context, rideId, messageSnapshot, reset, onClose]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={localVisible} transparent animationType="none" onRequestClose={handleClose}>
+      {/* Animated backdrop */}
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)', opacity: fadeAnim }]} pointerEvents="none" />
+      {/* Sheet with keyboard handling */}
       <KeyboardAvoidingView
-        style={s.overlay}
+        style={s.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={s.sheet}>
+        <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
           {/* Header */}
           <View style={s.header}>
             <TouchableOpacity onPress={handleClose} style={s.closeBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
@@ -190,7 +214,7 @@ export default function ReportUserModal({
               }
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -200,6 +224,10 @@ const s = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  kav: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {

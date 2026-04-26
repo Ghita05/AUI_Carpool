@@ -35,6 +35,7 @@ export default function PostRideRequestScreen({ navigation }) {
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [maxPrice, setMaxPrice] = useState('');
   const [notes, setNotes] = useState('');
+  const [luggageDeclaration, setLuggageDeclaration] = useState('None');
   const [stops, setStops] = useState([]);
   const [newStop, setNewStop] = useState('');
   const [posting, setPosting] = useState(false);
@@ -188,6 +189,7 @@ export default function PostRideRequestScreen({ navigation }) {
           groupPassengerIds: groupUsers.map(u => u._id),
           stops,
           selectedRoute: selectedRoute || undefined,
+          luggageDeclaration,
         };
       } else {
         reqObj = {
@@ -199,6 +201,7 @@ export default function PostRideRequestScreen({ navigation }) {
           notes,
           stops,
           selectedRoute: selectedRoute || undefined,
+          luggageDeclaration,
         };
       }
       await postRideRequest(reqObj);
@@ -524,6 +527,37 @@ export default function PostRideRequestScreen({ navigation }) {
             multiline
             numberOfLines={4}
           />
+        </SectionCard>
+
+        {/* Luggage */}
+        <SectionCard title="Luggage (Optional)">
+          <Text style={{ fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: 10 }}>
+            Let the driver know how much luggage you are bringing.
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {['None', 'Small', 'Medium', 'Large'].map((opt) => (
+              <TouchableOpacity
+                key={opt}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: Radius.sm,
+                  borderWidth: 1.5,
+                  borderColor: luggageDeclaration === opt ? Colors.primary : Colors.border,
+                  backgroundColor: luggageDeclaration === opt ? Colors.primaryBg : Colors.background,
+                }}
+                onPress={() => setLuggageDeclaration(opt)}
+              >
+                <Text style={{
+                  fontSize: Typography.sm,
+                  fontFamily: luggageDeclaration === opt ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_400Regular',
+                  color: luggageDeclaration === opt ? Colors.primary : Colors.textSecondary,
+                }}>
+                  {opt}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </SectionCard>
 
         <View style={{ height: 100 }} />
