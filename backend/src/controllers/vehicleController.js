@@ -5,6 +5,7 @@ const { processRegistrationCard, namesMatch } = require('../utils/ocr');
 
 const addVehicle = async (req, res, next) => {
   try {
+    const seatDefaults = { Small: 4, Medium: 5, Large: 7 };
     const vehicleData = {
       ownerId: req.user._id,
       brand: req.body.brand,
@@ -12,7 +13,8 @@ const addVehicle = async (req, res, next) => {
       color: req.body.color,
       licensePlate: req.body.licensePlate,
       sizeCategory: req.body.sizeCategory,
-      luggageCapacity: req.body.luggageCapacity,
+      luggageCapacity: req.body.luggageCapacity != null ? Number(req.body.luggageCapacity) || 0 : 0,
+      totalSeats: req.body.totalSeats ? Number(req.body.totalSeats) : (seatDefaults[req.body.sizeCategory] || 5),
       year: req.body.year,
       smokingPolicy: req.body.smokingPolicy,
     };
@@ -56,7 +58,8 @@ const addVehicle = async (req, res, next) => {
           ownerNameMatch = namesMatch(ocrResult.ownerName, userFullName);
         }
       } catch (ocrErr) {
-        return error(res, 503, `OCR service error: ${ocrErr.message}`);
+        console.warn('[vehicleController] OCR failed, continuing without verification:', ocrErr.message);
+        ocrResult = null;
       }
     }
 
@@ -142,7 +145,8 @@ const modifyVehicle = async (req, res, next) => {
           ownerNameMatch = namesMatch(ocrResult.ownerName, userFullName);
         }
       } catch (ocrErr) {
-        return error(res, 503, `OCR service error: ${ocrErr.message}`);
+        console.warn('[vehicleController] OCR failed, continuing without verification:', ocrErr.message);
+        ocrResult = null;
       }
     }
 

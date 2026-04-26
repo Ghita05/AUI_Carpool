@@ -18,6 +18,9 @@ const bookingSubSchema = new Schema({
     enum: ['Present', 'Absent'],
     default: null,
   },
+  requestedStop:      { type: String, default: null },
+  stopStatus:         { type: String, enum: ['Pending', 'Accepted', 'Rejected', null], default: null },
+  stopDecisionDate:   { type: Date, default: null },
   cancellationReason: { type: String, default: null },
   cancellationDate:   { type: Date, default: null },
   report: {
@@ -88,12 +91,13 @@ const rideSchema = new Schema({
   stops:             { type: [String], default: [] },
 
   // ── Request-only fields ───────────────────────────────────────────────
-  passengerId:       { type: Schema.Types.ObjectId, ref: 'User', default: null },
-  groupPassengerIds: { type: [Schema.Types.ObjectId], default: [] },
-  leftMembers:       { type: Map, of: Number, default: {} },
-  passengerCount:    { type: Number, min: 1, default: null },
-  maxPrice:          { type: Number, default: null },
-  acceptedRideId:    { type: Schema.Types.ObjectId, ref: 'Ride', default: null },
+  passengerId:          { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  groupPassengerIds:    { type: [Schema.Types.ObjectId], default: [] },
+  leftMembers:          { type: Map, of: Number, default: {} },
+  passengerCount:       { type: Number, min: 1, default: null },
+  maxPrice:             { type: Number, default: null },
+  acceptedRideId:       { type: Schema.Types.ObjectId, ref: 'Ride', default: null },
+  luggageDeclaration:   { type: String, enum: ['None', 'Small', 'Medium', 'Large'], default: 'None' },
 
   // ── Cancellation (both types) ─────────────────────────────────────────
   cancellationReason: { type: String, default: null },

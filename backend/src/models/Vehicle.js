@@ -53,6 +53,11 @@ const vehicleSchema = new mongoose.Schema(
       type: Number,
       required: [true, 'Manufacturing year is required'],
     },
+    totalSeats: {
+      type: Number,
+      min: [1, 'Vehicle must have at least 1 seat'],
+      default: null,
+    },
     smokingPolicy: {
       type: String,
       enum: {

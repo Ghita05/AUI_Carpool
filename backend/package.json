@@ -5,7 +5,15 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node --max-old-space-size=460 src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test": "jest tests/unit --verbose",
+    "test:coverage": "jest tests/unit --coverage --verbose"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/unit/**/*.test.js"
+    ]
   },
   "author": "Ghita Nafa",
   "license": "ISC",
@@ -31,6 +39,7 @@
     "socket.io": "^4.8.0"
   },
   "devDependencies": {
+    "jest": "^30.3.0",
     "nodemon": "^3.1.7"
   }
 }

@@ -559,7 +559,8 @@ const getMe = async (req, res, next) => {
 
 const searchUsers = async (req, res, next) => {
   try {
-    const { query, searchType = 'name' } = req.query;
+    const { q, query: queryParam, searchType = 'name' } = req.query;
+    const query = queryParam || q;
     if (!query) {
       return error(res, 400, 'Search query is required.');
     }

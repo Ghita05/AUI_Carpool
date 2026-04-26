@@ -81,7 +81,7 @@ const acceptRideRequest = async (req, res, next) => {
     if (request.state !== 'Open') return error(res, 400, 'This request is no longer available.');
     if (request.passengerId.toString() === driverId.toString()) return error(res, 400, 'You cannot accept your own ride request.');
 
-    // Find driver's vehicle (pick first for now)
+    // Find driver's vehicle
     const vehicle = await Vehicle.findOne({ ownerId: driverId });
     if (!vehicle) return error(res, 400, 'You must have a registered vehicle to accept ride requests.');
 
@@ -93,7 +93,27 @@ const acceptRideRequest = async (req, res, next) => {
     }
     groupIds = [...new Set(groupIds)];
 
+    // ── Hard block: seat capacity ────────────────────────────────────────
+    const requestedSeats = request.passengerCount || groupIds.length;
+    if (requestedSeats > vehicle.totalSeats) {
+      return error(res, 400,
+        `This request needs ${requestedSeats} seat(s) but your vehicle only has ${vehicle.totalSeats}. You cannot accept this request.`
+      );
+    }
+
+    // ── Soft check: luggage capacity ────────────────────────────────────
+    const LUGGAGE_WEIGHT = { None: 0, Small: 1, Medium: 2, Large: 3 };
+    const luggageScore = LUGGAGE_WEIGHT[request.luggageDeclaration] || 0;
+    const luggageWarning = luggageScore > 0 && luggageScore > (vehicle.luggageCapacity || 0)
+      ? {
+          declared: request.luggageDeclaration,
+          vehicleCapacity: vehicle.luggageCapacity,
+          message: `Passenger declared ${request.luggageDeclaration} luggage but your vehicle capacity is ${vehicle.luggageCapacity}. It is your responsibility to make the necessary arrangements.`,
+        }
+      : null;
+
     // Create the offer ride (copy route and stops from request)
+    const vehicleTotalSeats = vehicle.totalSeats || 5;
     const newOffer = await Ride.create({
       type: 'Offer',
       state: 'Active',
@@ -103,8 +123,8 @@ const acceptRideRequest = async (req, res, next) => {
       destination: request.destination,
       departureDateTime: request.departureDateTime,
       pricePerSeat: request.maxPrice || request.pricePerSeat,
-      totalSeats: request.passengerCount || groupIds.length,
-      availableSeats: (request.passengerCount || groupIds.length) - groupIds.length,
+      totalSeats: vehicleTotalSeats,
+      availableSeats: vehicleTotalSeats - groupIds.length,
       genderPreference: request.genderPreference || 'All',
       notes: request.notes,
       stops: request.stops || [],
@@ -116,13 +136,13 @@ const acceptRideRequest = async (req, res, next) => {
       passengerId: pid,
       status: 'Confirmed',
       price: request.maxPrice || request.pricePerSeat,
+      luggageDeclaration: request.luggageDeclaration || 'None',
     }));
     await Ride.findByIdAndUpdate(newOffer._id, {
       $push: { bookings: { $each: bookingDocs } },
     });
 
     if (groupIds.length > 1) {
-      // Group request: notify each member
       await Promise.all(groupIds.map(async (userId) => {
         await Notification.create({
           userId,
@@ -132,7 +152,6 @@ const acceptRideRequest = async (req, res, next) => {
         });
       }));
 
-      // Send welcome message in the group channel
       const driver = await User.findById(driverId).select('firstName lastName');
       const driverName = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim();
       const memberUsers = await User.find({ _id: { $in: groupIds } }).select('firstName lastName');
@@ -143,7 +162,6 @@ const acceptRideRequest = async (req, res, next) => {
         content: `${driverName} accepted the group ride request to ${request.destination}.\n\nGroup members: ${memberNames}\nDriver: ${driverName}\n\nUse this channel to coordinate your trip!`,
       });
     } else {
-      // Solo request
       await Notification.create({
         userId: request.passengerId,
         title: 'Ride Request Accepted',
@@ -163,7 +181,42 @@ const acceptRideRequest = async (req, res, next) => {
       $set: { state: 'Accepted', acceptedRideId: newOffer._id },
     });
 
-    return success(res, 200, 'Ride request accepted, ride created, and booking confirmed.', { ride: newOffer });
+    // ── Find identical pending requests for potential merge ──────────────
+    // "Identical" = same dep, dest, date (same minute), stops array, state Open
+    const depTime = new Date(request.departureDateTime);
+    const windowStart = new Date(depTime.getTime() - 60000);
+    const windowEnd   = new Date(depTime.getTime() + 60000);
+
+    const mergeCandidates = await Ride.find({
+      _id:               { $ne: requestId },
+      type:              'Request',
+      state:             'Open',
+      departureLocation: request.departureLocation,
+      destination:       request.destination,
+      departureDateTime: { $gte: windowStart, $lte: windowEnd },
+    })
+      .populate('passengerId', 'firstName lastName profilePicture averageRating')
+      .lean();
+
+    // Filter to same stops (order-insensitive)
+    const reqStops = [...(request.stops || [])].sort().join('|');
+    const filtered = mergeCandidates.filter(c => {
+      const cStops = [...(c.stops || [])].sort().join('|');
+      return cStops === reqStops;
+    });
+
+    return success(res, 200, 'Ride request accepted, ride created, and booking confirmed.', {
+      ride: newOffer,
+      luggageWarning,
+      mergeCandidates: filtered.map(c => ({
+        requestId:          c._id,
+        passenger:          c.passengerId,
+        passengerCount:     c.passengerCount,
+        luggageDeclaration: c.luggageDeclaration,
+        maxPrice:           c.maxPrice,
+        stops:              c.stops,
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -191,7 +244,8 @@ const postRideRequest = async (req, res, next) => {
   try {
     const {
       departureLocation, destination, travelDateTime,
-      passengerCount, maxPrice, notes, groupPassengerIds, stops, selectedRoute
+      passengerCount, maxPrice, notes, groupPassengerIds, stops, selectedRoute,
+      luggageDeclaration,
     } = req.body;
 
     // Validate travel time is in the future (at least 30 minutes from now)
@@ -206,7 +260,7 @@ const postRideRequest = async (req, res, next) => {
     }
 
     // If groupPassengerIds is present and is an array, treat as group request
-    if (Array.isArray(groupPassengerIds) && groupPassengerIds.length > 1) {
+    if (Array.isArray(groupPassengerIds) && groupPassengerIds.length >= 1) {
       let groupIds = groupPassengerIds.map(id => id.toString());
       const ownerId = req.user._id.toString();
       if (!groupIds.includes(ownerId)) groupIds = [ownerId, ...groupIds];
@@ -250,6 +304,7 @@ const postRideRequest = async (req, res, next) => {
         groupPassengerIds: groupIds,
         stops: stops || [],
         route: routeId,
+        luggageDeclaration: luggageDeclaration || 'None',
       });
       const uniqueMembers = [...new Set(groupIds)];
       await Promise.all(uniqueMembers.map(async (userId) => {
@@ -303,6 +358,7 @@ const postRideRequest = async (req, res, next) => {
       notes: notes || '',
       stops: stops || [],
       route: singleRouteId,
+      luggageDeclaration: luggageDeclaration || 'None',
     });
     await Notification.create({
       userId: req.user._id,
@@ -417,7 +473,7 @@ const modifyRideRequest = async (req, res, next) => {
     const allowedFields = [
       'departureLocation', 'destination', 'travelDateTime',
       'passengerCount', 'maxPrice', 'notes', 'groupPassengerIds',
-      'stops',
+      'stops', 'luggageDeclaration',
     ];
 
     const updates = {};
@@ -544,6 +600,117 @@ const cancelGroupRideRequest = async (req, res, next) => {
 };
 
 
+// ── Merge identical open requests into an existing offer ride ─────────────
+const mergeRideRequests = async (req, res, next) => {
+  try {
+    const driverId = req.user._id;
+    const { offerRideId, requestIds } = req.body;
+
+    if (!offerRideId || !Array.isArray(requestIds) || requestIds.length === 0) {
+      return error(res, 400, 'offerRideId and a non-empty requestIds array are required.');
+    }
+
+    // Load offer and verify ownership
+    const offer = await Ride.findOne({ _id: offerRideId, type: 'Offer', driverId });
+    if (!offer) return error(res, 404, 'Offer ride not found or you do not own it.');
+    if (offer.state !== 'Active') return error(res, 400, 'Offer ride is no longer active.');
+
+    const vehicle = await Vehicle.findById(offer.vehicleId);
+    if (!vehicle) return error(res, 400, 'Vehicle linked to this offer not found.');
+
+    // Load all candidate requests
+    const requests = await Ride.find({
+      _id: { $in: requestIds },
+      type: 'Request',
+      state: 'Open',
+    }).populate('passengerId', 'firstName lastName');
+
+    if (requests.length !== requestIds.length) {
+      return error(res, 400, 'One or more requests are no longer open or do not exist.');
+    }
+
+    // Total new passengers needed
+    const totalNewPassengers = requests.reduce((sum, r) => sum + (r.passengerCount || 1), 0);
+    if (totalNewPassengers > offer.availableSeats) {
+      return error(res, 400,
+        `Merging these requests requires ${totalNewPassengers} seat(s) but only ${offer.availableSeats} are available.`
+      );
+    }
+
+    // Soft luggage warnings
+    const LUGGAGE_WEIGHT = { None: 0, Small: 1, Medium: 2, Large: 3 };
+    const luggageWarnings = requests
+      .filter(r => {
+        const score = LUGGAGE_WEIGHT[r.luggageDeclaration] || 0;
+        return score > 0 && score > (vehicle.luggageCapacity || 0);
+      })
+      .map(r => ({
+        requestId: r._id,
+        passengerName: `${r.passengerId?.firstName || ''} ${r.passengerId?.lastName || ''}`.trim(),
+        declared: r.luggageDeclaration,
+        vehicleCapacity: vehicle.luggageCapacity,
+      }));
+
+    // Add bookings + update availableSeats + mark requests Accepted
+    const bookingDocs = [];
+    for (const r of requests) {
+      const passengers = [...(r.groupPassengerIds || []).map(id => id.toString())];
+      const ownerId = r.passengerId?._id?.toString() || r.passengerId?.toString();
+      if (ownerId && !passengers.includes(ownerId)) passengers.unshift(ownerId);
+
+      for (const pid of [...new Set(passengers)]) {
+        bookingDocs.push({
+          passengerId: pid,
+          status: 'Confirmed',
+          price: r.maxPrice || offer.pricePerSeat,
+          luggageDeclaration: r.luggageDeclaration || 'None',
+        });
+      }
+    }
+
+    await Ride.findByIdAndUpdate(offerRideId, {
+      $push: { bookings: { $each: bookingDocs } },
+      $inc: { availableSeats: -totalNewPassengers },
+    });
+
+    // Mark each merged request as Accepted
+    await Ride.updateMany(
+      { _id: { $in: requestIds } },
+      { $set: { state: 'Accepted', acceptedRideId: offerRideId } }
+    );
+
+    // Notify each passenger
+    for (const r of requests) {
+      const allPassengers = [...(r.groupPassengerIds || []).map(id => id.toString())];
+      const ownerId = r.passengerId?._id?.toString() || r.passengerId?.toString();
+      if (ownerId && !allPassengers.includes(ownerId)) allPassengers.unshift(ownerId);
+
+      for (const pid of [...new Set(allPassengers)]) {
+        await Notification.create({
+          userId: pid,
+          title: 'Ride Request Accepted',
+          content: `Your ride request to ${r.destination} was accepted and merged into an existing ride.`,
+          type: 'Alert',
+        });
+        await Message.create({
+          senderId: driverId,
+          receiverId: pid,
+          rideId: offerRideId,
+          content: `Hi! I have accepted your ride request to ${r.destination} and added you to my existing ride. See you soon!`,
+        });
+      }
+    }
+
+    const updatedOffer = await Ride.findById(offerRideId);
+    return success(res, 200, `${requests.length} request(s) merged successfully.`, {
+      ride: updatedOffer,
+      luggageWarnings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getRideRequests = async (req, res, next) => {
   try {
     const { destination, date, sortBy = 'date', order = 'desc' } = req.query;
@@ -610,4 +777,5 @@ module.exports = {
   getMyRideRequests,
   leaveRideRequest,
   transferGroupOwner,
+  mergeRideRequests,
 };

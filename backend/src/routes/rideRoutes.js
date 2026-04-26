@@ -61,12 +61,15 @@ router.get('/users/search', authenticate, async (req, res) => {
 // RIDE OFFERS (Building Block 2.1)
 // ═══════════════════════════════════════════
 router.get('/', authenticate, ride.getAvailableRides);
+router.get('/my', authenticate, ride.getMyRides);
 router.get('/driver/my-rides', authenticate, ride.getMyRides);
 router.get('/:rideId', authenticate, ride.getRideDetails);
 router.post('/', authenticate, authorize('Driver'), ride.postRideOffer);
 router.put('/:rideId', authenticate, authorize('Driver'), ride.modifyRide);
+router.patch('/:rideId', authenticate, authorize('Driver'), ride.modifyRide);
 router.delete('/:rideId', authenticate, authorize('Driver'), ride.cancelRide);
 router.put('/:rideId/complete', authenticate, authorize('Driver'), ride.completeRide);
+router.post('/:rideId/complete', authenticate, authorize('Driver'), ride.completeRide);
 
 // ─── Attendance (Building Block 2.4 — during-ride phase) ──────────────────
 // GET returns the passenger list with their attendanceStatus for the check-in panel.
@@ -81,6 +84,12 @@ router.put('/:rideId/attendance', authenticate, authorize('Driver'), ride.markAt
 router.get('/requests/all', authenticate, rideRequest.getRideRequests);
 router.get('/requests/my', authenticate, rideRequest.getMyRideRequests);
 router.post('/requests', authenticate, rideRequest.postRideRequest);
+router.post(
+  '/requests/merge',
+  authenticate,
+  authorize('Driver'),
+  rideRequest.mergeRideRequests
+);
 router.put('/requests/:requestId', authenticate, rideRequest.modifyRideRequest);
 router.delete('/requests/:requestId', authenticate, rideRequest.deleteRideRequest);
 // Cancel entire group ride request (owner only, assumes all members agreed)
@@ -90,12 +99,6 @@ router.put(
   authenticate,
   authorize('Driver'),
   rideRequest.acceptRideRequest
-);
-router.put(
-  '/requests/:requestId/dismiss',
-  authenticate,
-  authorize('Driver'),
-  rideRequest.dismissRideRequest
 );
 router.put(
   '/requests/:requestId/dismiss',

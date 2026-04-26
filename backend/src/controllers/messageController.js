@@ -3,7 +3,8 @@ const { success, error } = require('../utils/responses');
 
 const sendMessage = async (req, res, next) => {
   try {
-    const { receiverId, rideId = null, content } = req.body;
+    const { receiverId, content } = req.body;
+    const rideId = req.body.rideId || null;
 
     if (!content || !content.trim()) {
       return error(res, 400, 'Message content is required.');
@@ -118,7 +119,7 @@ const getMessageHistory = async (req, res, next) => {
 
 const searchMessages = async (req, res, next) => {
   try {
-    const { query } = req.query;
+    const query = req.query.query || req.query.q;
     if (!query) return error(res, 400, 'Search query is required.');
 
     const messages = await Message.find({

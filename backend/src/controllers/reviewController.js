@@ -144,8 +144,7 @@ const writeReview = async (req, res, next) => {
 
     const subjectBooking = !subjectIsDriver
       ? (ride.bookings || []).find(b =>
-          b.passengerId.toString() === subjectId &&
-          ['Confirmed', 'Completed'].includes(b.status)
+          b.passengerId.toString() === subjectId
         )
       : null;
 

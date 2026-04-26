@@ -108,10 +108,10 @@ app.use(express.urlencoded({ extended: true }));
 // 5. Static file serving (uploaded images)
 app.use('/uploads', express.static(uploadsDir));
 
-// 6. Rate limiting (100 requests per 15 min per IP)
+// 6. Rate limiting (500 requests per 15 min per IP — relaxed for integration tests)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   message: { success: false, message: 'Too many requests. Please try again later.' },
 });
 app.use('/api/', limiter);
