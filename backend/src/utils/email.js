@@ -1,10 +1,38 @@
 const https = require('https');
+const nodemailer = require('nodemailer');
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const FROM_NAME  = 'AUI Carpool';
 const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'auicarpool@outlook.com';
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+// ── Dev transport (direct SMTP — instant, no Brevo queue) ─────────────────────
+// Set SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS in your local .env
+// e.g. Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, use an App Password
+const devTransporter = IS_DEV
+  ? nodemailer.createTransport({
+      host:   process.env.SMTP_HOST || 'smtp.gmail.com',
+      port:   Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    })
+  : null;
 
 const sendEmail = ({ to, subject, html }) => {
+  // ── Dev: use nodemailer SMTP directly ─────────────────────────────────────
+  if (IS_DEV && devTransporter) {
+    return devTransporter.sendMail({
+      from: `"${FROM_NAME}" <${process.env.SMTP_USER || FROM_EMAIL}>`,
+      to,
+      subject,
+      html,
+    });
+  }
+
+  // ── Prod: use Brevo HTTP API ───────────────────────────────────────────────
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       sender: { name: FROM_NAME, email: FROM_EMAIL },

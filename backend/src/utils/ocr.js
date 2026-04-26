@@ -171,8 +171,9 @@ If this is not an AUI CashWallet card still identify the docType and leave name/
       verified: !!(extracted.studentId || holderName),
     };
   } catch (err) {
-    console.error('[OCR:CashWallet] Gemini error:', err.message, err.stack);
-    throw err; // re-throw so caller logs it and returns a clear 500 rather than silent 400
+    // Log only the error type/status — never log raw Gemini responses (may contain PII)
+    console.error('[OCR:CashWallet] Gemini error:', err.constructor.name, err.statusCode || '');
+    throw err;
   }
 }
 
@@ -218,7 +219,8 @@ If this is not a driver license still identify the docType and leave the other f
       verified: !!(extracted.licenseNumber || holderName),
     };
   } catch (err) {
-    console.error('[OCR:DriverLicense] Gemini error:', err.message, err.stack);
+    // Log only the error type/status — never log raw Gemini responses (may contain PII)
+    console.error('[OCR:DriverLicense] Gemini error:', err.constructor.name, err.statusCode || '');
     throw err;
   }
 }
@@ -270,7 +272,8 @@ If this is not a registration card still identify the docType and leave the othe
       verified: !!extracted.licensePlate,
     };
   } catch (err) {
-    console.error('[OCR:RegistrationCard] Gemini error:', err.message, err.stack);
+    // Log only the error type/status — never log raw Gemini responses (may contain PII)
+    console.error('[OCR:RegistrationCard] Gemini error:', err.constructor.name, err.statusCode || '');
     throw err;
   }
 }
