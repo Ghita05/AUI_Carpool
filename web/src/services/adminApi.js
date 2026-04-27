@@ -1,8 +1,4 @@
-/**
- * services/adminApi.js
- * Centralized admin API service.
- * All calls require a valid Admin JWT passed from AdminAuthContext.
- */
+﻿// Admin API service — all requests require a valid Admin JWT from AdminAuthContext.
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
@@ -25,10 +21,10 @@ async function request(path, token, options = {}) {
   return data.data;
 }
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
+// Stats
 export const fetchStats = (token) => request('/api/admin/stats', token);
 
-// ── Users ─────────────────────────────────────────────────────────────────────
+// Users
 export const fetchUsers = (token, params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/api/admin/users${qs ? `?${qs}` : ''}`, token);
@@ -52,7 +48,7 @@ export const warnUser = (token, userId, warningMessage) =>
     body: JSON.stringify({ warningMessage }),
   });
 
-// ── Rides ─────────────────────────────────────────────────────────────────────
+// Rides
 export const fetchRides = (token, params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/api/admin/rides${qs ? `?${qs}` : ''}`, token);
@@ -64,7 +60,7 @@ export const cancelRideAdmin = (token, rideId, reason) =>
     body: JSON.stringify({ reason }),
   });
 
-// ── Reviews ───────────────────────────────────────────────────────────────────
+// Reviews
 export const fetchReviews = (token, params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/api/admin/reviews${qs ? `?${qs}` : ''}`, token);
@@ -73,7 +69,7 @@ export const fetchReviews = (token, params = {}) => {
 export const removeReview = (token, reviewId) =>
   request(`/api/admin/reviews/${reviewId}`, token, { method: 'DELETE' });
 
-// ── Reports ───────────────────────────────────────────────────────────────────
+// Reports
 export const fetchReports = (token, params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/api/admin/reports${qs ? `?${qs}` : ''}`, token);
@@ -94,7 +90,7 @@ export const contactReporter = (token, reportId, message) =>
     body: JSON.stringify({ message }),
   });
 
-// ── Direct messaging (admin ↔ reporter thread) ────────────────────────────────
+// Direct messaging (admin <-> reporter thread)
 export const fetchConversation = (token, otherUserId) =>
   request(`/api/messages/${otherUserId}`, token);
 

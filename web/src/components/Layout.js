@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Layout.css';
 
@@ -24,7 +24,7 @@ export default function Layout({ children }) {
 
   return (
     <div className="layout-root">
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <aside className="layout-sidebar">
         {/* Brand */}
         <div className="layout-brand" onClick={() => navigate('/home')}>
@@ -83,7 +83,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* ── Page content ── */}
+      {/* Page content */}
       <main className="layout-content">
         {children}
       </main>
