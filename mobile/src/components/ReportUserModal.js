@@ -1,21 +1,6 @@
-/**
- * components/ReportUserModal.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Reusable modal for filing a user report.
- * Used in:
- *   • PostRideReviewModal — "Report [Name]" link below the review form
- *   • MessagesScreen (ChatView) — long-press on a message bubble or header ⋮ menu
- *
- * Props
- * ─────
- * visible         boolean
- * onClose         () => void
- * subjectId       string  — MongoDB _id of reported user
- * subjectName     string  — Display name (for UI copy)
- * context         'Ride' | 'Message'
- * rideId          string?  — required when context === 'Ride'
- * messageSnapshot { messageId, content, sentAt }? — optional for Message context
- */
+// Reusable modal for filing a report against another user.
+// Used in PostRideReviewModal and the Chat header menu.
+// Props: visible, onClose, subjectId, subjectName, context ('Ride'|'Message'), rideId?, messageSnapshot?
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {

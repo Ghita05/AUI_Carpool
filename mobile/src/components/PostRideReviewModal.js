@@ -1,31 +1,5 @@
-/**
- * components/PostRideReviewModal.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Full-screen modal that appears immediately when a ride completes (either via
- * GPS auto-complete or manual driver action). Each member must rate every other
- * member of the ride — driver rates passengers, passengers rate the driver and
- * optionally each other.
- *
- * DESIGN DECISIONS:
- *
- * 1. One-participant-at-a-time flow:
- *    Showing all participants at once would overwhelm users. Instead the modal
- *    cycles through participants one at a time with a progress indicator.
- *    This matches the Figma mockup (screen 13 — Rating & Reviews).
- *
- * 2. Rating is required, review text is optional:
- *    A 1-5 star rating is mandatory (the core trust metric). Text is optional
- *    so users who want to rate quickly can do so without typing.
- *
- * 3. Skip is allowed:
- *    Users can skip rating a specific person — they just cannot dismiss the
- *    whole modal without either rating everyone or explicitly pressing "Done".
- *    This avoids frustration while maximising review collection.
- *
- * 4. Submitted ratings update immediately via the API response:
- *    The parent screen refreshes the subject's averageRating from the response,
- *    so the profile shows the new score without a separate fetch.
- */
+﻿// Full-screen modal shown when a ride completes — each member rates every other member.
+// Cycles through participants one at a time. Rating is required; review text is optional.
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -38,7 +12,7 @@ import { Colors, Typography, Spacing, Radius } from '../theme';
 import { writeReview } from '../services/reviewService';
 import ReportUserModal from './ReportUserModal';
 
-// ── Star rating widget ────────────────────────────────────────────────────────
+// Star rating widget
 function StarPicker({ value, onChange, size = 36 }) {
   return (
     <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginVertical: 12 }}>
@@ -55,7 +29,7 @@ function StarPicker({ value, onChange, size = 36 }) {
   );
 }
 
-// ── Initials avatar ───────────────────────────────────────────────────────────
+// Initials avatar
 function Avatar({ name, size = 64 }) {
   const parts    = (name || '').split(' ');
   const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
@@ -72,7 +46,7 @@ function Avatar({ name, size = 64 }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// Main component
 export default function PostRideReviewModal({ visible, rideId, destination, participants, userId, onDone }) {
   // Filter out the current user from the list of people to rate
   const toRate = (participants || []).filter(p => p.userId !== userId);

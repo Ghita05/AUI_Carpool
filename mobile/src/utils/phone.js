@@ -1,21 +1,8 @@
-/**
- * Moroccan phone number utilities.
- *
- * Accepted raw inputs:
- *   0612345678   → +212612345678
- *   212612345678 → +212612345678
- *   +212612345678 → +212612345678 (already normalized)
- *   0600 123 456 (spaces/dashes ignored)
- *
- * Moroccan mobile prefixes after the country code:
- *   6xx / 7xx  (mobile)
- *   5xx        (fixed / VoIP, also valid)
- */
+// Moroccan phone number utilities.
+// Normalises inputs like 0612345678, 212612345678, or +212612345678 to E.164 format (+212XXXXXXXXX).
+// Accepts mobile prefixes 6xx/7xx and fixed/VoIP 5xx.
 
-/**
- * Normalise a raw phone string to +212XXXXXXXXX.
- * Returns null if the input cannot be normalised.
- */
+// Normalises a raw phone string to +212XXXXXXXXX. Returns null if it cannot be normalised.
 export function normalizePhone(raw) {
   if (!raw) return null;
   // Strip whitespace, dashes, dots, parentheses
@@ -38,9 +25,7 @@ export function normalizePhone(raw) {
   return `+212${digits}`;
 }
 
-/**
- * Returns an error string if invalid, or null if valid.
- */
+// Returns a validation error string, or null if valid.
 export function validatePhone(raw) {
   if (!raw || !raw.trim()) return 'Phone number is required';
   if (!normalizePhone(raw)) return 'Enter a valid Moroccan number (e.g. 0612345678 or +212612345678)';

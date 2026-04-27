@@ -1,11 +1,10 @@
-// Bulk fetch users by array of IDs (for group ride requests)
+﻿// Bulk fetch users by array of IDs (for group ride requests)
 export const getUsersByIds = async (ids) => {
   const { data } = await api.post('/rides/users/by-ids', { ids });
   return data;
 };
-// ═══════════════════════════════════════════
+
 // GROUP RIDE REQUESTS (NEW)
-// ═══════════════════════════════════════════
 
 // Leave group ride request
 export const leaveGroupRideRequest = async (requestId) => {
@@ -24,9 +23,8 @@ export const transferGroupOwner = async (requestId, newOwnerId) => {
   const { data } = await api.put(`/rides/requests/${requestId}/transfer-owner`, { newOwnerId });
   return data;
 };
-// ═══════════════════════════════════════════
+
 // USER SEARCH (for group ride requests)
-// ═══════════════════════════════════════════
 export const searchUsers = async (query, { driversOnly } = {}) => {
   const params = { q: query };
   if (driversOnly) params.driversOnly = 'true';
@@ -35,9 +33,8 @@ export const searchUsers = async (query, { driversOnly } = {}) => {
 };
 import api from './api';
 
-// ═══════════════════════════════════════════
+
 // ROUTE ALTERNATIVES
-// ═══════════════════════════════════════════
 
 export const getRouteAlternatives = async (origin, destination, stops = []) => {
   const { data } = await api.post('/routes/alternatives', { origin, destination, stops });
@@ -49,9 +46,8 @@ export const validateStopOnRoute = async (origin, destination, stopLocation) => 
   return data;
 };
 
-// ═══════════════════════════════════════════
+
 // RIDE OFFERS
-// ═══════════════════════════════════════════
 
 export const getAvailableRides = async (filters = {}) => {
   const { data } = await api.get('/rides', { params: filters });
@@ -88,7 +84,7 @@ export const completeRide = async (rideId) => {
   return data;
 };
 
-// ── Attendance (Building Block 2.4 — during-ride phase) ──────────────────────
+// Attendance (Building Block 2.4 — during-ride phase)
 // GET fetches the passenger list with their current attendanceStatus
 // for the driver's check-in panel.
 export const getAttendance = async (rideId) => {
@@ -103,9 +99,8 @@ export const markAttendance = async (rideId, attendance) => {
   return data;
 };
 
-// ═══════════════════════════════════════════
+
 // RIDE REQUESTS
-// ═══════════════════════════════════════════
 
 export const getRideRequests = async (filters = {}) => {
   const { data } = await api.get('/rides/requests/all', { params: filters });
@@ -167,9 +162,8 @@ export const mergeRideRequests = async (offerRideId, requestIds) => {
   return data;
 };
 
-// ═══════════════════════════════════════════
+
 // PASSENGERS
-// ═══════════════════════════════════════════
 
 export const getPassengerList = async (rideId) => {
   const { data } = await api.get(`/rides/${rideId}/passengers`);

@@ -2,10 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-// ── Base URL ──
-// Using the machine's network IP so the app works on physical devices,
-// simulators, and Expo Go. Port 5001 = HTTP fallback (Expo Go can't trust self-signed certs).
-// Change to https:// on port 5000 for production builds with real certs.
+// Base URL
 const BASE_URL = 'https://auicarpool-production-46f2.up.railway.app';
 
 const api = axios.create({
@@ -14,9 +11,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ── Token storage helpers ──
-// SecureStore for native mobile, localStorage for web.
-// All wrapped in try-catch to handle Expo Go edge cases.
+// Token storage helpers (SecureStore on native, localStorage on web)
 const TOKEN_KEY = 'aui_access_token';
 const REFRESH_KEY = 'aui_refresh_token';
 
@@ -66,7 +61,7 @@ export const clearTokens = async () => {
   }
 };
 
-// ── Request interceptor: attach access token to every request ──
+// Request interceptor: attach access token to every request
 api.interceptors.request.use(
   async (config) => {
     const token = await getAccessToken();
@@ -78,7 +73,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ── Response interceptor: auto-refresh on 401 ──
+// Response interceptor: auto-refresh on 401
 let isRefreshing = false;
 let failedQueue = [];
 

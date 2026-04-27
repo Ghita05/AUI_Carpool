@@ -4,18 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 
-/**
- * Bottom-sheet modal that lets the user choose Camera or Gallery,
- * with built-in cropping (allowsEditing) enabled.
- *
- * Props:
- *   visible   – boolean
- *   onClose   – () => void
- *   onImage   – (uri: string) => void   called with the picked/cropped image URI
- *   aspect    – [number,number] optional crop aspect ratio, e.g. [4,3]
- *   quality   – number 0-1  (default 0.8)
- *   title     – optional header text
- */
+// Bottom-sheet modal for picking an image from the camera or gallery, with built-in cropping.
+// Props: visible, onClose, onImage(uri), aspect, quality, title
 export default function ImagePickerModal({ visible, onClose, onImage, aspect, quality = 0.8, title = 'Upload Photo' }) {
   const [localVisible, setLocalVisible] = useState(false);
   const fadeAnim  = useRef(new Animated.Value(0)).current;

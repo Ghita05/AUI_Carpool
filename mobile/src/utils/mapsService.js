@@ -1,33 +1,6 @@
-/**
- * utils/mapsService.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Client-side Google Maps utility for the mobile app.
- *
- * WHY CLIENT-SIDE HERE (and not server-side like maps.js):
- *   Places autocomplete is a UI-assist feature — it fires on every keystroke
- *   while the user types a location. Routing each keystroke through the backend
- *   would add ~100-200ms of network latency per character and create unnecessary
- *   load on our server. The Places Autocomplete API is designed to be called
- *   directly from clients; it does not return sensitive data.
- *
- *   The Directions API (distance/duration computation) stays server-side because
- *   it computes data that gets stored in MongoDB — that is a business logic
- *   operation. Autocomplete is purely a UI enhancement.
- *
- * KEY SAFETY NOTE:
- *   The API key exposed here (EXPO_PUBLIC_GOOGLE_MAPS_KEY) must have its
- *   "Application restrictions" set to "Android apps" and "iOS apps" in Google
- *   Cloud Console so it cannot be used from arbitrary servers if extracted.
- *   In the current dev setup (no restriction) this is acceptable, but should
- *   be tightened before any public release.
- *
- * EXPORTS:
- *   autocompleteLocation(input, sessionToken)
- *     → Promise<Array<{ placeId, description, mainText, secondaryText }>>
- *
- *   geocodePlace(placeId, sessionToken)
- *     → Promise<{ lat, lng, formattedAddress }>
- */
+﻿// Client-side Google Maps utility for the mobile app.
+// Places autocomplete calls the API directly (low-latency UI assist); geocoding goes through the backend.
+// The API key (EXPO_PUBLIC_GOOGLE_MAPS_KEY) must be restricted to Android/iOS apps in Google Cloud Console.
 
 import { Platform } from 'react-native';
 import api from '../services/api';
@@ -45,23 +18,8 @@ const LOCATION_BIAS = 'location=33.5332,5.1116&radius=200000'; // ~200km from If
 // restriction. On native (iOS/Android) the direct REST calls still work fine.
 const IS_WEB = Platform.OS === 'web';
 
-/**
- * autocompleteLocation
- * ─────────────────────────────────────────────────────────────────────────────
- * Calls the Places Autocomplete API and returns formatted suggestions.
- *
- * @param {string} input           - User's current text input
- * @param {string} [sessionToken]  - UUID grouping autocomplete+geocode calls
- *                                   for billing purposes (one charge per session
- *                                   instead of per-request). Generate once per
- *                                   input session and reuse across keystrokes.
- * @returns {Promise<Array<{
- *   placeId: string,
- *   description: string,     // Full address string
- *   mainText: string,        // Primary location name (e.g. "Fez Airport")
- *   secondaryText: string,   // Secondary context (e.g. "Fez, Morocco")
- * }>>}
- */
+// Calls the Places Autocomplete API and returns formatted suggestions.
+// sessionToken groups autocomplete + geocode calls for billing (one charge per session).
 export async function autocompleteLocation(input, sessionToken = '') {
   if (!input || input.trim().length < 2) return [];
 
@@ -117,18 +75,8 @@ export async function autocompleteLocation(input, sessionToken = '') {
   }
 }
 
-/**
- * geocodePlace
- * ─────────────────────────────────────────────────────────────────────────────
- * Converts a placeId (from autocomplete) into lat/lng coordinates.
- * Used when we need to place a marker on the map for a selected location.
- * Uses the same sessionToken as the preceding autocomplete calls so billing
- * groups them into a single session.
- *
- * @param {string} placeId
- * @param {string} [sessionToken]
- * @returns {Promise<{ lat: number, lng: number, formattedAddress: string } | null>}
- */
+// Converts a placeId (from autocomplete) into lat/lng coordinates.
+// Uses the same sessionToken as the preceding autocomplete calls for billing grouping.
 export async function geocodePlace(placeId, sessionToken = '') {
   if (!placeId) return null;
 
@@ -173,16 +121,8 @@ export async function geocodePlace(placeId, sessionToken = '') {
   }
 }
 
-/**
- * geocodeAddress
- * ─────────────────────────────────────────────────────────────────────────────
- * Converts an address string into lat/lng coordinates using the Geocoding API.
- * Used when we only have a place name (e.g. stops stored as strings) and need
- * to plot it on the map.
- *
- * @param {string} address
- * @returns {Promise<{ lat: number, lng: number, formattedAddress: string } | null>}
- */
+// Converts an address string into lat/lng coordinates using the Geocoding API.
+// Used when we have a place name (e.g. a stop string) and need to plot it on the map.
 export async function geocodeAddress(address) {
   if (!address) return null;
 

@@ -7,21 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 import { mergeRideRequests } from '../services/rideService';
 
-/**
- * MergeRequestsModal
- *
- * Shows after a driver accepts a request when there are other identical open
- * requests (same departure, destination, datetime, stops).  The driver can
- * select which of those requests to merge into the just-created offer ride.
- *
- * Props:
- *   visible         – boolean
- *   offerRideId     – string  (the newly created offer ride's _id)
- *   candidates      – array of { requestId, passenger, passengerCount, luggageDeclaration, maxPrice, stops }
- *   availableSeats  – number  (remaining seats in the offer ride)
- *   onClose         – () => void
- *   onMergeConfirmed– () => void  (called after successful merge)
- */
+// Modal for merging identical open ride requests into a newly created offer ride.
+// Shown after a driver accepts a request when other matching open requests exist.
+// Props: visible, offerRideId, candidates, availableSeats, onClose, onMergeConfirmed
 export default function MergeRequestsModal({
   visible,
   offerRideId,

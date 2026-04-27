@@ -1,29 +1,5 @@
-/**
- * context/AuthContext.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Provides authentication state, the Socket.IO connection, and the global
- * post-ride review modal to the entire app.
- *
- * WHY SOCKET.IO LIVES HERE:
- *   The Socket.IO connection must:
- *     (a) open immediately after login with the user's JWT
- *     (b) close on logout
- *     (c) be accessible from any screen (ride tracking, notifications, messages)
- *   The AuthContext is the only component that satisfies all three requirements.
- *   It is instantiated once at the app root and lives for the full session.
- *
- * WHY THE REVIEW MODAL LIVES HERE:
- *   The `ride-completed` event can arrive while the user is on any screen —
- *   they might be in Settings or viewing a Profile when the GPS triggers.
- *   A global modal rendered at the root level overlays any screen correctly.
- *   Individual screens do not need to handle this event.
- *
- * SOCKET EVENTS MANAGED HERE:
- *   ride-completed     → show PostRideReviewModal
- *   late-notification  → push a local alert (passive reminder)
- *   new-message        → stored in pendingMessages state for badge display
- *   (tracking events are handled within RideDetailsScreen directly)
- */
+﻿// Auth context — provides user state, Socket.IO connection, and the global post-ride review modal to the entire app.
+// The socket lives here because it must open on login and be accessible from any screen.
 
 import React, {
   createContext, useContext, useState, useCallback,
@@ -74,7 +50,7 @@ export function AuthProvider({ children }) {
     participants: [],
   });
 
-  // ── Toast banner ─────────────────────────────────────────────────────────
+  // Toast banner
   const showToast = useCallback((notif) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(notif);
@@ -94,7 +70,7 @@ export function AuthProvider({ children }) {
     );
   }, [toastAnim]);
 
-  // ── Badge helpers ─────────────────────────────────────────────────────────
+  // Badge helpers
   const clearTabBadge = useCallback((tab) => {
     if (tab === 'Rides')         setRideBadge(0);
     if (tab === 'Notifications') setNotifBadge(0);
@@ -107,7 +83,7 @@ export function AuthProvider({ children }) {
 
   const clearLatestNotif = useCallback(() => setLatestNotif(null), []);
 
-  // ── Fetch initial unread counts ───────────────────────────────────────────
+  // Fetch initial unread counts
   const fetchInitialBadges = useCallback(async () => {
     try {
       const res = await notifService.getNotifications(1, 100);
@@ -118,7 +94,7 @@ export function AuthProvider({ children }) {
     } catch { /* non-critical */ }
   }, []);
 
-  // ── Connect Socket.IO after login ────────────────────────────────────────
+  // Connect Socket.IO after login
   const connectSocket = useCallback(async () => {
     const token = await getAccessToken();
     if (!token || socketRef.current?.connected) return;
@@ -139,7 +115,7 @@ export function AuthProvider({ children }) {
       console.warn('[Socket] Connection error:', err.message);
     });
 
-    // ── new-notification: show popup banner + increment badge ─────────────
+    // new-notification: show banner + increment badge
     socket.on('new-notification', ({ notification }) => {
       if (!notification) return;
       showToast(notification);
@@ -148,7 +124,7 @@ export function AuthProvider({ children }) {
       if (notification.type === 'Reminder') setRideBadge(prev => prev + 1);
     });
 
-    // ── ride-completed: show the review modal ──────────────────────────────
+    // ride-completed: show the review modal
     // Payload: { rideId, destination, participants: [{userId, name, role}] }
     socket.on('ride-completed', (data) => {
       setReviewModal({
@@ -159,10 +135,10 @@ export function AuthProvider({ children }) {
       });
     });
 
-    // ── late-notification: already handled by new-notification ────────────
+    // late-notification: already handled by new-notification
     socket.on('late-notification', () => {});
 
-    // ── ride-started: notify passenger that the ride is moving ────────────
+    // ride-started: notify passenger that the ride is moving
     socket.on('ride-started', (data) => {
       Alert.alert(
         'Ride Started',
@@ -170,7 +146,7 @@ export function AuthProvider({ children }) {
       );
     });
 
-    // ── new-stop-request: alert driver of an incoming stop request ─────────
+    // new-stop-request: alert driver of an incoming stop request
     socket.on('new-stop-request', (data) => {
       Alert.alert(
         'Stop Request',
@@ -181,7 +157,7 @@ export function AuthProvider({ children }) {
     socketRef.current = socket;
   }, [showToast]);
 
-  // ── Disconnect Socket.IO on logout ───────────────────────────────────────
+  // Disconnect Socket.IO on logout
   const disconnectSocket = useCallback(() => {
     if (socketRef.current) {
       socketRef.current.disconnect();
@@ -189,7 +165,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ── Restore session on app launch ────────────────────────────────────────
+  // Restore session on app launch
   useEffect(() => {
     const restoreSession = async () => {
       try {
@@ -215,7 +191,7 @@ export function AuthProvider({ children }) {
     return () => disconnectSocket();
   }, [connectSocket, disconnectSocket, fetchInitialBadges]);
 
-  // ── Login ─────────────────────────────────────────────────────────────────
+  // Login
   const login = useCallback(async (email, password) => {
     const response = await authService.login(email, password);
     if (response.success && response.data) {
@@ -229,7 +205,7 @@ export function AuthProvider({ children }) {
     throw new Error(response.message || 'Login failed');
   }, [connectSocket, fetchInitialBadges]);
 
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // Logout
   const logout = useCallback(async () => {
     try { await authService.logout(); } catch {}
     await clearTokens();
@@ -240,7 +216,7 @@ export function AuthProvider({ children }) {
     setMsgBadge(0);
   }, [disconnectSocket]);
 
-  // ── Role switch (UI toggle) ───────────────────────────────────────────────
+  // Role switch (UI toggle)
   const switchRole = useCallback((role) => {
     setUser(prev => prev ? { ...prev, role } : prev);
   }, []);
@@ -304,7 +280,7 @@ export function AuthProvider({ children }) {
   );
 }
 
-// ── Toast appearance config ───────────────────────────────────────────────────
+// Toast appearance config
 const TOAST_COLORS = {
   Booking:      { icon: 'checkmark-circle', bg: '#ECFDF5', color: '#10B981' },
   Reminder:     { icon: 'time',             bg: '#FEF3C7', color: '#F59E0B' },
@@ -358,7 +334,7 @@ const toastStyles = StyleSheet.create({
   },
 });
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// Helper
 function buildUser(u) {
   return {
     ...u,
