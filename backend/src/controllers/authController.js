@@ -10,11 +10,7 @@ const {
 } = require('../utils/tokens');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/email');
 const { processDriverLicense, processCashWallet, processRegistrationCard, namesMatch } = require('../utils/ocr');
-/**
- * POST /api/users/send-verification
- * Step 1 of signup: validates the @aui.ma email, creates a minimal placeholder
- * user (just email), and sends the verification link. No profile data yet.
- */
+// Step 1 of signup: validates the @aui.ma email, creates a placeholder user, and sends the verification link.
 const sendVerification = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -61,11 +57,7 @@ const sendVerification = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/users/check-verification?email=...
- * Step 2 polling: the CheckInbox screen calls this to know when the user
- * has clicked the verification link. Returns { verified: true/false }.
- */
+// Step 2 polling: returns { verified: true/false } for the CheckInbox screen.
 const checkVerification = async (req, res, next) => {
   try {
     const { email } = req.query;
@@ -83,12 +75,7 @@ const checkVerification = async (req, res, next) => {
     next(err);
   }
 };
-/**
- * POST /api/users/register
- * Step 3 of signup: completes the pre-verified placeholder user with full
- * profile data. The email was already verified in Step 2, so the account
- * is immediately active and the user is auto-logged in.
- */
+// Step 3 of signup: fills in the placeholder user with full profile data and auto-logs them in.
 const registerUser = async (req, res, next) => {
   try {
     const { firstName, lastName, email, password, phoneNumber, auiId, role, gender } = req.body;
@@ -137,9 +124,7 @@ const registerUser = async (req, res, next) => {
   }
 };
 
-/**
- * Shared HTML page renderer for the email verification flow.
- */
+// Shared HTML page renderer for email verification and password reset flows.
 const renderVerifyPage = (res, title, message, isSuccess, extraBody = '') => {
   const icon = isSuccess
     ? '<div style="width:64px;height:64px;border-radius:50%;background:#E8F5E9;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#1B5E20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M20 6L9 17l-5-5"/></svg></div>'
@@ -167,11 +152,7 @@ const renderVerifyPage = (res, title, message, isSuccess, extraBody = '') => {
   `);
 };
 
-/**
- * GET /api/users/verify-email?token=...
- * Shows a confirmation page — does NOT verify yet.
- * Email scanner bots follow GET links automatically; we must NOT mutate state here.
- */
+// GET: shows the confirmation page. Does NOT verify yet — bots follow GET links automatically.
 const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.query;
@@ -225,11 +206,7 @@ const verifyEmail = async (req, res, next) => {
   }
 };
 
-/**
- * POST /api/users/verify-email
- * Actually sets verificationStatus = true. Only triggered by the human pressing
- * the "Confirm" button — never by bot link prefetching (which only does GET).
- */
+// POST: actually sets verificationStatus = true when the user clicks the Confirm button.
 const confirmEmail = async (req, res, next) => {
   try {
     const { token } = req.body;
@@ -659,7 +636,7 @@ const deactivateAccount = async (req, res, next) => {
   try {
     const userId = req.user._id;
 
-    // ── 1. Cancel all upcoming/active Offer rides where user is the driver ──
+    // Cancel all upcoming/active rides where user is the driver
     const activeDriverRides = await Ride.find({
       type: 'Offer',
       driverId: userId,
@@ -691,7 +668,7 @@ const deactivateAccount = async (req, res, next) => {
       }
     }
 
-    // ── 2. Cancel all pending ride Requests posted by the user ──────────────
+    // Cancel all pending ride requests posted by the user───
     await Ride.updateMany(
       {
         type: 'Request',
@@ -707,7 +684,7 @@ const deactivateAccount = async (req, res, next) => {
       }
     );
 
-    // ── 3. Cancel user's confirmed bookings in other drivers' rides ──────────
+    // Cancel user's confirmed bookings in other drivers' rides──
     const ridesWithUserBooking = await Ride.find({
       type: 'Offer',
       'bookings.passengerId': userId,
@@ -725,18 +702,17 @@ const deactivateAccount = async (req, res, next) => {
       }, { arrayFilters: [{ 'elem.passengerId': userId, 'elem.status': 'Confirmed' }] });
     }
 
-    // ── 4. Delete vehicle(s) ─────────────────────────────────────────────────
+    // Delete vehicle(s)──────────
     await Vehicle.deleteMany({ ownerId: userId });
 
-    // ── 5. Delete user's notifications (private, no longer needed) ───────────
+    // Delete user's notifications────────
     await Notification.deleteMany({ userId });
 
-    // ── 6. Delete reviews written by this user ───────────────────────────────
+    // Delete reviews written by this user────────
     await Review.deleteMany({ authorId: userId });
 
-    // ── 7. Wipe all PII — keep the _id shell so ride history references work ─
-    //    Messages are intentionally kept so other users retain their chat history;
-    //    they will show "Deleted User" as sender via the anonymized name fields.
+    // Wipe all PII — keep the _id shell so ride history references work.
+    // Messages are kept so other users retain their chat history (shows as 'Deleted User').
     await User.findByIdAndUpdate(userId, {
       firstName: 'Deleted',
       lastName: 'User',
@@ -974,11 +950,7 @@ const uploadDriverLicense = async (req, res, next) => {
   }
 };
 
-/**
- * POST /api/users/ocr-preview
- * Pre-auth endpoint: runs OCR on an uploaded document and returns extracted data
- * without storing anything. Used during signup to verify cashwallet before registration.
- */
+// POST /api/users/ocr-preview — runs OCR on an uploaded document and returns extracted data without storing it.
 const previewOCR = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -1058,12 +1030,7 @@ const previewOCR = async (req, res, next) => {
   }
 };
 
-/**
- * PUT /api/users/change-password
- * Authenticated: verifies current password, then replaces it with a new one.
- * Invalidates all existing sessions by clearing the refresh token so that
- * other devices must re-login — a standard security measure after a credential change.
- */
+// PUT /api/users/change-password — verifies current password, sets new one, and invalidates other sessions.
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;

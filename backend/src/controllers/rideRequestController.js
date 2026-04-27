@@ -1,4 +1,4 @@
-// Transfer group owner for a group ride request
+﻿// Transfer group owner for a group ride request
 const transferGroupOwner = async (req, res, next) => {
   try {
     const { requestId } = req.params;
@@ -53,7 +53,7 @@ const transferGroupOwner = async (req, res, next) => {
 const { Ride, Notification, User, Vehicle, Message, Route } = require('../models');
 const { success, error } = require('../utils/responses');
 
-/** Helper: persist a Route document from raw route data. */
+// Persists a Route document from raw route data.
 async function createRouteDoc(data) {
   if (!data || !data.originLatitude) return null;
   const doc = await Route.create({
@@ -93,7 +93,7 @@ const acceptRideRequest = async (req, res, next) => {
     }
     groupIds = [...new Set(groupIds)];
 
-    // ── Hard block: seat capacity ────────────────────────────────────────
+    // Hard block: seat capacity
     const requestedSeats = request.passengerCount || groupIds.length;
     if (requestedSeats > vehicle.totalSeats) {
       return error(res, 400,
@@ -101,7 +101,7 @@ const acceptRideRequest = async (req, res, next) => {
       );
     }
 
-    // ── Soft check: luggage capacity ────────────────────────────────────
+    // Soft check: luggage capacity
     const LUGGAGE_WEIGHT = { None: 0, Small: 1, Medium: 2, Large: 3 };
     const luggageScore = LUGGAGE_WEIGHT[request.luggageDeclaration] || 0;
     const luggageWarning = luggageScore > 0 && luggageScore > (vehicle.luggageCapacity || 0)
@@ -181,7 +181,7 @@ const acceptRideRequest = async (req, res, next) => {
       $set: { state: 'Accepted', acceptedRideId: newOffer._id },
     });
 
-    // ── Find identical pending requests for potential merge ──────────────
+    // Find identical pending requests for potential merge
     // "Identical" = same dep, dest, date (same minute), stops array, state Open
     const depTime = new Date(request.departureDateTime);
     const windowStart = new Date(depTime.getTime() - 60000);
@@ -600,7 +600,7 @@ const cancelGroupRideRequest = async (req, res, next) => {
 };
 
 
-// ── Merge identical open requests into an existing offer ride ─────────────
+// Merge identical open requests into an existing offer ride
 const mergeRideRequests = async (req, res, next) => {
   try {
     const driverId = req.user._id;

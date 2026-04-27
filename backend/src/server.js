@@ -30,11 +30,10 @@ const reportRoutes  = require('./routes/reportRoutes');
 
 const app = express();
 
-// Trust the first proxy hop (required when deployed behind Render / Railway / nginx reverse proxy)
-// Without this, express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// Required for express-rate-limit when deployed behind a reverse proxy
 app.set('trust proxy', 1);
 
-// ── SSL setup (self-signed cert for dev) ──
+// SSL setup (self-signed cert for dev)
 const certPath = path.join(__dirname, '../certs/cert.pem');
 const keyPath = path.join(__dirname, '../certs/key.pem');
 const hasSSL = fs.existsSync(certPath) && fs.existsSync(keyPath);
@@ -53,7 +52,7 @@ if (hasSSL) {
   server = http.createServer(app);
 }
 
-// ── Socket.IO setup (attach to all active servers) ──
+// Attach Socket.IO to all active servers (HTTPS + HTTP fallback)
 const ioServers = [server];
 if (httpServer) ioServers.push(httpServer);
 
@@ -72,16 +71,13 @@ configureSocket(io);
 // Make io accessible in controllers (for push notifications)
 app.set('io', io);
 
-// ── Ensure uploads directory exists ──
+// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MIDDLEWARE CHAIN (Server-Side Presentation Tier — 0.5 Tier)
-// Order matters: security → parsing → logging → rate limiting → routes → errors
-// ═══════════════════════════════════════════════════════════════
+// Middleware chain — order matters: security → parsing → logging → rate limiting → routes → errors
 
 // 1. Security headers
 app.use(helmet());
@@ -116,9 +112,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// ═══════════════════════════════════════════════════════════════
-// ROUTE MOUNTING — Maps to Table 12 (Service to Building Block)
-// ═══════════════════════════════════════════════════════════════
+// Route mounting
 
 app.use('/api/users', authRoutes);           // BB1: Manage User Accounts
 app.use('/api/vehicles', vehicleRoutes);     // BB3: Manage Vehicles
@@ -141,14 +135,10 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found.` });
 });
 
-// ═══════════════════════════════════════════════════════════════
-// ERROR HANDLER (must be last middleware)
-// ═══════════════════════════════════════════════════════════════
+// Error handler — must be registered last
 app.use(errorHandler);
 
-// ═══════════════════════════════════════════════════════════════
-// START SERVER
-// ═══════════════════════════════════════════════════════════════
+// Start server
 const startServer = async () => {
   try {
     await connectDB();

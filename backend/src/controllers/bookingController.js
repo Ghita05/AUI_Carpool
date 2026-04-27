@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 const { Ride, Notification, User, Message, Review, Route } = require('../models');
 const { success, error } = require('../utils/responses');
 const { isStopOnRoute, getDirections } = require('../utils/maps');
@@ -38,7 +38,7 @@ const bookRide = async (req, res, next) => {
       return error(res, 409, 'You already have a seat in this ride. You cannot book more than one.');
     }
 
-    // ── Inner city stop validation ─────────────────────────────────────────
+    // Inner city stop validation
     // Push booking and decrement seats atomically
     const newBooking = {
       passengerId: req.user._id,
@@ -553,7 +553,7 @@ const getStopRequests = async (req, res, next) => {
   }
 };
 
-// ── validateStopOnRoute ─────────────────────────────────────────────────────
+// validateStopOnRoute
 // Called by the mobile app to check if a suggested stop location is on the ride's route.
 const validateStopOnRoute = async (req, res, next) => {
   try {

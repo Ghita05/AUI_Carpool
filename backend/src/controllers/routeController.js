@@ -1,18 +1,11 @@
-/**
- * controllers/routeController.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Dedicated controller for all route, location, and stop logic.
- * Provides modularity by keeping route concerns separate from ride CRUD.
- */
+﻿// Route controller — handles route alternatives, stop validation, and live driver location.
 
 const { Ride } = require('../models');
 const { success, error } = require('../utils/responses');
 const { getAlternativeRoutes, isStopOnRoute } = require('../utils/maps');
 const routeService = require('../services/routeService');
 
-// ── getRouteAlternatives ────────────────────────────────────────────────────
-// Returns all alternative routes between origin and destination via Google
-// Directions API. The user picks their preferred route before publishing a ride.
+// Returns all alternative routes between origin and destination so the driver can pick one.
 const getRouteAlternatives = async (req, res, next) => {
   try {
     const { origin, destination, stops } = req.body;
@@ -29,7 +22,7 @@ const getRouteAlternatives = async (req, res, next) => {
   }
 };
 
-// ── getRouteForRide ─────────────────────────────────────────────────────────
+// getRouteForRide
 // Returns the route sub-document for a given ride.
 const getRouteForRide = async (req, res, next) => {
   try {
@@ -42,9 +35,7 @@ const getRouteForRide = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── validateStopOnRoute ─────────────────────────────────────────────────────
-// Checks whether a stop location is within the detour threshold.
-// Supports two modes:
+// validateStopOnRoute — Checks whether a stop location is within the detour threshold. Supports two modes:
 //   1. rideId-based: looks up origin/destination from the DB (for post-publish)
 //   2. direct: origin + destination supplied in the body (for pre-publish)
 const validateStop = async (req, res, next) => {
@@ -76,7 +67,7 @@ const validateStop = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── shareDriverLocation ─────────────────────────────────────────────────────
+// shareDriverLocation
 // Emits the driver's live GPS via Socket.IO — no DB write.
 const shareDriverLocation = async (req, res, next) => {
   try {

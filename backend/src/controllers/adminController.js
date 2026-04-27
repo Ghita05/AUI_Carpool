@@ -1,14 +1,10 @@
-/**
- * controllers/adminController.js
- * Admin-only operations for the AUI Carpool web dashboard.
- * All routes that use these handlers must be protected by
- * authenticate + authorize('Admin') middleware.
- */
+﻿// Admin-only controller for the web dashboard.
+// All handlers require authenticate + authorize('Admin') middleware.
 
 const { User, Ride, Review, Notification, Report } = require('../models');
 const { success, error } = require('../utils/responses');
 
-// ── GET /api/admin/stats ──────────────────────────────────────────────────────
+// GET /api/admin/stats
 const getStats = async (req, res, next) => {
   try {
     const [totalUsers, totalRides, activeRides, openReports] = await Promise.all([
@@ -73,7 +69,7 @@ const getStats = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/users ──────────────────────────────────────────────────────
+// GET /api/admin/users
 // Query params: search, role, status, sortBy (rating|joinDate), order (asc|desc)
 const getAllUsers = async (req, res, next) => {
   try {
@@ -109,7 +105,7 @@ const getAllUsers = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/users/:userId ──────────────────────────────────────────────
+// GET /api/admin/users/:userId
 const getUserDetail = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.userId)
@@ -121,7 +117,7 @@ const getUserDetail = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/rides ──────────────────────────────────────────────────────
+// GET /api/admin/rides
 // Query params: search, status, sortBy (date|price), order (asc|desc)
 const getAllRides = async (req, res, next) => {
   try {
@@ -161,7 +157,7 @@ const getAllRides = async (req, res, next) => {
   }
 };
 
-// ── DELETE /api/admin/rides/:rideId ──────────────────────────────────────────
+// DELETE /api/admin/rides/:rideId
 // Admin force-cancel a ride (regardless of who the driver is)
 const adminCancelRide = async (req, res, next) => {
   try {
@@ -182,7 +178,7 @@ const adminCancelRide = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/reviews ────────────────────────────────────────────────────
+// GET /api/admin/reviews
 const getAllReviews = async (req, res, next) => {
   try {
     const { search = '', sortBy = 'date', order = 'desc' } = req.query;
@@ -211,7 +207,7 @@ const getAllReviews = async (req, res, next) => {
   }
 };
 
-// ── PUT /api/admin/users/:userId/unsuspend ────────────────────────────────────
+// PUT /api/admin/users/:userId/unsuspend
 const unsuspendAccount = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.userId);

@@ -1,7 +1,7 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-// ── Booking sub-document (embedded in Offer documents) ───────────────────
+// Booking sub-document (embedded in Offer rides)
 const bookingSubSchema = new Schema({
   passengerId:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
   groupId:            { type: Schema.Types.ObjectId, default: null },
@@ -38,7 +38,7 @@ const bookingSubSchema = new Schema({
   bookedAt: { type: Date, default: Date.now },
 }, { _id: true, timestamps: false });
 
-// ── Unified Ride schema ───────────────────────────────────────────────────
+// Unified Ride schema
 const rideSchema = new Schema({
 
   type: {
@@ -53,7 +53,7 @@ const rideSchema = new Schema({
     default: null,
   },
 
-  // ── Live-ride flags (set by GPS-driven socket logic) ──────────────────
+  // Live-ride flags
   // Tracks how many departure-window alerts have been sent (allows repeated alerts).
   departureAlertsSent:  { type: Number, default: 0 },
   // Set when the ride transitions OnGoing → Completed via GPS, prevents
@@ -66,7 +66,7 @@ const rideSchema = new Schema({
 
 
 
-  // ── Shared fields ─────────────────────────────────────────────────────
+  // Shared fields
   departureLocation: { type: String, required: true, trim: true },
   destination:       { type: String, required: true, trim: true },
   departureDateTime: { type: Date, required: true },
@@ -78,7 +78,7 @@ const rideSchema = new Schema({
   },
   notes: { type: String, default: '' },
 
-  // ── Offer-only fields ─────────────────────────────────────────────────
+  // Offer-only fields
   driverId:        { type: Schema.Types.ObjectId, ref: 'User', default: null },
   vehicleId:       { type: Schema.Types.ObjectId, ref: 'Vehicle', default: null },
   totalSeats:      { type: Number, min: 1, default: null },
@@ -87,10 +87,10 @@ const rideSchema = new Schema({
   route:           { type: Schema.Types.ObjectId, ref: 'Route', default: null },
   bookings:        { type: [bookingSubSchema], default: [] },
 
-  // ── Stops (used by both Offer and Request) ────────────────────────────
+  // Stops
   stops:             { type: [String], default: [] },
 
-  // ── Request-only fields ───────────────────────────────────────────────
+  // Request-only fields
   passengerId:          { type: Schema.Types.ObjectId, ref: 'User', default: null },
   groupPassengerIds:    { type: [Schema.Types.ObjectId], default: [] },
   leftMembers:          { type: Map, of: Number, default: {} },
@@ -99,13 +99,13 @@ const rideSchema = new Schema({
   acceptedRideId:       { type: Schema.Types.ObjectId, ref: 'Ride', default: null },
   luggageDeclaration:   { type: String, enum: ['None', 'Small', 'Medium', 'Large'], default: 'None' },
 
-  // ── Cancellation (both types) ─────────────────────────────────────────
+  // Cancellation
   cancellationReason: { type: String, default: null },
   cancellationDate:   { type: Date, default: null },
 
 }, { timestamps: true });
 
-// ── Pre-save: set default state based on type ─────────────────────────────
+// Pre-save: set default state based on type
 rideSchema.pre('save', function(next) {
   if (this.isNew && this.state === null) {
     this.state = this.type === 'Offer' ? 'Active' : 'Open';
@@ -113,7 +113,7 @@ rideSchema.pre('save', function(next) {
   next();
 });
 
-// ── Indexes ───────────────────────────────────────────────────────────────
+// Indexes
 rideSchema.index({ type: 1, state: 1, departureDateTime: 1 });
 rideSchema.index({ driverId: 1, type: 1 });
 rideSchema.index({ passengerId: 1, type: 1 });

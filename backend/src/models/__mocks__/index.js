@@ -1,11 +1,5 @@
-/**
- * Manual mock for src/models/index.js
- *
- * Jest replaces the real module with this when a test calls
- * jest.mock('../../src/models').  Each exported model is a plain
- * object whose Mongoose static methods are Jest mock functions.
- * No mongoose connection is required — no real DB calls happen.
- */
+// Jest manual mock for src/models/index.js.
+// Each exported model has mock functions for all Mongoose statics — no DB connection needed.
 
 function makeModel() {
   const findOneMock = jest.fn();

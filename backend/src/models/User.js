@@ -1,4 +1,4 @@
-
+﻿
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -93,7 +93,7 @@ const userSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.ObjectId],
       default: [],
     },
-    // ── Computed fields (updated by their owning services) ──
+    // Computed fields
     averageRating: {
       type: Number,
       default: 0,
@@ -117,7 +117,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    // ── Driver-specific fields ──
+    // Driver-specific fields
     driverLicenseImage: {
       type: String,
       default: null,
@@ -134,7 +134,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
-    // ── Auth tokens ──
+    // Auth tokens
     refreshToken: {
       type: String,
       select: false,
@@ -145,13 +145,13 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// ── Indexes ──
+// Indexes
 // Note: email already has unique:true in the schema, so no separate index needed for it
 userSchema.index({ firstName: 'text', lastName: 'text', email: 'text' });
 userSchema.index({ averageRating: -1 });
 userSchema.index({ registrationDate: -1 });
 
-// ── Pre-save: hash password ──
+// Pre-save: hash password
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(12);
@@ -159,12 +159,12 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// ── Instance method: compare password ──
+// Instance method: compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// ── Instance method: return safe user object (no sensitive fields) ──
+// Instance method: return safe user object (strips sensitive fields)
 userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();
   delete obj.password;

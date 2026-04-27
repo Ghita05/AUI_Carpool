@@ -1,9 +1,5 @@
-/**
- * OCR utility — powered by Google Gemini Vision API.
- * Replaced tesseract.js (OOM-killed on Railway 512 MB containers) with
- * a lightweight HTTPS call to Gemini 1.5 Flash, which handles Moroccan
- * documents (French + Arabic) with higher accuracy and zero local memory.
- */
+﻿// OCR utility — Gemini Vision API for student cards, licenses, and registration cards.
+// Replaced tesseract.js (OOM-killed on 512 MB containers) with a lightweight HTTPS call to Gemini 1.5 Flash.
 
 const https = require('https');
 const fs = require('fs');
@@ -13,9 +9,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-1.5-flash-latest';
 const GEMINI_API_VERSION = 'v1beta';
 
-/**
- * Fetch raw bytes from an HTTPS URL, returning { buffer, mimeType }.
- */
+// Fetches image bytes from an HTTPS URL, returning { buffer, mimeType }.
 function fetchImageUrl(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
@@ -30,16 +24,7 @@ function fetchImageUrl(url) {
   });
 }
 
-/**
- * Send an image + prompt to Gemini and return the parsed JSON object.
- *
- * @param {string|{buffer:Buffer,mimetype:string}} imageInput
- *   - A Cloudinary/HTTPS URL string → fetched via HTTPS
- *   - A {buffer, mimetype} object   → used directly (from multer memoryStorage)
- *   - A local path string (dev only) → read with fs
- * @param {string} prompt – the text instruction
- * @returns {Promise<object>} – parsed JSON from the model
- */
+// Sends an image + prompt to Gemini and returns parsed JSON.
 async function callGemini(imageInput, prompt) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
 
@@ -119,9 +104,9 @@ async function callGemini(imageInput, prompt) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Document processors
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const DOC_TYPE_LABELS = {
   registrationCard: 'Vehicle Registration Card (Carte Grise)',
@@ -130,10 +115,7 @@ const DOC_TYPE_LABELS = {
   unknown: 'Unknown Document',
 };
 
-/**
- * Process an AUI CashWallet student card.
- * Returns: { holderName, firstName, lastName, studentId, isAuiCard, verified, ... }
- */
+// Extracts student info from an AUI CashWallet card image.
 async function processCashWallet(imagePath) {
   const empty = {
     rawText: '', detectedType: 'unknown',
@@ -177,10 +159,7 @@ If this is not an AUI CashWallet card still identify the docType and leave name/
   }
 }
 
-/**
- * Process a Moroccan Driver License (Permis de Conduire).
- * Returns: { holderName, firstName, lastName, licenseNumber, cni, verified, ... }
- */
+// Extracts holder info from a Moroccan driver license image.
 async function processDriverLicense(imagePath) {
   const empty = {
     rawText: '', detectedType: 'unknown',
@@ -225,10 +204,7 @@ If this is not a driver license still identify the docType and leave the other f
   }
 }
 
-/**
- * Process a Moroccan Vehicle Registration Card (Carte Grise).
- * Returns: { licensePlate, ownerName, expiryDate, isExpired, verified, ... }
- */
+// Extracts vehicle info from a Moroccan registration card image.
 async function processRegistrationCard(imagePath) {
   const empty = {
     rawText: '', detectedType: 'unknown',
@@ -278,9 +254,9 @@ If this is not a registration card still identify the docType and leave the othe
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Name comparison helpers (used by authController for identity verification)
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 function normalizeName(name) {
   if (!name) return '';

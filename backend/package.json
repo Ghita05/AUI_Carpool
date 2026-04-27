@@ -7,7 +7,8 @@
     "start": "node --max-old-space-size=460 src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest tests/unit --verbose",
-    "test:coverage": "jest tests/unit --coverage --verbose"
+    "test:coverage": "jest tests/unit --coverage --verbose",
+    "seed:admin": "node scripts/seed-admin.js"
   },
   "jest": {
     "testEnvironment": "node",

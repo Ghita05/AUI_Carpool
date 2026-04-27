@@ -1,4 +1,4 @@
-const { Message, User, Ride } = require('../models');
+﻿const { Message, User, Ride } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const sendMessage = async (req, res, next) => {

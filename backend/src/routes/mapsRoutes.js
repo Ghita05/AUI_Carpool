@@ -1,21 +1,5 @@
-/**
- * routes/mapsRoutes.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Server-side proxy for Google Maps Places / Geocoding API calls.
- *
- * WHY THIS EXISTS:
- *   The Places Autocomplete and Geocoding REST endpoints block direct browser
- *   requests with a CORS error (they are designed for server-side use only).
- *   The mobile app calls these directly on native (no CORS restriction), but
- *   the web build must route through this proxy.
- *
- * ROUTES:
- *   GET /api/maps/autocomplete?input=...&sessiontoken=...
- *   GET /api/maps/place-details?placeId=...&sessiontoken=...
- *   GET /api/maps/geocode?address=...
- *
- * All routes require authentication to prevent API key abuse.
- */
+﻿// Server-side proxy for Google Maps Places and Geocoding API calls.
+// Routes web requests through the backend to avoid CORS restrictions on the browser client.
 
 const express = require('express');
 const router = express.Router();
@@ -25,7 +9,7 @@ const { authenticate } = require('../middleware/auth');
 const mapsClient = new Client({});
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
-// ── GET /api/maps/autocomplete ───────────────────────────────────────────────
+// GET /api/maps/autocomplete
 router.get('/autocomplete', authenticate, async (req, res) => {
   const { input, sessiontoken } = req.query;
   if (!input || input.trim().length < 2) return res.json({ predictions: [] });
@@ -53,7 +37,7 @@ router.get('/autocomplete', authenticate, async (req, res) => {
   }
 });
 
-// ── GET /api/maps/place-details ──────────────────────────────────────────────
+// GET /api/maps/place-details
 router.get('/place-details', authenticate, async (req, res) => {
   const { placeId, sessiontoken } = req.query;
   if (!placeId) return res.status(400).json({ error: 'placeId is required' });
@@ -83,7 +67,7 @@ router.get('/place-details', authenticate, async (req, res) => {
   }
 });
 
-// ── GET /api/maps/geocode ────────────────────────────────────────────────────
+// GET /api/maps/geocode
 router.get('/geocode', authenticate, async (req, res) => {
   const { address } = req.query;
   if (!address) return res.status(400).json({ error: 'address is required' });

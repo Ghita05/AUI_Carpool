@@ -2,15 +2,7 @@ const cron = require('node-cron');
 const { User, Ride, Notification } = require('../models');
 const { sendNotification } = require('../utils/notify');
 
-/**
- * Job 1: Clean up unverified accounts
- * Runs every 6 hours.
- *
- * Deletes accounts where verificationStatus is false AND the account
- * was created more than 24 hours ago (matching the verification token's TTL).
- * This prevents stale, unverified accounts from appearing in the system
- * and consuming storage.
- */
+// Runs every 6h: deletes unverified accounts older than 24 hours.
 const scheduleUnverifiedCleanup = () => {
   cron.schedule('0 */6 * * *', async () => {
     try {
@@ -32,13 +24,7 @@ const scheduleUnverifiedCleanup = () => {
   console.log('[CRON] Unverified account cleanup scheduled (every 6h).');
 };
 
-/**
- * Job 2: Ride departure reminders (Algorithm 8)
- * Runs every 30 minutes.
- *
- * Finds rides departing within the next 2 hours that haven't been
- * reminded yet, then notifies the driver and all confirmed passengers.
- */
+// Runs every 30min: sends departure reminders to driver and confirmed passengers 2 hours before the ride.
 const scheduleRideReminders = (io = null) => {
   cron.schedule('*/30 * * * *', async () => {
     try {
@@ -95,15 +81,7 @@ const scheduleRideReminders = (io = null) => {
   console.log('[CRON] Ride departure reminders scheduled (every 30min).');
 };
 
-/**
- * Job 3: OnGoing ride safety-net completion
- * Runs every 30 minutes.
- *
- * If a ride has been OnGoing for > 6 hours (GPS either failed or the driver
- * never sent a final position), auto-complete it. This prevents rides from
- * being stuck in OnGoing state permanently.
- * 6 hours is generous enough to cover the longest AUI → Casablanca route.
- */
+// Runs every 30min: auto-completes rides stuck in OnGoing for more than 6 hours (GPS failure fallback).
 const scheduleOngoingSafetyNet = (io = null) => {
   cron.schedule('*/30 * * * *', async () => {
     try {
@@ -155,16 +133,7 @@ const scheduleOngoingSafetyNet = (io = null) => {
   console.log('[CRON] OnGoing safety-net scheduled (every 30min).');
 };
 
-/**
- * Job 4: Late driver auto-cancel (backup)
- * Runs every 5 minutes.
- *
- * If a ride's departure time was > 15 minutes ago and the ride is still
- * Active/Full (driver never moved away), auto-cancel the entire ride.
- * This is a safety net for when the driver is offline (no socket connection).
- * The socket state machine handles the same check in real-time when the
- * driver is online.
- */
+// Runs every 5min: auto-cancels rides where the driver did not depart within 15 minutes. Backup for when the driver is offline.
 const scheduleLateDriverAutoCancel = (io = null) => {
   cron.schedule('*/5 * * * *', async () => {
     try {
@@ -224,14 +193,7 @@ const scheduleLateDriverAutoCancel = (io = null) => {
   console.log('[CRON] Late driver auto-cancel scheduled (every 5min).');
 };
 
-/**
- * Job 5: Silently dismiss empty rides at departure time
- * Runs every 5 minutes.
- *
- * If a ride's departure time has passed and it has 0 confirmed passengers,
- * silently cancel it without notifying the driver. This keeps the ride list
- * clean and avoids bothering drivers about rides nobody joined.
- */
+// Runs every 5min: silently dismisses offers with 0 confirmed passengers after their departure time.
 const scheduleEmptyRideDismissal = () => {
   cron.schedule('*/5 * * * *', async () => {
     try {
@@ -263,9 +225,7 @@ const scheduleEmptyRideDismissal = () => {
   console.log('[CRON] Empty ride dismissal scheduled (every 5min).');
 };
 
-/**
- * Initialize all scheduled jobs
- */
+// Registers all five cron jobs.
 const initScheduledJobs = (io = null) => {
   scheduleUnverifiedCleanup();
   scheduleRideReminders(io);

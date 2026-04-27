@@ -1,15 +1,15 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const vehicle = require('../controllers/vehicleController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
-// ── Protected routes (all require auth) ──
+// Protected routes
 router.get('/', authenticate, vehicle.getVehicles);
 router.get('/select', authenticate, vehicle.selectVehicle);
 router.get('/:vehicleId', authenticate, vehicle.getVehicleDetails);
 
-// ── Driver-only routes ──
+// Driver-only routes
 router.post(
   '/',
   authenticate,

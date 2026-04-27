@@ -1,8 +1,4 @@
-/**
- * controllers/rideController.js
- * Unified Ride model — all queries use type: 'Offer' and state instead of status.
- * Bookings are embedded in the Ride document.
- */
+﻿// Ride controller uses the unified Ride model (type: Offer). Bookings are embedded in the ride document.
 
 const { Ride, Notification, User, Message, Review, Route } = require('../models');
 const { success, error } = require('../utils/responses');
@@ -10,10 +6,7 @@ const { getDirections } = require('../utils/maps');
 const { scoreRides } = require('../utils/recommender');
 const { emitReviewPrompts } = require('../socket');
 
-/**
- * Helper: persist a Route document from raw route data.
- * Returns the Route _id, or null if no valid data.
- */
+// Saves a Route document from raw directions data. Returns the Route _id or null.
 async function createRouteDoc(data) {
   if (!data || !data.originLatitude) return null;
   const doc = await Route.create({
@@ -29,7 +22,6 @@ async function createRouteDoc(data) {
   return doc._id;
 }
 
-// ── postRideOffer ─────────────────────────────────────────────────────────────
 const postRideOffer = async (req, res, next) => {
   try {
     const {
@@ -97,7 +89,6 @@ const postRideOffer = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── modifyRide ────────────────────────────────────────────────────────────────
 const modifyRide = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
@@ -163,7 +154,6 @@ const modifyRide = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── cancelRide ────────────────────────────────────────────────────────────────
 const cancelRide = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
@@ -216,7 +206,6 @@ const cancelRide = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── markAttendance ────────────────────────────────────────────────────────────
 const markAttendance = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
@@ -264,7 +253,6 @@ const markAttendance = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getAttendance ─────────────────────────────────────────────────────────────
 const getAttendance = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' })
@@ -289,7 +277,6 @@ const getAttendance = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── completeRide ──────────────────────────────────────────────────────────────
 const completeRide = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({ _id: req.params.rideId, type: 'Offer' });
@@ -337,7 +324,6 @@ const completeRide = async (req, res, next) => {
     });
   } catch (err) { next(err); }
 };
-// ── getAvailableRides ─────────────────────────────────────────────────────────
 const getAvailableRides = async (req, res, next) => {
   try {
     const {
@@ -422,7 +408,6 @@ const getAvailableRides = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getRideDetails ────────────────────────────────────────────────────────────
 const getRideDetails = async (req, res, next) => {
   try {
     const ride = await Ride.findById(req.params.rideId)
@@ -434,7 +419,6 @@ const getRideDetails = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getMyRides ────────────────────────────────────────────────────────────────
 const getMyRides = async (req, res, next) => {
   try {
     const { status = 'upcoming' } = req.query;

@@ -6,9 +6,7 @@ const FROM_NAME  = 'AUI Carpool';
 const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'auicarpool@outlook.com';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
-// ── Dev transport (direct SMTP — instant, no Brevo queue) ─────────────────────
-// Set SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS in your local .env
-// e.g. Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, use an App Password
+// Dev: direct SMTP transport (bypasses Brevo queue). Set SMTP_* vars in .env.
 const devTransporter = IS_DEV
   ? nodemailer.createTransport({
       host:   process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -22,7 +20,7 @@ const devTransporter = IS_DEV
   : null;
 
 const sendEmail = ({ to, subject, html }) => {
-  // ── Dev: use nodemailer SMTP directly ─────────────────────────────────────
+  // Dev: use nodemailer SMTP directly
   if (IS_DEV && devTransporter) {
     return devTransporter.sendMail({
       from: `"${FROM_NAME}" <${process.env.SMTP_USER || FROM_EMAIL}>`,
@@ -32,7 +30,7 @@ const sendEmail = ({ to, subject, html }) => {
     });
   }
 
-  // ── Prod: use Brevo HTTP API ───────────────────────────────────────────────
+  // Prod: use Brevo HTTP API
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       sender: { name: FROM_NAME, email: FROM_EMAIL },
@@ -71,9 +69,7 @@ const sendEmail = ({ to, subject, html }) => {
   });
 };
 
-/**
- * Send AUI email verification link
- */
+// Sends the email verification link.
 const sendVerificationEmail = async (email, token) => {
   const verificationUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/verify-email?token=${token}`;
 
@@ -99,9 +95,7 @@ const sendVerificationEmail = async (email, token) => {
   });
 };
 
-/**
- * Send password reset link
- */
+// Sends the password reset link.
 const sendPasswordResetEmail = async (email, token) => {
   const resetUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/api/users/reset-password-page?token=${token}`;
 

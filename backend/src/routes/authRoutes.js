@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const auth = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
@@ -6,7 +6,7 @@ const upload = require('../middleware/upload');
 const multer = require('multer');
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// ── Public routes (no JWT required) ──
+// Public routes (no JWT required)
 router.post('/send-verification', auth.sendVerification);
 router.get('/check-verification', auth.checkVerification);
 router.post('/register', auth.registerUser);
@@ -53,7 +53,7 @@ router.post(
   auth.uploadProfilePicture
 );
 
-// ── Admin routes ──
+// Admin routes
 router.put('/:userId/suspend', authenticate, authorize('Admin'), auth.suspendAccount);
 router.post('/:userId/warn', authenticate, authorize('Admin'), auth.issueWarning);
 

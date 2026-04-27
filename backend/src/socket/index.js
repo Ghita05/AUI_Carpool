@@ -1,31 +1,5 @@
-/**
- * socket/index.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Socket.IO configuration — real-time layer of the 3.5-tier architecture.
- *
- * RESPONSIBILITIES:
- *   1. Authenticate every WebSocket connection with the same JWT used by HTTP.
- *   2. Maintain an in-memory position store for every connected user.
- *   3. Run a GPS-driven state machine on every location update:
- *        - Auto-mark passengers as Present when their GPS is near departure point
- *        - Active/Full → OnGoing (driver moved ≥ DEPARTURE_THRESHOLD_M from start)
- *        - OnGoing → Completed (driver within ARRIVAL_THRESHOLD_M of destination)
- *   4. Send departure-window alerts (dep time → dep+15min) to members not at
- *      the departure point. Alerts sent every ~5 min during the window.
- *   5. Auto-cancel the entire ride if driver is not at departure 15 min after
- *      scheduled departure (late driver auto-cancel).
- *   6. Auto-cancel bookings for passengers not marked Present when ride goes OnGoing.
- *   7. Broadcast live tracking data (position) to all ride-room members.
- *   8. Handle direct messages and group channel messages in real-time.
- *
- * GEOGRAPHIC THRESHOLDS (tuned for AUI → city routes):
- *   ATTENDANCE_THRESHOLD_M = 300  m  — passenger is "at" the departure point
- *   DEPARTURE_THRESHOLD_M  = 200  m  — driver has clearly left the pickup area
- *   ARRIVAL_THRESHOLD_M    = 300  m  — close enough to destination to auto-complete
- *   LATE_THRESHOLD_M       = 500  m  — member is not at the departure point
- *   LATE_WINDOW_MS         = 15 min  — window after departure to check for latecomers
- *   ALERT_INTERVAL_MS      = 5 min   — gap between repeated departure alerts
- */
+﻿// Socket.IO server — JWT auth, live GPS tracking, and automatic ride state transitions.
+// Handles attendance marking, departure/arrival detection, and real-time messaging.
 
 const jwt = require('jsonwebtoken');
 const { Ride, Notification, User } = require('../models');
@@ -41,10 +15,7 @@ const ALERT_INTERVAL_MS      = 5 * 60 * 1000;
 // In-memory: userId (string) → { lat, lng, updatedAt (ms) }
 const lastPositions = new Map();
 
-/**
- * haversineDistance — returns distance in metres between two lat/lng pairs.
- * Haversine formula accurate to < 0.5% for all distances relevant here.
- */
+// Returns distance in metres between two lat/lng pairs.
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const φ1 = (lat1 * Math.PI) / 180;
@@ -55,12 +26,8 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * emitReviewPrompts
- * Fires `ride-completed` to every member's personal Socket room and persists
- * an in-app notification so offline members are also prompted on next login.
- * Exported so the HTTP completeRide controller can call it for manual completions.
- */
+// Fires 'ride-completed' to all ride members' socket rooms and persists an in-app notification.
+// Exported so the HTTP completeRide controller can call it for manual completions.
 async function emitReviewPrompts(io, ride) {
   // Only include attendees: bookings that are Completed/Confirmed AND not marked Absent
   const confirmedBookings = (ride.bookings || []).filter(
@@ -98,12 +65,7 @@ async function emitReviewPrompts(io, ride) {
   }
 }
 
-/**
- * autoMarkAttendance
- * Called on every PASSENGER location-update. If the passenger is within
- * ATTENDANCE_THRESHOLD_M of the departure point and has a confirmed booking
- * with no attendanceStatus yet, auto-mark them as Present.
- */
+// Auto-marks attendance if the passenger is within ATTENDANCE_THRESHOLD_M of the departure point.
 async function autoMarkAttendance(io, rideId, passengerId, passengerLat, passengerLng) {
   let ride;
   try { ride = await Ride.findById(rideId).populate('route'); } catch { return; }
@@ -149,11 +111,7 @@ async function autoMarkAttendance(io, rideId, passengerId, passengerLat, passeng
   console.log(`[Socket] Auto-marked passenger ${passengerId} as Present for ride ${rideId} (${Math.round(dist)}m from departure).`);
 }
 
-/**
- * cancelAbsentPassengers
- * Once a ride transitions to OnGoing, cancel bookings for passengers
- * not marked as Present. Called once per ride (guarded by absentPassengersCancelled flag).
- */
+// Cancels bookings for passengers not marked Present when a ride transitions to OnGoing.
 async function cancelAbsentPassengers(io, rideId) {
   const ride = await Ride.findOneAndUpdate(
     { _id: rideId, state: 'OnGoing', absentPassengersCancelled: false },
@@ -207,14 +165,7 @@ async function cancelAbsentPassengers(io, rideId) {
   }
 }
 
-/**
- * runGpsStateMachine
- * Called on every driver location-update. Performs sequential checks:
- *   A. Active/Full → OnGoing (driver left departure area)
- *   C. Departure-window alerts (repeated every ~5min)
- *   D. Late driver auto-cancel (15min past departure, driver not at pickup)
- *   B. OnGoing → Completed (driver near destination)
- */
+// GPS state machine: checks for ride state transitions on every driver location-update.
 async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
   let ride;
   try {
@@ -235,7 +186,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
   const distFromDep  = haversineDistance(driverLat, driverLng, depLat, depLng);
   const distFromDest = haversineDistance(driverLat, driverLng, destLat, destLng);
 
-  // ── Check A: Active/Full → OnGoing ────────────────────────────────────────
+  // Check A: Active/Full → OnGoing
   // Only allow the transition within 10 minutes of the scheduled departure time.
   const now = Date.now();
   const depTime = new Date(ride.departureDateTime).getTime();
@@ -271,7 +222,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
     return; // Re-read state on next ping
   }
 
-  // ── Check C: Departure-window alerts (repeated every ~5min) ────────────────
+  // Check C: Departure-window alerts
   if (['Active', 'Full'].includes(ride.state)) {
     const msSinceDepart = now - depTime;
 
@@ -307,7 +258,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
       }
     }
 
-    // ── Check D: Late driver auto-cancel (15min past departure) ───────────
+    // Check D: Late driver auto-cancel (15min past departure)
     if (msSinceDepart > LATE_WINDOW_MS) {
       // Driver hasn't departed yet (still within departure threshold)
       // The fact that we reached here means the ride is still Active/Full
@@ -360,7 +311,7 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
     }
   }
 
-  // ── Check B: OnGoing → Completed (auto via GPS) ───────────────────────────
+  // Check B: OnGoing → Completed
   if (ride.state === 'OnGoing' && !ride.reviewsPrompted && distFromDest <= ARRIVAL_THRESHOLD_M) {
     // findOneAndUpdate with reviewsPrompted: false guard prevents double-fire
     const completed = await Ride.findOneAndUpdate(
@@ -394,7 +345,6 @@ async function runGpsStateMachine(io, rideId, driverLat, driverLng) {
   }
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
 const configureSocket = (io) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -414,11 +364,11 @@ const configureSocket = (io) => {
     console.log(`[Socket] Connected: ${uid}`);
     socket.join(`user:${uid}`);
 
-    // ── Ride room ──
+    // Ride room
     socket.on('join-ride',  (rideId) => socket.join(`ride:${rideId}`));
     socket.on('leave-ride', (rideId) => socket.leave(`ride:${rideId}`));
 
-    // ── Location update (driver and passengers both send) ──────────────────
+    // Location update (driver and passengers both send)
     socket.on('location-update', async (data) => {
       const { rideId, latitude, longitude } = data;
       if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
@@ -451,7 +401,7 @@ const configureSocket = (io) => {
       }
     });
 
-    // ── Direct messages ────────────────────────────────────────────────────
+    // Direct messages
     socket.on('send-message', (data) => {
       io.to(`user:${data.receiverId}`).emit('new-message', {
         senderId: uid,
@@ -465,7 +415,7 @@ const configureSocket = (io) => {
       io.to(`user:${data.receiverId}`).emit('user-typing', { userId: uid });
     });
 
-    // ── Group channel ──────────────────────────────────────────────────────
+    // Group channel
     socket.on('join-channel',  (rideId) => socket.join(`channel:${rideId}`));
     socket.on('leave-channel', (rideId) => socket.leave(`channel:${rideId}`));
     socket.on('send-channel-message', (data) => {

@@ -1,8 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-/**
- * Generate an access token (short-lived, attached to every API request)
- */
+// Short-lived access token attached to every API request.
 const generateAccessToken = (userId, role) => {
   return jwt.sign(
     { userId, role },
@@ -11,9 +9,7 @@ const generateAccessToken = (userId, role) => {
   );
 };
 
-/**
- * Generate a refresh token (long-lived, used to obtain new access tokens)
- */
+// Long-lived refresh token used to obtain new access tokens.
 const generateRefreshToken = (userId) => {
   return jwt.sign(
     { userId },
@@ -22,9 +18,7 @@ const generateRefreshToken = (userId) => {
   );
 };
 
-/**
- * Generate an email verification token (sent via Nodemailer)
- */
+// Email verification token — expires in 24h.
 const generateVerificationToken = (userId, email) => {
   return jwt.sign(
     { userId, email, purpose: 'email-verification' },
@@ -33,9 +27,7 @@ const generateVerificationToken = (userId, email) => {
   );
 };
 
-/**
- * Generate a password reset token (sent via Nodemailer)
- */
+// Password reset token — expires in 1h.
 const generateResetToken = (userId, email) => {
   return jwt.sign(
     { userId, email, purpose: 'password-reset' },
@@ -44,9 +36,7 @@ const generateResetToken = (userId, email) => {
   );
 };
 
-/**
- * Verify any token given its secret
- */
+// Verifies any JWT given its secret.
 const verifyToken = (token, secret) => {
   return jwt.verify(token, secret);
 };

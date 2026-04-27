@@ -1,9 +1,9 @@
-const { Report, User, Ride, Notification, Message } = require('../models');
+﻿const { Report, User, Ride, Notification, Message } = require('../models');
 const { success, error } = require('../utils/responses');
 
 const CATEGORIES = ['Harassment', 'Inappropriate Behavior', 'Dangerous Driving', 'Fraud or Scam', 'Spam', 'Other'];
 
-// ── POST /api/reports ─────────────────────────────────────────────────────────
+// POST /api/reports
 // Any authenticated user can file a report.
 const createReport = async (req, res, next) => {
   try {
@@ -39,7 +39,7 @@ const createReport = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/reports ────────────────────────────────────────────────────
+// GET /api/admin/reports
 // Query: status (Open|Reviewed|Resolved), context (Ride|Message), page, limit
 const listReports = async (req, res, next) => {
   try {
@@ -67,7 +67,7 @@ const listReports = async (req, res, next) => {
   }
 };
 
-// ── GET /api/admin/reports/:reportId ─────────────────────────────────────────
+// GET /api/admin/reports/:reportId
 const getReport = async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.reportId)
@@ -82,7 +82,7 @@ const getReport = async (req, res, next) => {
   }
 };
 
-// ── PUT /api/admin/reports/:reportId ─────────────────────────────────────────
+// PUT /api/admin/reports/:reportId
 // Body: { status, adminNote }
 const updateReport = async (req, res, next) => {
   try {
@@ -100,7 +100,7 @@ const updateReport = async (req, res, next) => {
   }
 };
 
-// ── POST /api/admin/reports/:reportId/contact-reporter ───────────────────────
+// POST /api/admin/reports/:reportId/contact-reporter
 // Sends an in-app notification to the reporter to continue the discussion.
 const contactReporter = async (req, res, next) => {
   try {

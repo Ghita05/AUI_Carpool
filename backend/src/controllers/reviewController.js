@@ -1,49 +1,15 @@
-/**
- * controllers/reviewController.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Manages the Manage Ratings & Reviews building block (BB4).
- *
- * KEY DESIGN DECISIONS:
- *
- * 1. Rating recalculation on every write:
- *    averageRating is a computed field on User — updated synchronously after
- *    every review create/update/delete. This keeps the profile screen fast
- *    (no aggregation query needed at read time) and the rating always current.
- *
- * 2. Gemini AI review summary:
- *    Replaces the previous keyword-matching implementation. Gemini produces
- *    a 2-3 sentence natural-language summary from all review texts.
- *    Summary is cached in user.reviewSummary and regenerated whenever a new
- *    review pushes the subject past the MIN_REVIEWS_FOR_SUMMARY threshold,
- *    or on explicit request. Uses gemini-2.5-flash (fast, low-cost, free tier).
- *
- * 3. Community leaderboard:
- *    GET /api/reviews/community — returns top-rated drivers with generated
- *    summaries. This powers the Community button on the HomeScreen map.
- *
- * 4. Driver route analytics:
- *    GET /api/reviews/driver/:userId/analytics — aggregates completed rides
- *    by route and returns frequency + average price. Shown on the driver profile.
- */
+﻿// Review controller — handles creating, editing, and deleting reviews.
+// Recalculates averageRating after every write and generates AI summaries via Gemini once a user hits the review threshold.
 
 const { Review, User, Ride } = require('../models');
 const { success, error } = require('../utils/responses');
 
-const MIN_REVIEWS_FOR_SUMMARY = 5; // threshold to generate AI summary (reduced from 10 for capstone demo)
-const MIN_DRIVER_RIDES        = 1; // minimum completed rides to appear in community leaderboard
-const MIN_DRIVER_RATING       = 0;  // show all rated drivers (sorted by rating desc)
+const MIN_REVIEWS_FOR_SUMMARY = 5; // min reviews needed to generate an AI summary
+const MIN_DRIVER_RIDES        = 1; // min completed rides to appear in community leaderboard
+const MIN_DRIVER_RATING       = 0; // show all rated drivers (sorted by rating)
 
-// ── Gemini helper ─────────────────────────────────────────────────────────────
-/**
- * generateGeminiSummary
- * Calls the Gemini 2.5 Flash API to produce a concise user review summary.
- * Returns a plain string. Falls back to null on any error so the caller can
- * skip saving rather than storing a broken summary.
- *
- * WHY gemini-2.5-flash:
- *   Flash is optimised for short, fast tasks. A review summary is exactly that:
- *   low latency, low token count, and the free tier is sufficient for a capstone.
- */
+// Calls Gemini 2.5 Flash to generate a short review summary for a user.
+// Returns null on any error so the caller can skip saving it.
 async function generateGeminiSummary(userName, role, avgRating, reviews) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -94,7 +60,7 @@ Write in third person. Do not include the rating number. Max 60 words.`;
   }
 }
 
-// ── Rating recalculation (called after every write) ───────────────────────────
+// Recalculate user's average rating and refresh their AI summary if the threshold is met.
 async function recalculateRating(userId) {
   const reviews = await Review.find({ subjectId: userId });
   const avg = reviews.length === 0
@@ -118,7 +84,6 @@ async function recalculateRating(userId) {
   return avg;
 }
 
-// ── writeReview ───────────────────────────────────────────────────────────────
 const writeReview = async (req, res, next) => {
   try {
     const { subjectId, rideId, rating, content = '' } = req.body;
@@ -170,7 +135,6 @@ const writeReview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── modifyReview ──────────────────────────────────────────────────────────────
 const modifyReview = async (req, res, next) => {
   try {
     const review = await Review.findById(req.params.reviewId);
@@ -186,7 +150,6 @@ const modifyReview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── deleteReview ──────────────────────────────────────────────────────────────
 const deleteReview = async (req, res, next) => {
   try {
     const review = await Review.findById(req.params.reviewId);
@@ -201,7 +164,7 @@ const deleteReview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── removeInappropriateReview (Admin) ─────────────────────────────────────────
+// removeInappropriateReview (Admin)
 const removeInappropriateReview = async (req, res, next) => {
   try {
     const review = await Review.findById(req.params.reviewId);
@@ -213,7 +176,7 @@ const removeInappropriateReview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getUserReviews ────────────────────────────────────────────────────────────
+// getUserReviews
 const getUserReviews = async (req, res, next) => {
   try {
     const { sortBy = 'date', order = 'desc', type } = req.query;
@@ -248,7 +211,7 @@ const getUserReviews = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getUserRatings ────────────────────────────────────────────────────────────
+// getUserRatings
 const getUserRatings = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.userId).select('averageRating reviewSummary');
@@ -262,7 +225,7 @@ const getUserRatings = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getReviewSummary — on-demand AI summary regeneration ─────────────────────
+// getReviewSummary — on-demand AI summary regeneration
 const getReviewSummary = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.userId);
@@ -288,15 +251,8 @@ const getReviewSummary = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getCommunity — top-rated drivers for the Community leaderboard ─────────────
-/**
- * GET /api/reviews/community
- * Returns top-rated verified drivers (avg ≥ MIN_DRIVER_RATING, ≥ MIN_DRIVER_RIDES
- * completed) sorted by averageRating descending, with their AI review summary
- * and most frequent routes.
- *
- * This powers the Community button on the HomeScreen map (Figma mockup screen 06).
- */
+// getCommunity
+// GET /api/reviews/community — top-rated verified drivers sorted by rating, with AI summary and frequent routes.
 const getCommunity = async (req, res, next) => {
   try {
     const { limit = 20 } = req.query;
@@ -373,14 +329,8 @@ const getCommunity = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── getDriverAnalytics — route frequency analytics for a driver's profile ─────
-/**
- * GET /api/reviews/driver/:userId/analytics
- * Aggregates completed rides for a driver:
- *   - Top 5 most frequent routes (from → to)
- *   - Per-route: trip count, average price, most recent date
- * Shown on the driver's own profile page (Figma mockup screen 11).
- */
+// getDriverAnalytics
+// GET /api/reviews/driver/:userId/analytics — top 5 most frequent routes with trip count, avg price, and latest date.
 const getDriverAnalytics = async (req, res, next) => {
   try {
     const { userId } = req.params;

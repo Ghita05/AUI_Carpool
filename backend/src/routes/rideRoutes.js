@@ -1,4 +1,4 @@
-// ...existing code...
+﻿// ...existing code...
 const express = require('express');
 const router = express.Router();
 const ride = require('../controllers/rideController');
@@ -9,9 +9,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 // Transfer group owner (NEW)
 router.put('/requests/:requestId/transfer-owner', authenticate, rideRequest.transferGroupOwner);
 
-// ═══════════════════════════════════════════
+
 // BULK USER FETCH (for group ride requests)
-// ═══════════════════════════════════════════
 const User = require('../models/User');
 router.post('/users/by-ids', authenticate, async (req, res) => {
   try {
@@ -26,9 +25,8 @@ router.post('/users/by-ids', authenticate, async (req, res) => {
 });
 // Allow group member to leave a pending group request
 router.put('/requests/:requestId/leave', authenticate, rideRequest.leaveRideRequest);
-// ═══════════════════════════════════════════
+
 // USER SEARCH (for group ride requests)
-// ═══════════════════════════════════════════
 const Ride = require('../models/Ride');
 router.get('/users/search', authenticate, async (req, res) => {
   try {
@@ -57,9 +55,8 @@ router.get('/users/search', authenticate, async (req, res) => {
   }
 });
 
-// ═══════════════════════════════════════════
+
 // RIDE OFFERS (Building Block 2.1)
-// ═══════════════════════════════════════════
 router.get('/', authenticate, ride.getAvailableRides);
 router.get('/my', authenticate, ride.getMyRides);
 router.get('/driver/my-rides', authenticate, ride.getMyRides);
@@ -71,16 +68,15 @@ router.delete('/:rideId', authenticate, authorize('Driver'), ride.cancelRide);
 router.put('/:rideId/complete', authenticate, authorize('Driver'), ride.completeRide);
 router.post('/:rideId/complete', authenticate, authorize('Driver'), ride.completeRide);
 
-// ─── Attendance (Building Block 2.4 — during-ride phase) ──────────────────
-// GET returns the passenger list with their attendanceStatus for the check-in panel.
+// Attendance (during-ride phase)
+// GET returns the passenger list with attendanceStatus for the check-in panel.
 // PUT accepts { attendance: [{bookingId, status}] } from the driver.
-// Both are Driver-only — need-to-know principle: passengers cannot see each other's status.
+// Both are Driver-only — passengers cannot see each other's status.
 router.get('/:rideId/attendance', authenticate, authorize('Driver'), ride.getAttendance);
 router.put('/:rideId/attendance', authenticate, authorize('Driver'), ride.markAttendance);
 
-// ═══════════════════════════════════════════
+
 // RIDE REQUESTS (Building Block 2.2)
-// ═══════════════════════════════════════════
 router.get('/requests/all', authenticate, rideRequest.getRideRequests);
 router.get('/requests/my', authenticate, rideRequest.getMyRideRequests);
 router.post('/requests', authenticate, rideRequest.postRideRequest);
@@ -106,9 +102,8 @@ router.put(
   authorize('Driver'),
   rideRequest.dismissRideRequest
 );
-// ═══════════════════════════════════════════
+
 // BOOKINGS (Building Block 2.4)
-// ═══════════════════════════════════════════
 router.get('/bookings/current', authenticate, booking.getCurrentBookings);
 router.get('/bookings/history', authenticate, booking.getBookingHistory);
 router.get('/:rideId/passengers', authenticate, booking.getPassengerList);

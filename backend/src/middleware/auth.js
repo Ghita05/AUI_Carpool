@@ -2,11 +2,7 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { error } = require('../utils/responses');
 
-/**
- * JWT Authentication middleware.
- * Extracts Bearer token from Authorization header, verifies it,
- * and attaches the full user document to req.user.
- */
+// JWT auth middleware — verifies Bearer token and attaches the user to req.user.
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -40,10 +36,7 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-/**
- * Role-based authorization middleware factory.
- * Usage: authorize('Driver', 'Admin') — allows only drivers and admins.
- */
+// Role-based authorization middleware factory. Usage: authorize('Driver', 'Admin')
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
