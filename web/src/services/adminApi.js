@@ -1,4 +1,4 @@
-﻿// Admin API service — all requests require a valid Admin JWT from AdminAuthContext.
+// Admin API service — all requests require a valid Admin JWT from AdminAuthContext.
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
