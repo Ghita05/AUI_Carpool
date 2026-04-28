@@ -12,10 +12,10 @@ import * as authService from '../services/authService';
 import * as notifService from '../services/notificationService';
 import { storeTokens, clearTokens, getAccessToken } from '../services/api';
 import PostRideReviewModal from '../components/PostRideReviewModal';
+import { API_BASE_URL } from '../config';
 
-// Must match the backend BASE_URL — imported from api.js indirectly but
-// duplicated here to keep the socket client independent of the Axios instance.
-const SOCKET_URL = 'https://auicarpool-production-46f2.up.railway.app';
+// Derived from the central config so both HTTP and WebSocket always target the same server.
+const SOCKET_URL = API_BASE_URL;
 
 const AuthContext = createContext(null);
 

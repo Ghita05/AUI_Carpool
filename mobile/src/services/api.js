@@ -1,9 +1,10 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { API_BASE_URL } from '../config';
 
-// Base URL
-const BASE_URL = 'https://auicarpool-production-46f2.up.railway.app';
+// Base URL — switches between local dev and production (see src/config.js)
+const BASE_URL = API_BASE_URL;
 
 const api = axios.create({
   baseURL: `${BASE_URL}/api`,
