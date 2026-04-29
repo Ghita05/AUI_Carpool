@@ -453,8 +453,93 @@ const getMyRides = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// Haversine distance in km between two lat/lng points.
+function haversineKM(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * GET /rides/nearby
+ * Find active rides whose destination is within `destRadius` km of [destLat, destLng].
+ * Optionally also filter by origin proximity if [originLat, originLng] are provided.
+ *
+ * Query params:
+ *   destLat, destLng   — clicked map coordinates (required)
+ *   destRadius         — km radius around destination  (default 10)
+ *   originLat, originLng — user current location       (optional)
+ *   originRadius       — km radius around user location (default 15)
+ */
+const getNearbyRides = async (req, res, next) => {
+  try {
+    const {
+      destLat, destLng,
+      destRadius = 10,
+      originLat, originLng,
+      originRadius = 15,
+    } = req.query;
+
+    if (!destLat || !destLng) return error(res, 400, 'destLat and destLng are required.');
+
+    const dLat = parseFloat(destLat);
+    const dLng = parseFloat(destLng);
+    const dR   = parseFloat(destRadius);
+    const oLat = originLat ? parseFloat(originLat) : null;
+    const oLng = originLng ? parseFloat(originLng) : null;
+    const oR   = parseFloat(originRadius);
+
+    if (isNaN(dLat) || isNaN(dLng) || isNaN(dR)) {
+      return error(res, 400, 'Invalid coordinate values.');
+    }
+
+    // Load all active rides that have route data — the route collection is small enough
+    // that this is fast; no change to the Ride schema required.
+    const rides = await Ride.find({
+      type: 'Offer',
+      state: { $in: ['Active', 'Full'] },
+      departureDateTime: { $gte: new Date() },
+    })
+      .populate('driverId', 'firstName lastName averageRating totalCompletedRides profilePicture')
+      .populate('vehicleId', 'brand model color sizeCategory luggageCapacity licensePlate smokingPolicy')
+      .populate('route');
+
+    // Filter by Haversine distance
+    const nearby = rides.filter((ride) => {
+      const r = ride.route;
+      if (!r || r.destinationLatitude == null) return false;
+
+      const distToDest = haversineKM(dLat, dLng, r.destinationLatitude, r.destinationLongitude);
+      if (distToDest > dR) return false;
+
+      if (oLat !== null && oLng !== null) {
+        const distFromOrigin = haversineKM(oLat, oLng, r.originLatitude, r.originLongitude);
+        if (distFromOrigin > oR) return false;
+      }
+
+      // Attach computed distance so the client can sort/display it
+      ride._doc.distanceToDestKM = Math.round(distToDest * 10) / 10;
+      return true;
+    });
+
+    // Sort by proximity to tapped destination
+    nearby.sort((a, b) => (a._doc.distanceToDestKM || 0) - (b._doc.distanceToDestKM || 0));
+
+    return success(res, 200, `${nearby.length} nearby ride(s) found.`, {
+      rides: nearby,
+      meta: { destLat: dLat, destLng: dLng, destRadius: dR, originRadius: oR },
+    });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   postRideOffer, modifyRide, cancelRide, completeRide,
   markAttendance, getAttendance,
   getAvailableRides, getRideDetails, getMyRides,
+  getNearbyRides,
 };

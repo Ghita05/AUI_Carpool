@@ -2,14 +2,13 @@ require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
-const https = require('https');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs'); // still needed for uploads dir
 
 const connectDB = require('./config/db');
 const configureSocket = require('./socket').configureSocket;
@@ -33,28 +32,7 @@ const app = express();
 // Required for express-rate-limit when deployed behind a reverse proxy
 app.set('trust proxy', 1);
 
-// SSL setup (self-signed cert for dev)
-const certPath = path.join(__dirname, '../certs/cert.pem');
-const keyPath = path.join(__dirname, '../certs/key.pem');
-const hasSSL = fs.existsSync(certPath) && fs.existsSync(keyPath);
-
-let server;
-let httpServer; // secondary HTTP server for mobile dev (Expo Go can't trust self-signed certs)
-if (hasSSL) {
-  const sslOptions = {
-    key: fs.readFileSync(keyPath),
-    cert: fs.readFileSync(certPath),
-  };
-  server = https.createServer(sslOptions, app);
-  httpServer = http.createServer(app);
-} else {
-  console.warn('⚠  SSL certs not found in certs/ — falling back to HTTP');
-  server = http.createServer(app);
-}
-
-// Attach Socket.IO to all active servers (HTTPS + HTTP fallback)
-const ioServers = [server];
-if (httpServer) ioServers.push(httpServer);
+const server = http.createServer(app);
 
 const io = new Server({
   cors: {
@@ -65,7 +43,7 @@ const io = new Server({
     methods: ['GET', 'POST'],
   },
 });
-ioServers.forEach((s) => io.attach(s));
+io.attach(server);
 configureSocket(io);
 
 // Make io accessible in controllers (for push notifications)
@@ -77,7 +55,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Middleware chain — order matters: security → parsing → logging → rate limiting → routes → errors
+// Middleware chain : security → parsing → logging → rate limiting → routes → errors
 
 // 1. Security headers
 app.use(helmet());
@@ -144,26 +122,12 @@ const startServer = async () => {
     await connectDB();
 
     const PORT = process.env.PORT || 5000;
-    const HTTP_PORT = Number(PORT) + 1; // 5001 — HTTP fallback for Expo Go
 
     server.listen(PORT, () => {
-      const protocol = hasSSL ? 'https' : 'http';
       console.log(`\n══════════════════════════════════════`);
-      console.log(`  AUI Carpool API — ${protocol}://localhost:${PORT}`);
-      if (hasSSL && httpServer) {
-        console.log(`  HTTP fallback — http://localhost:${HTTP_PORT}`);
-      }
+      console.log(`  AUI Carpool API -> http://localhost:${PORT}`);
       console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`  SSL: ${hasSSL ? 'enabled ✓' : 'disabled (no certs)'}`);
-      console.log(`  Socket.IO: enabled`);
       console.log(`══════════════════════════════════════\n`);
-
-      // Start HTTP fallback if SSL enabled (for Expo Go mobile dev)
-      if (hasSSL && httpServer) {
-        httpServer.listen(HTTP_PORT, () => {
-          console.log(`  HTTP fallback listening on port ${HTTP_PORT}`);
-        });
-      }
 
       // Start scheduled jobs after DB is connected (pass io for real-time socket push)
       initScheduledJobs(io);
@@ -177,7 +141,6 @@ const startServer = async () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Shutting down...');
-  if (httpServer) httpServer.close();
   server.close(() => process.exit(0));
 });
 

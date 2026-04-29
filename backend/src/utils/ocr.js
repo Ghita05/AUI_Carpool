@@ -1,12 +1,12 @@
 ﻿// OCR utility — Gemini Vision API for student cards, licenses, and registration cards.
-// Replaced tesseract.js (OOM-killed on 512 MB containers) with a lightweight HTTPS call to Gemini 1.5 Flash.
+// Replaced tesseract.js 
 
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash-latest';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_VERSION = 'v1beta';
 
 // Fetches image bytes from an HTTPS URL, returning { buffer, mimeType }.

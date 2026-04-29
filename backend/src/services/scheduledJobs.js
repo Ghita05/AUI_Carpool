@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { User, Ride, Notification } = require('../models');
+const { User, Ride, Notification, Review } = require('../models');
 const { sendNotification } = require('../utils/notify');
 
 // Runs every 6h: deletes unverified accounts older than 24 hours.
@@ -225,13 +225,71 @@ const scheduleEmptyRideDismissal = () => {
   console.log('[CRON] Empty ride dismissal scheduled (every 5min).');
 };
 
-// Registers all five cron jobs.
+// Runs nightly at 2am: regenerates AI review summaries for users with >= MIN_REVIEWS_FOR_SUMMARY reviews.
+const MIN_REVIEWS_FOR_SUMMARY = 5;
+const scheduleAISummaryRefresh = () => {
+  cron.schedule('0 2 * * *', async () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    try {
+      const users = await User.find({}).select('_id firstName lastName role averageRating');
+      let refreshed = 0;
+
+      for (const user of users) {
+        const reviews = await Review.find({ subjectId: user._id });
+        if (reviews.length < MIN_REVIEWS_FOR_SUMMARY) continue;
+
+        const reviewTexts = reviews
+          .filter(r => r.content && r.content.trim().length > 0)
+          .map((r, i) => `${i + 1}. "${r.content.trim()}"`)
+          .join('\n');
+        if (!reviewTexts) continue;
+
+        const userName = `${user.firstName} ${user.lastName}`.trim();
+        const avgRating = user.averageRating || 0;
+        const prompt = `Based on these ${reviews.length} reviews of ${userName} (a ${user.role} on a university carpooling platform, avg ${avgRating}/5):\n\n${reviewTexts}\n\nWrite 2-3 flowing sentences that capture the overall impression — what kind of ${user.role} they are, what stands out, and what to expect. Write as a neutral observer who read all the reviews. Third person. No rating numbers. No "reviewers say" or "according to reviews". Complete grammatically correct sentences only. Max 70 words.`;
+
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 300, temperature: 0.4 },
+              }),
+            }
+          );
+          if (!res.ok) continue;
+          const data = await res.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) {
+            await User.findByIdAndUpdate(user._id, { reviewSummary: text });
+            refreshed++;
+          }
+        } catch (e) {
+          console.warn(`[CRON] AI summary failed for ${userName}:`, e.message);
+        }
+      }
+
+      if (refreshed > 0) console.log(`[CRON] AI summary refresh complete — ${refreshed} profile(s) updated.`);
+    } catch (err) {
+      console.error('[CRON] AI summary refresh error:', err.message);
+    }
+  });
+  console.log('[CRON] AI summary refresh scheduled (nightly at 2am).');
+};
+
+// Registers all cron jobs.
 const initScheduledJobs = (io = null) => {
   scheduleUnverifiedCleanup();
   scheduleRideReminders(io);
   scheduleOngoingSafetyNet(io);
   scheduleLateDriverAutoCancel(io);
   scheduleEmptyRideDismissal();
+  scheduleAISummaryRefresh();
 };
 
 module.exports = initScheduledJobs;

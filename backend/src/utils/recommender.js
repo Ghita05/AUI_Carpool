@@ -1,9 +1,9 @@
 ﻿// Content-based weighted similarity scorer for ride recommendations.
 // Tier 1 (0 rides): preference + quality. Tier 2 (1-4 rides): + stops + price. Tier 3 (5+): all 7 features.
-// Pure function — no DB calls.
+// Pure function no DB calls.
 
 const W = {
-  TIME_AFFINITY:     0.22, // strongest personal behavioral signal
+  TIME_AFFINITY:     0.22, // personal behavioral signal (strong)
   PREFERENCE_MATCH:  0.18, // gender / smoking compatibility
   DRIVER_AFFINITY:   0.18, // past positive experience with this driver
   STOP_OVERLAP:      0.15, // route path preference via stop history
@@ -12,7 +12,7 @@ const W = {
   DRIVER_QUALITY:    0.05, // baseline driver rating tiebreaker
 };
 
-// Tier 2 weights — stop overlap included since even 1 ride can reveal stop preference
+// Tier 2 weights top overlap included since even 1 ride can reveal stop preference
 const W2 = {
   PREFERENCE_MATCH:  0.40,
   STOP_OVERLAP:      0.25,
@@ -20,7 +20,7 @@ const W2 = {
   DRIVER_QUALITY:    0.15,
 };
 
-// Tier 1 weights — no history at all
+// Tier 1 weights  no history at all
 const W1 = {
   PREFERENCE_MATCH:  0.60,
   DRIVER_QUALITY:    0.40,

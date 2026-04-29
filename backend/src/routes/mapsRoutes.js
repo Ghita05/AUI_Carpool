@@ -97,4 +97,56 @@ router.get('/geocode', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/maps/reverse-geocode
+// Converts lat/lng coordinates into a human-readable place name.
+// Used by the map-tap feature on the home screen.
+router.get('/reverse-geocode', authenticate, async (req, res) => {
+  const { lat, lng } = req.query;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng are required' });
+
+  try {
+    // First try with type restriction to get a clean city/town name
+    let { status, results } = (await mapsClient.reverseGeocode({
+      params: {
+        latlng: `${lat},${lng}`,
+        result_type: 'locality|sublocality|administrative_area_level_2',
+        language: 'en',
+        key: API_KEY,
+      },
+    })).data;
+
+    // If the restricted query finds nothing (rural/remote area), retry without type filter
+    if (status !== 'OK' || !results?.length) {
+      const fallback = await mapsClient.reverseGeocode({
+        params: { latlng: `${lat},${lng}`, language: 'en', key: API_KEY },
+      });
+      status = fallback.data.status;
+      results = fallback.data.results;
+    }
+
+    if (status !== 'OK' || !results?.length) {
+      return res.status(502).json({ error: `Maps API status: ${status}` });
+    }
+    const best = results[0];
+    const components = best.address_components || [];
+    // Pick the most specific named component available
+    const locality = components.find(c => c.types.includes('locality'))?.long_name
+      || components.find(c => c.types.includes('sublocality'))?.long_name
+      || components.find(c => c.types.includes('administrative_area_level_2'))?.long_name
+      || components.find(c => c.types.includes('neighborhood'))?.long_name
+      || components.find(c => c.types.includes('route'))?.long_name
+      || best.formatted_address.split(',')[0].trim();
+
+    res.json({
+      placeName: locality,
+      formattedAddress: best.formatted_address,
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+    });
+  } catch (err) {
+    console.error('[mapsRoutes] reverse-geocode error:', err.message);
+    res.status(502).json({ error: 'Reverse geocode request failed' });
+  }
+});
+
 module.exports = router;

@@ -25,15 +25,11 @@ async function generateGeminiSummary(userName, role, avgRating, reviews) {
 
   if (!reviewTexts) return null;
 
-  const prompt = `You are summarising reviews for an AUI carpooling platform user named ${userName} who is a ${role}.
-Their average rating is ${avgRating}/5 based on ${reviews.length} reviews.
+  const prompt = `Based on these ${reviews.length} reviews of ${userName} (a ${role} on a university carpooling platform, avg ${avgRating}/5):
 
-Reviews:
 ${reviewTexts}
 
-Write a 2-3 sentence summary of what people generally say about this ${role}. 
-Be concise, neutral, and specific. Do not use phrases like "users say" or "reviewers mention". 
-Write in third person. Do not include the rating number. Max 60 words.`;
+Write 2-3 flowing sentences that capture the overall impression — what kind of ${role} they are, what stands out, and what to expect. Write as a neutral observer who read all the reviews. Third person. No rating numbers. No "reviewers say" or "according to reviews". Complete grammatically correct sentences only. Max 70 words.`;
 
   try {
     const res = await fetch(
@@ -43,7 +39,7 @@ Write in third person. Do not include the rating number. Max 60 words.`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 120, temperature: 0.4 },
+          generationConfig: { maxOutputTokens: 300, temperature: 0.4 },
         }),
       }
     );
@@ -60,7 +56,7 @@ Write in third person. Do not include the rating number. Max 60 words.`;
   }
 }
 
-// Recalculate user's average rating and refresh their AI summary if the threshold is met.
+// Recalculate user's average rating. AI summaries are refreshed by the nightly cron job.
 async function recalculateRating(userId) {
   const reviews = await Review.find({ subjectId: userId });
   const avg = reviews.length === 0
@@ -68,19 +64,6 @@ async function recalculateRating(userId) {
     : Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10;
 
   await User.findByIdAndUpdate(userId, { averageRating: avg });
-
-  // Regenerate AI summary if threshold met
-  if (reviews.length >= MIN_REVIEWS_FOR_SUMMARY) {
-    const user = await User.findById(userId).select('firstName lastName role reviewSummary averageRating');
-    if (user) {
-      const name    = `${user.firstName} ${user.lastName}`.trim();
-      const summary = await generateGeminiSummary(name, user.role, avg, reviews);
-      if (summary) {
-        await User.findByIdAndUpdate(userId, { reviewSummary: summary });
-      }
-    }
-  }
-
   return avg;
 }
 

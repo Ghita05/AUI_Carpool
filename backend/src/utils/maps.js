@@ -3,7 +3,18 @@
 const { Client, TravelMode, UnitSystem } = require('@googlemaps/google-maps-services-js');
 
 // Max extra km a stop is allowed to add before being rejected as off-route
-const MAX_DETOUR_KM = 3;
+const MAX_DETOUR_KM = 5;
+
+// Hard cap on how long we wait for Google Maps to respond.
+// Without this, mapsClient.directions() can hang indefinitely.
+const MAPS_TIMEOUT_MS = 8000;
+
+function mapsRequest(promise) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Google Maps request timed out')), MAPS_TIMEOUT_MS)
+  );
+  return Promise.race([promise, timeout]);
+}
 
 const mapsClient = new Client({});
 
@@ -22,8 +33,7 @@ async function getDirections(origin, destination, waypoints = []) {
     params.waypoints = waypoints;
   }
 
-  const response = await mapsClient.directions({ params });
-
+  const response = await mapsRequest(mapsClient.directions({ params }));
   const { status, routes } = response.data;
 
   if (status !== 'OK' || !routes || routes.length === 0) {
@@ -71,7 +81,7 @@ async function getAlternativeRoutes(origin, destination, waypoints = []) {
     params.waypoints = waypoints;
   }
 
-  const response = await mapsClient.directions({ params });
+  const response = await mapsRequest(mapsClient.directions({ params }));
   const { status, routes } = response.data;
 
   if (status !== 'OK' || !routes || routes.length === 0) {
@@ -117,7 +127,7 @@ async function isStopOnRoute(origin, destination, stopLocation) {
 
   // Run both calls in parallel — they are independent
   const [baselineRes, detourRes] = await Promise.all([
-    mapsClient.directions({
+    mapsRequest(mapsClient.directions({
       params: {
         origin,
         destination,
@@ -125,8 +135,8 @@ async function isStopOnRoute(origin, destination, stopLocation) {
         unitSystem: UnitSystem.metric,
         key: apiKey,
       },
-    }),
-    mapsClient.directions({
+    })),
+    mapsRequest(mapsClient.directions({
       params: {
         origin,
         destination,
@@ -135,7 +145,7 @@ async function isStopOnRoute(origin, destination, stopLocation) {
         unitSystem: UnitSystem.metric,
         key: apiKey,
       },
-    }),
+    })),
   ]);
 
   // If the API fails, allow the stop rather than blocking the passenger (driver can still reject)

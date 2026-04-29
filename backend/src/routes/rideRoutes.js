@@ -57,6 +57,7 @@ router.get('/users/search', authenticate, async (req, res) => {
 
 
 // RIDE OFFERS (Building Block 2.1)
+router.get('/nearby', authenticate, ride.getNearbyRides);
 router.get('/', authenticate, ride.getAvailableRides);
 router.get('/my', authenticate, ride.getMyRides);
 router.get('/driver/my-rides', authenticate, ride.getMyRides);
