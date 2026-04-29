@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { getAvailableRides, postRideRequest, validateStopOnRoute, getRouteAlternatives, getNearbyRides, getActivityRides } from '../../services/rideService';
+import { getAvailableRides, postRideRequest, validateStopOnRoute, getRouteAlternatives, getNearbyRides, getActivityRides, searchUsers } from '../../services/rideService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
 import RouteSelectionModal from '../../components/RouteSelectionModal';
 import { autocompleteLocation, geocodePlace, reverseGeocode } from '../../utils/mapsService';
@@ -318,8 +318,6 @@ function formatTime(raw) {
   return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
 
-
-import { searchUsers } from '../../services/rideService';
 
 function RideRequestModal({ visible, departure, destination, routeOrigin, routeDest, onClose }) {
   const { user: currentUser } = useAuth();
