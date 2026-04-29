@@ -54,6 +54,34 @@ export const getAvailableRides = async (filters = {}) => {
   return data;
 };
 
+/**
+ * Find rides near a tapped map coordinate.
+ * @param {number} destLat  - tapped destination latitude
+ * @param {number} destLng  - tapped destination longitude
+ * @param {number} destRadius - km radius around destination (default 10)
+ * @param {number|null} originLat - user's current latitude (optional)
+ * @param {number|null} originLng - user's current longitude (optional)
+ * @param {number} originRadius - km radius around user (default 15)
+ */
+export const getNearbyRides = async ({
+  destLat, destLng,
+  destRadius = 10,
+  originLat = null, originLng = null,
+  originRadius = 15,
+}) => {
+  const params = { destLat, destLng, destRadius, originRadius };
+  if (originLat != null) params.originLat = originLat;
+  if (originLng != null) params.originLng = originLng;
+  const { data } = await api.get('/rides/nearby', { params });
+  return data;
+};
+
+// Fetches a sample of all active rides for the landing map activity dots.
+export const getActivityRides = async () => {
+  const { data } = await api.get('/rides', { params: { limit: 40 } });
+  return data;
+};
+
 export const getRideDetails = async (rideId) => {
   const { data } = await api.get(`/rides/${rideId}`);
   return data;

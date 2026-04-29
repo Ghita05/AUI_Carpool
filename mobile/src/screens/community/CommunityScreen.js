@@ -89,16 +89,7 @@ function DriverCard({ driver, rank, onPress }) {
         </View>
       </View>
 
-      {/* AI review summary */}
-      {driver.reviewSummary ? (
-        <View style={s.summaryBox}>
-          <View style={s.summaryHeader}>
-            <Ionicons name="sparkles" size={12} color={Colors.primary} />
-            <Text style={s.summaryLabel}>AI Summary</Text>
-          </View>
-          <Text style={s.summaryText} numberOfLines={3}>{driver.reviewSummary}</Text>
-        </View>
-      ) : null}
+
 
       {/* Top route */}
       {driver.topRoute && (

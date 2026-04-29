@@ -1,16 +1,17 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Alert, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { Colors, Typography, Spacing, Radius } from '../../theme';
 import { postRideRequest, searchUsers, validateStopOnRoute, getRouteAlternatives } from '../../services/rideService';
 import { useAuth } from '../../context/AuthContext';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
 import RouteSelectionModal from '../../components/RouteSelectionModal';
 import RequestConfirmationModal from '../../components/RequestConfirmationModal';
-import { autocompleteLocation } from '../../utils/mapsService';
+import { autocompleteLocation, reverseGeocode } from '../../utils/mapsService';
 
 function SectionCard({ title, children }) {
   return (
@@ -22,10 +23,27 @@ function SectionCard({ title, children }) {
 }
 
 
-export default function PostRideRequestScreen({ navigation }) {
+export default function PostRideRequestScreen({ navigation, route }) {
   const { user } = useAuth();
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(route?.params?.initialFrom || '');
+  const [to, setTo] = useState(route?.params?.initialTo || '');
+
+  // Pre-fill departure with the user's current location if not passed as a param
+  useEffect(() => {
+    if (from) return; // already set via param or user typed
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!loc) return;
+        const geo = await reverseGeocode(loc.coords.latitude, loc.coords.longitude);
+        const name = geo?.placeName || geo?.formattedAddress;
+        if (name) setFrom(name);
+      } catch (_) {}
+    })();
+  }, []);
+
   const [departureDateTime, setDepartureDateTime] = useState(null);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [groupMode, setGroupMode] = useState(false);

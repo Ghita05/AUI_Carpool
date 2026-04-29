@@ -164,3 +164,19 @@ export async function geocodeAddress(address) {
     return null;
   }
 }
+
+// Converts lat/lng coordinates into a human-readable place name.
+// Always proxied through the backend on both web and native — the server key
+// has no application restrictions and contains the two-pass fallback logic,
+// which guarantees a named result rather than raw coordinates.
+export async function reverseGeocode(lat, lng) {
+  if (lat == null || lng == null) return null;
+
+  try {
+    const res = await api.get('/maps/reverse-geocode', { params: { lat, lng } });
+    return res.data; // { placeName, formattedAddress, lat, lng }
+  } catch (err) {
+    console.warn('[mapsService] reverseGeocode failed:', err.message);
+    return null;
+  }
+}

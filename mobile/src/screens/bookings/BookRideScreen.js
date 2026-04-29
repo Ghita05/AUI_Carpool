@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, FlatList, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -7,8 +7,11 @@ import { useAuth } from '../../context/AuthContext';
 import { getRideDetails } from '../../services/rideService';
 import { bookRide, requestAdditionalStop, validateStopOnRoute } from '../../services/bookingService';
 import { autocompleteLocation } from '../../utils/mapsService';
+import VehicleSizeGuideModal from '../../components/VehicleSizeGuideModal';
 
 const LUGGAGE = ['No luggage','1 small bag','1 suitcase','2+ bags'];
+// Units consumed per luggage choice (used against vehicle.luggageCapacity)
+const LUGGAGE_UNITS = { 'No luggage': 0, '1 small bag': 1, '1 suitcase': 2, '2+ bags': 3 };
 function Card({children,style}){return <View style={[st.card,style]}>{children}</View>;}
 
 export default function BookRideScreen({ navigation, route }) {
@@ -25,8 +28,21 @@ export default function BookRideScreen({ navigation, route }) {
   const [stopSuggestions, setStopSuggestions] = useState([]);
   const [validatingStop, setValidatingStop] = useState(false);
   const [stopValid, setStopValid] = useState(null); // null | true | false
+  const [showLuggageGuide, setShowLuggageGuide] = useState(false);
   const sessionTokenRef = useRef(`${Date.now()}`);
   const debounceRef = useRef(null);
+  const seatPulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(seatPulse, { toValue: 0.2, duration: 700, useNativeDriver: true }),
+        Animated.timing(seatPulse, { toValue: 1,   duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
   useEffect(()=>{
     if(!rideId) return;
@@ -82,6 +98,15 @@ export default function BookRideScreen({ navigation, route }) {
   const driver = ride.driverId||{};
   const vehicle = ride.vehicleId||{};
   const total = seats * ride.pricePerSeat;
+
+  // ── Luggage capacity calculation ──
+  const totalLuggageCap = vehicle.luggageCapacity ?? 0;
+  const usedLuggageUnits = (ride.bookings || [])
+    .filter(b => b.status !== 'Cancelled')
+    .reduce((sum, b) => sum + (LUGGAGE_UNITS[b.luggageDeclaration] ?? 0), 0);
+  const remainingLuggageCap = Math.max(0, totalLuggageCap - usedLuggageUnits);
+  const availableLuggageOptions = LUGGAGE.filter(l => LUGGAGE_UNITS[l] <= remainingLuggageCap);
+  const luggageFull = remainingLuggageCap === 0;
 
   // ── Compatibility warnings ──
   const warnings = [];
@@ -183,11 +208,36 @@ export default function BookRideScreen({ navigation, route }) {
           )}
 
           <Card>
-            <View style={st.rowBetween}><Text style={st.cardLabel}>Number of Seats</Text><Text style={st.subLabel}>1 available</Text></View>
-            <View style={{alignItems: 'center', paddingVertical: 16}}>
-              <Text style={st.stepperVal}>1</Text>
-              <Text style={[st.stopsHint, {marginTop: 12}]}>Only 1 seat per passenger</Text>
+            <View style={st.rowBetween}>
+              <Text style={st.cardLabel}>Available Seats</Text>
+              {ride.availableSeats === 0
+                ? <View style={st.seatsBadgeFull}><Text style={st.seatsBadgeTextFull}>FULL</Text></View>
+                : <Text style={st.seatsCount}>{ride.availableSeats} of {ride.totalSeats}</Text>
+              }
             </View>
+            <View style={st.seatsRow}>
+              {Array.from({ length: ride.totalSeats }).map((_, i) => {
+                const takenCount = ride.totalSeats - ride.availableSeats;
+                const isTaken = i < takenCount;
+                const isBooking = i === takenCount; // first available = the seat user will occupy
+                if (isBooking && ride.availableSeats > 0) {
+                  return (
+                    <Animated.View key={i} style={{ opacity: seatPulse }}>
+                      <Ionicons name="person" size={20} color={Colors.primary} />
+                    </Animated.View>
+                  );
+                }
+                return (
+                  <Ionicons
+                    key={i}
+                    name={isTaken ? 'person' : 'person-outline'}
+                    size={20}
+                    color={isTaken ? Colors.primary : Colors.border}
+                  />
+                );
+              })}
+            </View>
+            <Text style={st.stopsHint}>1 seat per passenger · you will occupy 1 seat</Text>
           </Card>
 
           <Card>
@@ -233,11 +283,39 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
 
           <Card>
-            <Text style={st.cardLabel}>Luggage</Text>
-            <Text style={st.stopsHint}>Drivers need to plan space in advance</Text>
-            <View style={st.pillRow}>
-              {LUGGAGE.map(l=>(<TouchableOpacity key={l} style={[st.pill,luggage===l&&st.pillActive]} onPress={()=>setLuggage(l)}><Text style={[st.pillText,luggage===l&&st.pillTextActive]}>{l}</Text></TouchableOpacity>))}
+            <View style={st.rowBetween}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:6}}>
+                <Text style={st.cardLabel}>Luggage</Text>
+                <TouchableOpacity onPress={() => setShowLuggageGuide(true)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                  <Ionicons name="information-circle-outline" size={17} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
+              <View style={[st.luggageCapBadge, luggageFull && st.luggageCapBadgeFull]}>
+                <Ionicons name="cube-outline" size={12} color={luggageFull ? '#E53935' : Colors.primary} />
+                <Text style={[st.luggageCapText, luggageFull && {color:'#E53935'}]}>
+                  {luggageFull ? 'No space left' : `${remainingLuggageCap} / ${totalLuggageCap} units free`}
+                </Text>
+              </View>
             </View>
+            <Text style={st.stopsHint}>Drivers need to plan space in advance. Choose what you're bringing.</Text>
+            {luggageFull ? (
+              <View style={st.luggageFullBanner}>
+                <Ionicons name="warning-outline" size={15} color="#E53935" />
+                <Text style={st.luggageFullText}>The luggage space for this ride is full. You can only travel with no luggage.</Text>
+              </View>
+            ) : (
+              <View style={st.pillRow}>
+                {availableLuggageOptions.map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[st.pill, luggage === l && st.pillActive]}
+                    onPress={() => setLuggage(l)}
+                  >
+                    <Text style={[st.pillText, luggage === l && st.pillTextActive]}>{l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </Card>
 
           <Card>
@@ -253,6 +331,7 @@ export default function BookRideScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={st.disclaimer}>You won't be charged until the driver confirms</Text>
       </View>
+      <VehicleSizeGuideModal visible={showLuggageGuide} onClose={() => setShowLuggageGuide(false)} passengerMode />
     </SafeAreaView>
   );
 }
@@ -263,6 +342,19 @@ const st = StyleSheet.create({
   summaryRoute:{flexDirection:'row',alignItems:'center',gap:6},summaryRouteText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary},divider:{height:1,backgroundColor:Colors.border,marginVertical:Spacing.md},
   summaryGrid:{flexDirection:'row',flexWrap:'wrap',gap:Spacing.md},summaryItem:{width:'45%'},summaryLabel:{fontSize:10,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textSecondary,letterSpacing:.5},summaryVal:{fontSize:13,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary,marginTop:2},
   rowBetween:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:8},cardLabel:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},subLabel:{fontSize:Typography.sm,color:Colors.textSecondary},
+  // Seats
+  seatsBadgeFull:{paddingHorizontal:8,paddingVertical:3,borderRadius:Radius.sm,backgroundColor:'#FFEBEE'},
+  seatsBadgeTextFull:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_700Bold',color:'#E53935',letterSpacing:0.5},
+  seatsCount:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  seatsRow:{flexDirection:'row',gap:8,marginVertical:8},
+  // Luggage
+  luggageCapBadge:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:10,paddingVertical:4,borderRadius:Radius.full,backgroundColor:Colors.primaryBg,borderWidth:1,borderColor:Colors.primary+'33'},
+  luggageCapBadgeFull:{backgroundColor:'#FFEBEE',borderColor:'#FFCDD2'},
+  luggageCapText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  luggageFullBanner:{flexDirection:'row',alignItems:'flex-start',gap:8,marginVertical:10,backgroundColor:'#FFEBEE',borderRadius:Radius.sm,padding:10,borderWidth:1,borderColor:'#FFCDD2'},
+  luggageFullText:{flex:1,fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:'#C62828',lineHeight:17},
+  luggagePolicyRow:{flexDirection:'row',alignItems:'center',gap:5,marginTop:10},
+  luggagePolicyText:{flex:1,fontSize:10,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textDisabled},
   stepperRow:{flexDirection:'row',alignItems:'center',gap:16},stepBtn:{width:36,height:36,borderRadius:18,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},stepBtnDisabled:{borderColor:Colors.divider},stepperVal:{fontSize:22,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary,minWidth:28,textAlign:'center'},
   stopsHint:{fontSize:11,color:Colors.textSecondary,marginBottom:8},pillRow:{flexDirection:'row',flexWrap:'wrap',gap:8},pill:{paddingHorizontal:14,paddingVertical:8,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.background},pillActive:{backgroundColor:Colors.primaryBg,borderColor:Colors.primary},pillText:{fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},pillTextActive:{color:Colors.primary,fontFamily:'PlusJakartaSans_600SemiBold'},
   stopInput:{height:42,borderWidth:1,borderColor:Colors.border,borderRadius:8,paddingHorizontal:12,fontSize:13,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textPrimary,marginTop:4},

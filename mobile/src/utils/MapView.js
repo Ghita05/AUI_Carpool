@@ -92,6 +92,17 @@ if (Platform.OS === 'web') {
           zoomControl: true,
           gestureHandling: 'greedy',
         },
+        onClick: rest.onPress
+          ? (e) => {
+              if (e.latLng) {
+                rest.onPress({
+                  nativeEvent: {
+                    coordinate: { latitude: e.latLng.lat(), longitude: e.latLng.lng() },
+                  },
+                });
+              }
+            }
+          : undefined,
       },
       children
     );

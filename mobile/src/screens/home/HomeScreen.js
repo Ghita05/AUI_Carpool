@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList,
   Dimensions, StatusBar, TextInput, Platform, Modal,
   KeyboardAvoidingView, ActivityIndicator, Alert,
   Animated, Easing, Image
@@ -12,10 +12,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { getAvailableRides, postRideRequest, validateStopOnRoute, getRouteAlternatives } from '../../services/rideService';
+import { getAvailableRides, postRideRequest, validateStopOnRoute, getRouteAlternatives, getNearbyRides, getActivityRides } from '../../services/rideService';
 import DateTimePickerModal from '../../components/DateTimePickerModal';
 import RouteSelectionModal from '../../components/RouteSelectionModal';
-import { autocompleteLocation, geocodePlace } from '../../utils/mapsService';
+import { autocompleteLocation, geocodePlace, reverseGeocode } from '../../utils/mapsService';
+import * as Location from 'expo-location';
 
 const { width } = Dimensions.get('window');
 
@@ -320,7 +321,7 @@ function formatTime(raw) {
 
 import { searchUsers } from '../../services/rideService';
 
-function RideRequestModal({ visible, departure, destination, onClose }) {
+function RideRequestModal({ visible, departure, destination, routeOrigin, routeDest, onClose }) {
   const { user: currentUser } = useAuth();
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -399,9 +400,11 @@ function RideRequestModal({ visible, departure, destination, onClose }) {
   };
 
   const refetchRoute = async (currentStops) => {
-    if (!departure || !destination) return;
+    const routingOrigin = routeOrigin || departure;
+    const routingDest = routeDest || destination;
+    if (!routingOrigin || !routingDest) return;
     try {
-      const res = await getRouteAlternatives(departure, destination, currentStops);
+      const res = await getRouteAlternatives(routingOrigin, routingDest, currentStops);
       const fetched = res.data?.routes || res.routes || [];
       if (fetched.length > 0) setSelectedRoute(fetched[0]);
       else setSelectedRoute(null);
@@ -415,7 +418,7 @@ function RideRequestModal({ visible, departure, destination, onClose }) {
     if (!departure || !destination) return;
     setValidatingStop(true);
     try {
-      const res = await validateStopOnRoute(departure, destination, stopName);
+      const res = await validateStopOnRoute(routeOrigin || departure, routeDest || destination, stopName);
       const validation = res.data || res;
       setStopValidations(prev => ({ ...prev, [stopName]: validation }));
       if (validation.onRoute) {
@@ -780,8 +783,8 @@ function RideRequestModal({ visible, departure, destination, onClose }) {
       />
       <RouteSelectionModal
         visible={showRouteModal}
-        origin={departure}
-        destination={destination}
+        origin={routeOrigin || departure}
+        destination={routeDest || destination}
         stops={stops}
         onSelect={(route) => { setSelectedRoute(route); setShowRouteModal(false); }}
         onClose={() => setShowRouteModal(false)}
@@ -813,12 +816,31 @@ export default function HomeScreen({ navigation }) {
   const [showFilter, setShowFilter] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [requestDest, setRequestDest] = useState('');
+  // Precise lat,lng routing keys for the request modal — set from map tap coords.
+  // These are separate from the display names so Google Maps gets exact coordinates.
+  const [requestRouteOrigin, setRequestRouteOrigin] = useState('');
+  const [requestRouteDest, setRequestRouteDest] = useState('');
   const [highlightedPin, setHighlightedPin] = useState(null);
   const [filters, setFilters] = useState({});
   const [hasSearched, setHasSearched] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [sortBy, setSortBy] = useState('recommendation');
   const [sortOrder, setSortOrder] = useState('desc');
+
+  // Map-tap / nearby-rides state
+  const [userLocation, setUserLocation] = useState(null);
+  const [tappedCoord, setTappedCoord] = useState(null);
+  const [tappedName, setTappedName] = useState('');
+  const [nearbyRides, setNearbyRides] = useState([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [showNearbySheet, setShowNearbySheet] = useState(false);
+  // Search overlay state (Google Maps-style)
+  const [showSearchOverlay, setShowSearchOverlay] = useState(false);
+  const [userLocationName, setUserLocationName] = useState('');
+  const [activityRides, setActivityRides] = useState([]);
+  const [activityGroup, setActivityGroup] = useState([]);   // rides at the tapped origin dot
+  const [activeActivityIndex, setActiveActivityIndex] = useState(0);
+  const activityFlatListRef = useRef(null);
 
   // Autocomplete state
   const [depSuggestions, setDepSuggestions] = useState([]);
@@ -828,6 +850,7 @@ export default function HomeScreen({ navigation }) {
   const sessionToken = useRef(Math.random().toString(36).substring(2));
   const debounceTimer = useRef(null);
   const mapRef = useRef(null);
+  const destInputRef = useRef(null);
 
   // Animation values
   const landingOpacity = useRef(new Animated.Value(1)).current;
@@ -854,6 +877,43 @@ export default function HomeScreen({ navigation }) {
       startWheelSpin();
     }
   }, [hasSearched]);
+
+  // ── Fetch user's GPS location once on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      } catch {
+        // Location unavailable — map still works without it
+      }
+    })();
+  }, []);
+
+  // ── Reverse-geocode user location to get a human-readable city name ──
+  useEffect(() => {
+    if (!userLocation) return;
+    reverseGeocode(userLocation.latitude, userLocation.longitude)
+      .then(geo => {
+        const name = geo?.placeName || geo?.formattedAddress;
+        if (name) setUserLocationName(name);
+      })
+      .catch(() => {});
+  }, [userLocation]);
+
+  // ── Fetch a sample of active rides for the landing map activity dots ──
+  useEffect(() => {
+    getActivityRides()
+      .then(data => {
+        const rides = data?.data?.rides || data?.rides || [];
+        setActivityRides(rides.filter(r => r.route?.originLatitude));
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Autocomplete handler (debounced 300ms) ──
   const handleAutocomplete = useCallback((text, field) => {
@@ -933,6 +993,7 @@ export default function HomeScreen({ navigation }) {
     if (!destination.trim()) return;
     setDepSuggestions([]);
     setDestSuggestions([]);
+    setShowSearchOverlay(false);
     transitionToResults();
     await performSearch(destination);
   }, [destination, transitionToResults, performSearch]);
@@ -968,6 +1029,7 @@ export default function HomeScreen({ navigation }) {
     wheelSpin.setValue(0);
     setDepSuggestions([]);
     setDestSuggestions([]);
+    setShowSearchOverlay(false);
   }, [landingOpacity, resultsOpacity, logoScale, welcomeTranslateY, wheelSpin]);
 
   const handleDateConfirm = (isoString) => {
@@ -975,6 +1037,59 @@ export default function HomeScreen({ navigation }) {
     setDate(datePart);
     setShowDatePicker(false);
   };
+
+  // ── Map-tap: reverse-geocode + search nearby rides ──
+  const handleMapPress = useCallback(async (e) => {
+    if (hasSearched) return; // results view handles its own interactions
+    const coord = e?.nativeEvent?.coordinate;
+    if (!coord) return;
+
+    // Search overlay is open → tap fills the destination field
+    if (showSearchOverlay) {
+      setTappedCoord(coord);
+      setDestSuggestions([]);
+      reverseGeocode(coord.latitude, coord.longitude).then(geo => {
+        const name = geo?.placeName || geo?.formattedAddress ||
+          `${coord.latitude.toFixed(4)}, ${coord.longitude.toFixed(4)}`;
+        setDestination(name);
+        setDestCoords(coord);
+      });
+      return;
+    }
+
+    // Dismiss any selected activity group card on background tap
+    setActivityGroup([]);
+    setTappedCoord(coord);
+    setShowNearbySheet(true);
+    setNearbyLoading(true);
+    setNearbyRides([]);
+    setTappedName('');
+
+    try {
+      // Reverse geocode in parallel with the ride search
+      const [geo, res] = await Promise.all([
+        reverseGeocode(coord.latitude, coord.longitude),
+        getNearbyRides({
+          destLat: coord.latitude,
+          destLng: coord.longitude,
+          destRadius: 10,
+          ...(userLocation
+            ? { originLat: userLocation.latitude, originLng: userLocation.longitude, originRadius: 15 }
+            : {}),
+        }),
+      ]);
+
+      setTappedName(
+        geo?.placeName || geo?.formattedAddress ||
+        `${coord.latitude.toFixed(4)}, ${coord.longitude.toFixed(4)}`
+      );
+      setNearbyRides(res?.data?.rides || []);
+    } catch {
+      setNearbyRides([]);
+    } finally {
+      setNearbyLoading(false);
+    }
+  }, [hasSearched, showSearchOverlay, userLocation]);
 
   // Fit map to ride coordinates whenever rides change
   useEffect(() => {
@@ -1005,110 +1120,470 @@ export default function HomeScreen({ navigation }) {
 
       {!hasSearched ? (
         /* ═══════════════════════════════════════════════
-           LANDING VIEW — centered column, no map
+           LANDING VIEW — full-screen interactive map
+           Tap anywhere to discover rides nearby
            ═══════════════════════════════════════════════ */
-        <View style={st.landingContainer}>
-          <Animated.View style={[st.landingContent, { opacity: landingOpacity }]}>
-
-            {/* Welcome text */}
-            <Animated.Text
-              style={[st.welcomeText, { transform: [{ translateY: welcomeTranslateY }] }]}
-            >
-              Welcome back ! {firstName}
-            </Animated.Text>
-
-            {/* Logo circle with animated spinning wheels */}
-            <Animated.View style={[st.logoCircle, { transform: [{ scale: logoScale }] }]}>
-              <AnimatedCarLogo wheelSpin={wheelSpin} />
-            </Animated.View>
-
-            {/* Brand name + tagline */}
-            <Animated.View style={{ alignItems: 'center', transform: [{ translateY: welcomeTranslateY }] }}>
-              <Text style={st.brandTitle}>AUI Carpool</Text>
-              <Text style={st.brandSubtitle}>A Peer-to-Peer Ride-Sharing Platform</Text>
-            </Animated.View>
-
-            {/* Search bar — integrated into the centered column */}
-            <View style={st.landingSearchWrap}>
-              <View style={st.landingSearchBar}>
-                <View style={st.searchSegment}>
-                  <TextInput
-                    style={st.searchSegInput}
-                    placeholder="Departure"
-                    placeholderTextColor={Colors.textSecondary}
-                    value={departure}
-                    onChangeText={(t) => handleAutocomplete(t, 'departure')}
-                    returnKeyType="next"
-                  />
+        <View style={{ flex: 1 }}>
+          {/* Full-screen map */}
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={
+              userLocation
+                ? { latitude: userLocation.latitude, longitude: userLocation.longitude, latitudeDelta: 0.08, longitudeDelta: 0.08 }
+                : INITIAL_REGION
+            }
+            showsUserLocation
+            showsMyLocationButton={false}
+            showsCompass={false}
+            toolbarEnabled={false}
+            onPress={handleMapPress}
+          >
+            {/* Tapped destination marker */}
+            {tappedCoord && (
+              <Marker coordinate={tappedCoord} pinColor={Colors.primary} title={tappedName || 'Selected'} />
+            )}
+            {/* Activity dots — origin of each active ride, shown as GPS-style glow dots */}
+            {activityRides.map(ride => (
+              <Marker
+                key={`act-${ride._id}`}
+                coordinate={{ latitude: ride.route.originLatitude, longitude: ride.route.originLongitude }}
+                tracksViewChanges={false}
+                anchor={{ x: 0.5, y: 0.5 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  // Collect all rides that share this origin (within ~50 m)
+                  const THRESH = 0.0005;
+                  const group = activityRides.filter(r =>
+                    Math.abs(r.route.originLatitude - ride.route.originLatitude) < THRESH &&
+                    Math.abs(r.route.originLongitude - ride.route.originLongitude) < THRESH
+                  );
+                  setActivityGroup(group);
+                  setActiveActivityIndex(0);
+                  setShowNearbySheet(false);
+                  setTappedCoord(null);
+                  setShowSearchOverlay(false);
+                }}
+              >
+                <View pointerEvents="none" style={st.activityDotHitArea}>
+                  <View pointerEvents="none" style={st.activityDotOuter}>
+                    <View pointerEvents="none" style={st.activityDotInner} />
+                  </View>
                 </View>
-                <View style={st.searchDivider} />
-                <View style={[st.searchSegment, { flex: 1.2 }]}>
-                  <TextInput
-                    style={st.searchSegInput}
-                    placeholder="Destination"
-                    placeholderTextColor={Colors.textSecondary}
-                    value={destination}
-                    onChangeText={(t) => handleAutocomplete(t, 'destination')}
-                    onSubmitEditing={handleSearch}
-                    returnKeyType="search"
-                  />
+              </Marker>
+            ))}
+            {/* Polyline for the active ride in the selected group */}
+            {activityGroup.length > 0 && activityGroup[activeActivityIndex]?.route && (() => {
+              const r = activityGroup[activeActivityIndex];
+              return (
+                <Polyline
+                  key={`poly-${r._id}`}
+                  coordinates={
+                    r.route.polyline
+                      ? decodePolyline(r.route.polyline)
+                      : [
+                          { latitude: r.route.originLatitude, longitude: r.route.originLongitude },
+                          { latitude: r.route.destinationLatitude, longitude: r.route.destinationLongitude },
+                        ]
+                  }
+                  strokeColor={Colors.primary}
+                  strokeWidth={3}
+                  lineDashPattern={r.route.polyline ? undefined : [8, 4]}
+                />
+              );
+            })()}
+            {/* Destination endpoint marker for active ride in selected group */}
+            {activityGroup.length > 0 && activityGroup[activeActivityIndex]?.route && (() => {
+              const r = activityGroup[activeActivityIndex];
+              return (
+                <Marker
+                  key={`dest-${r._id}`}
+                  coordinate={{
+                    latitude: r.route.destinationLatitude,
+                    longitude: r.route.destinationLongitude,
+                  }}
+                  pinColor="#E65100"
+                  title={r.destination || 'Destination'}
+                />
+              );
+            })()}
+            {/* Nearby ride destination markers */}
+            {nearbyRides.map((ride) => {
+              const coord = ride.route?.destinationLatitude
+                ? { latitude: ride.route.destinationLatitude, longitude: ride.route.destinationLongitude }
+                : null;
+              if (!coord) return null;
+              const color = getDestColor(ride);
+              return (
+                <Marker key={ride._id} coordinate={coord} tracksViewChanges={false}>
+                  <View style={[st.mapPin, { borderColor: color }]}>
+                    <View style={[st.mapPinDot, { backgroundColor: color }]} />
+                    <View>
+                      <Text style={st.mapPinLabel}>{ride.destination}</Text>
+                      <Text style={[st.mapPinPrice, { color }]}>{ride.pricePerSeat} MAD</Text>
+                    </View>
+                  </View>
+                  <Callout tooltip onPress={() => navigation.navigate('RideDetails', { rideId: ride._id })}>
+                    <View style={st.callout}>
+                      <Text style={st.calloutTitle}>{ride.destination}</Text>
+                      <Text style={st.calloutSub}>{ride.availableSeats} seat{ride.availableSeats !== 1 ? 's' : ''} · {ride.pricePerSeat} MAD</Text>
+                      <Text style={[st.calloutAction, { color: Colors.primary }]}>Tap to view →</Text>
+                    </View>
+                  </Callout>
+                </Marker>
+              );
+            })}
+          </MapView>
+
+          {/* Top overlay card — hidden when search overlay is active */}
+          {!showSearchOverlay && (
+            <View style={st.mapTopOverlay}>
+              <View style={st.mapTopCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={st.mapTopTitle}>Welcome back, {firstName}!</Text>
+                  <Text style={st.mapTopSub}>Where to?</Text>
                 </View>
-                <View style={st.searchDivider} />
-                {/* Date segment — icon and text on the same row, vertically centered */}
                 <TouchableOpacity
-                  style={[st.searchSegment, st.searchSegDate]}
-                  onPress={() => setShowDatePicker(true)}
+                  style={st.mapSearchFab}
+                  onPress={async () => {
+                    setShowNearbySheet(false);
+                    setTappedCoord(null);
+                    setNearbyRides([]);
+                    setActivityGroup([]);
+                    // Pre-fill departure with cached name or fetch it now if not ready
+                    if (!departure) {
+                      let locName = userLocationName;
+                      if (!locName && userLocation) {
+                        try {
+                          const geo = await reverseGeocode(userLocation.latitude, userLocation.longitude);
+                          locName = geo?.placeName || geo?.formattedAddress || '';
+                          if (locName) setUserLocationName(locName);
+                        } catch (_) {}
+                      }
+                      if (locName) {
+                        setDeparture(locName);
+                        if (userLocation) setDepCoords(userLocation);
+                      }
+                    }
+                    setShowSearchOverlay(true);
+                  }}
                 >
-                  <Ionicons name="calendar-outline" size={14} color={date ? Colors.primary : Colors.textSecondary} />
-                  <Text style={[st.searchSegInput, { marginLeft: 4, flex: 0 }, date && { color: Colors.primary }]}>
-                    {date || 'Date'}
-                  </Text>
+                  <Ionicons name="search" size={20} color={Colors.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={st.searchBtn} onPress={handleSearch}>
-                  <Ionicons name="search" size={18} color="#fff" />
+                <TouchableOpacity style={[st.mapSearchFab, { marginLeft: 6 }]} onPress={() => navigation.navigate('Community')}>
+                  <Ionicons name="people" size={20} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Floating hint — shown when nothing is tapped and no overlay is open */}
+          {!showNearbySheet && !showSearchOverlay && activityGroup.length === 0 && (
+            <View style={st.mapHintBadge}>
+              <Ionicons name="finger-print-outline" size={14} color={Colors.primary} />
+              <Text style={st.mapHintText}>Tap anywhere on the map to search rides</Text>
+            </View>
+          )}
+
+          {/* Bottom sheet — nearby ride results */}
+          {showNearbySheet && (
+            <View style={st.nearbySheet}>
+              <TouchableOpacity
+                style={st.handle}
+                onPress={() => { setShowNearbySheet(false); setTappedCoord(null); setNearbyRides([]); }}
+              />
+              <View style={st.sheetHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={st.sheetTitle} numberOfLines={1}>
+                    {tappedName ? `Rides near "${tappedName}"` : 'Nearby Rides'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <Ionicons name="navigate-circle-outline" size={12} color={Colors.textSecondary} />
+                    <Text style={{ fontSize: Typography.xs, color: Colors.textSecondary, fontFamily: 'PlusJakartaSans_400Regular' }}>
+                      Within 10 km destination radius{userLocation ? ' · From your location' : ''}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => { setShowNearbySheet(false); setTappedCoord(null); setNearbyRides([]); }}>
+                  <Ionicons name="close" size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
-              {/* Autocomplete dropdowns */}
-              {depSuggestions.length > 0 && (
-                <View style={st.suggestionsBox}>
-                  {depSuggestions.map(s => (
-                    <TouchableOpacity key={s.placeId} style={st.suggestionRow} onPress={() => handleSuggestionSelect(s, 'departure')}>
-                      <Ionicons name="location-outline" size={16} color={Colors.primary} />
-                      <View style={{flex:1}}>
-                        <Text style={st.suggestionMain}>{s.mainText}</Text>
-                        {!!s.secondaryText && <Text style={st.suggestionSub}>{s.secondaryText}</Text>}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+              {nearbyLoading ? (
+                <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 24 }} />
+              ) : nearbyRides.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                  <Ionicons name="car-outline" size={36} color={Colors.textDisabled} style={{ marginBottom: 8 }} />
+                  <Text style={{ color: Colors.textSecondary, fontSize: Typography.base, fontFamily: 'PlusJakartaSans_500Medium', textAlign: 'center' }}>
+                    No rides found near {tappedName || 'this area'}
+                  </Text>
+                  <Text style={{ color: Colors.textDisabled, fontSize: Typography.xs, fontFamily: 'PlusJakartaSans_400Regular', marginTop: 4, marginBottom: 16, textAlign: 'center' }}>
+                    Be the first to request a ride here!
+                  </Text>
+                  <TouchableOpacity
+                    style={[st.postRequestBtn, { flexDirection: 'row', alignItems: 'center' }]}
+                    onPress={() => {
+                      setRequestDest(tappedName || '');
+                      // Pre-fill departure with the user's current location name.
+                      setDeparture(userLocationName || '');
+                      // Use precise coordinates as routing keys so Google Maps
+                      // doesn't fail on vague region names like "Sefrou Province".
+                      setRequestRouteOrigin(
+                        userLocation
+                          ? `${userLocation.latitude},${userLocation.longitude}`
+                          : ''
+                      );
+                      setRequestRouteDest(
+                        tappedCoord
+                          ? `${tappedCoord.latitude},${tappedCoord.longitude}`
+                          : ''
+                      );
+                      setShowRequest(true);
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#fff" />
+                    <Text style={[st.postRequestBtnText, { marginLeft: 6 }]}>Post Ride Request</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-              {destSuggestions.length > 0 && (
-                <View style={st.suggestionsBox}>
-                  {destSuggestions.map(s => (
-                    <TouchableOpacity key={s.placeId} style={st.suggestionRow} onPress={() => handleSuggestionSelect(s, 'destination')}>
-                      <Ionicons name="navigate-outline" size={16} color={Colors.primary} />
-                      <View style={{flex:1}}>
-                        <Text style={st.suggestionMain}>{s.mainText}</Text>
-                        {!!s.secondaryText && <Text style={st.suggestionSub}>{s.secondaryText}</Text>}
-                      </View>
-                    </TouchableOpacity>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={[st.sheetCount, { marginBottom: Spacing.sm }]}>
+                    {nearbyRides.length} ride{nearbyRides.length !== 1 ? 's' : ''} found
+                  </Text>
+                  {nearbyRides.map(ride => (
+                    <RideCard key={ride._id} ride={ride} onPress={() => navigation.navigate('RideDetails', { rideId: ride._id })} />
                   ))}
+                  {/* Option to do full text search for that destination */}
+                  {tappedName && (
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 }}
+                      onPress={() => {
+                        setDestination(tappedName);
+                        setShowNearbySheet(false);
+                        setTappedCoord(null);
+                        setNearbyRides([]);
+                        transitionToResults();
+                        performSearch(tappedName);
+                      }}
+                    >
+                      <Ionicons name="search-outline" size={14} color={Colors.primary} />
+                      <Text style={{ fontSize: Typography.sm, fontFamily: 'PlusJakartaSans_600SemiBold', color: Colors.primary }}>
+                        See all rides to "{tappedName}"
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          )}
+
+          {/* ── Activity ride carousel (pager-style, one card per ride at origin dot) ── */}
+          {activityGroup.length > 0 && !showSearchOverlay && (
+            <View style={st.activityRideCard}>
+              {/* Header row: ride count + close */}
+              <View style={st.activityCarouselHeader}>
+                <Ionicons name="location" size={13} color={Colors.primary} />
+                <Text style={st.activityCarouselCount}>
+                  {activityGroup.length} ride{activityGroup.length > 1 ? 's' : ''} from here
+                </Text>
+                {activityGroup.length > 1 && (
+                  <Text style={st.activityCarouselIndex}>
+                    {activeActivityIndex + 1} / {activityGroup.length}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={st.activityRideClose}
+                  onPress={() => setActivityGroup([])}
+                >
+                  <Ionicons name="close" size={16} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Cards pager */}
+              <View style={st.activityCarouselPager}>
+                <FlatList
+                  ref={activityFlatListRef}
+                  data={activityGroup}
+                  keyExtractor={item => item._id}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  onMomentumScrollEnd={e => {
+                    const CARD_W = width - Spacing.md * 2;
+                    const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
+                    setActiveActivityIndex(Math.max(0, Math.min(idx, activityGroup.length - 1)));
+                  }}
+                  renderItem={({ item }) => (
+                    <View style={st.activityCarouselItem}>
+                      <RideCard
+                        ride={item}
+                        onPress={() => navigation.navigate('RideDetails', { rideId: item._id })}
+                      />
+                    </View>
+                  )}
+                />
+              </View>
+
+              {/* Pagination dots + swipe hint */}
+              {activityGroup.length > 1 && (
+                <View style={st.activityPagination}>
+                  {activityGroup.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[st.activityPaginationDot, i === activeActivityIndex && st.activityPaginationDotActive]}
+                    />
+                  ))}
+                  <Text style={st.activitySwipeHint}>  swipe to browse</Text>
                 </View>
               )}
             </View>
+          )}
 
-            {/* Community button */}
-            <TouchableOpacity
-              style={st.communityFab}
-              onPress={() => navigation.navigate('Community')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="people" size={14} color={Colors.primary} />
-              <Text style={st.communityFabText}>Community</Text>
-            </TouchableOpacity>
+          {/* ── Google Maps-style search overlay ── */}
+          {showSearchOverlay && (
+            <View style={st.searchOverlay}>
+              {/* Header row: back button */}
+              <View style={st.searchOverlayHeader}>
+                <TouchableOpacity
+                  style={st.searchOverlayBack}
+                  onPress={() => {
+                    setShowSearchOverlay(false);
+                    setDepSuggestions([]);
+                    setDestSuggestions([]);
+                  }}
+                >
+                  <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={st.searchOverlayTitle}>Find a Ride</Text>
+              </View>
 
-          </Animated.View>
+              {/* Departure + Destination inputs with Google Maps vertical connector */}
+              <View style={st.searchOverlayCard}>
+                {/* Vertical connector dots + line */}
+                <View style={st.searchOverlayConnector}>
+                  <View style={st.connectorDotOrigin} />
+                  <View style={st.connectorLine} />
+                  <View style={st.connectorDotDest} />
+                </View>
+
+                {/* Input rows */}
+                <View style={{ flex: 1 }}>
+                  {/* Departure */}
+                  <View style={st.searchOverlayInputRow}>
+                    <TextInput
+                      style={st.searchOverlayInput}
+                      placeholder="Departure (leave blank for any)"
+                      placeholderTextColor={Colors.textSecondary}
+                      value={departure}
+                      onChangeText={(t) => handleAutocomplete(t, 'departure')}
+                      returnKeyType="next"
+                    />
+                    {departure ? (
+                      <TouchableOpacity onPress={() => { setDeparture(''); setDepCoords(null); setDepSuggestions([]); }}>
+                        <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : userLocationName ? (
+                      <TouchableOpacity
+                        style={st.myLocationChip}
+                        onPress={() => {
+                          setDeparture(userLocationName);
+                          if (userLocation) setDepCoords(userLocation);
+                          setDepSuggestions([]);
+                        }}
+                      >
+                        <Ionicons name="navigate" size={11} color={Colors.primary} />
+                        <Text style={st.myLocationChipText}>My location</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  <View style={st.searchOverlayDivider} />
+
+                  {/* Destination */}
+                  <View style={st.searchOverlayInputRow}>
+                    <TextInput
+                      ref={destInputRef}
+                      autoFocus
+                      style={st.searchOverlayInput}
+                      placeholder="Where to?"
+                      placeholderTextColor={Colors.textSecondary}
+                      value={destination}
+                      onChangeText={(t) => handleAutocomplete(t, 'destination')}
+                      onSubmitEditing={handleSearch}
+                      returnKeyType="search"
+                    />
+                    {destination ? (
+                      <TouchableOpacity onPress={() => { setDestination(''); setDestCoords(null); setDestSuggestions([]); }}>
+                        <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={st.mapTapHint}>
+                        <Ionicons name="hand-left-outline" size={12} color={Colors.textDisabled} />
+                        <Text style={st.mapTapHintText}>or tap map</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* Date chip + Search button row */}
+              <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm }}>
+                <TouchableOpacity
+                  style={[st.searchDateChip, date && st.searchDateChipActive]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={13} color={date ? Colors.primary : Colors.textSecondary} />
+                  <Text style={[st.searchDateChipText, date && { color: Colors.primary }]}>
+                    {date || 'Any date'}
+                  </Text>
+                </TouchableOpacity>
+                {destination.trim() ? (
+                  <TouchableOpacity style={st.searchSubmitChip} onPress={handleSearch}>
+                    <Ionicons name="search" size={13} color="#fff" />
+                    <Text style={st.searchSubmitChipText}>Search</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {/* Autocomplete suggestions */}
+              {depSuggestions.length > 0 && (
+                <ScrollView style={st.searchOverlaySuggestions} keyboardShouldPersistTaps="handled">
+                  {depSuggestions.map(s => (
+                    <TouchableOpacity key={s.placeId} style={st.suggestionRow} onPress={() => handleSuggestionSelect(s, 'departure')}>
+                      <Ionicons name="location-outline" size={16} color={Colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={st.suggestionMain}>{s.mainText}</Text>
+                        {!!s.secondaryText && <Text style={st.suggestionSub}>{s.secondaryText}</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+              {destSuggestions.length > 0 && (
+                <ScrollView style={st.searchOverlaySuggestions} keyboardShouldPersistTaps="handled">
+                  {destSuggestions.map(s => (
+                    <TouchableOpacity key={s.placeId} style={st.suggestionRow} onPress={() => handleSuggestionSelect(s, 'destination')}>
+                      <Ionicons name="navigate-outline" size={16} color={Colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={st.suggestionMain}>{s.mainText}</Text>
+                        {!!s.secondaryText && <Text style={st.suggestionSub}>{s.secondaryText}</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
+
+          {/* Map-tap destination hint — shown below search overlay when destination is empty */}
+          {showSearchOverlay && !destination && !destSuggestions.length && (
+            <View style={st.mapTapIndicator}>
+              <Ionicons name="arrow-down-circle-outline" size={16} color={Colors.primary} />
+              <Text style={st.mapTapIndicatorText}>Tap anywhere on the map below to set destination</Text>
+            </View>
+          )}
         </View>
       ) : (
         /* ═══════════════════════════════════════════════
@@ -1303,7 +1778,7 @@ export default function HomeScreen({ navigation }) {
                 </Text>
                 <TouchableOpacity
                   style={st.postRequestBtn}
-                  onPress={() => { setRequestDest(destination); setShowRequest(true); }}
+                  onPress={() => { setRequestDest(destination); setRequestRouteOrigin(''); setRequestRouteDest(''); setShowRequest(true); }}
                 >
                   <Text style={st.postRequestBtnText}>Post a Ride Request instead</Text>
                 </TouchableOpacity>
@@ -1320,7 +1795,14 @@ export default function HomeScreen({ navigation }) {
       )}
 
       <FilterModal visible={showFilter} onClose={() => setShowFilter(false)} onApply={handleFilterApply} />
-      <RideRequestModal visible={showRequest} departure={departure} destination={requestDest} onClose={() => { setShowRequest(false); if (rides.length === 0) handleBack(); }} />
+      <RideRequestModal
+        visible={showRequest}
+        departure={departure}
+        destination={requestDest}
+        routeOrigin={requestRouteOrigin}
+        routeDest={requestRouteDest}
+        onClose={() => { setShowRequest(false); if (rides.length === 0) handleBack(); }}
+      />
       <DateTimePickerModal
         visible={showDatePicker}
         date={new Date()}
@@ -1336,7 +1818,61 @@ export default function HomeScreen({ navigation }) {
 const st = StyleSheet.create({
   container:{flex:1,backgroundColor:Colors.background},
 
-  /* ── Landing View ── */
+  /* ── Landing Map View ── */
+  mapTopOverlay:{position:'absolute',top:0,left:0,right:0,zIndex:100,padding:Spacing.md,paddingTop:Platform.OS==='ios'?8:Spacing.md},
+  mapTopCard:{flexDirection:'row',alignItems:'center',backgroundColor:Colors.surface,borderRadius:Radius.xl,paddingHorizontal:Spacing.lg,paddingVertical:14,...Shadows.md,borderWidth:1,borderColor:Colors.border},
+  mapTopTitle:{fontSize:Typography.lg,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
+  mapTopSub:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary,marginTop:2},
+  mapSearchFab:{width:42,height:42,borderRadius:21,backgroundColor:Colors.primaryBg,alignItems:'center',justifyContent:'center'},
+  mapHintBadge:{position:'absolute',bottom:30,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:6,backgroundColor:Colors.surface,paddingHorizontal:16,paddingVertical:8,borderRadius:Radius.full,...Shadows.sm,borderWidth:1,borderColor:Colors.border},
+  mapHintText:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+  nearbySheet:{position:'absolute',bottom:0,left:0,right:0,backgroundColor:Colors.surface,borderTopLeftRadius:20,borderTopRightRadius:20,paddingHorizontal:Spacing.lg,paddingTop:Spacing.sm,paddingBottom:Spacing.xl,...Shadows.lg,maxHeight:'50%'},
+
+  /* ── Activity dots (GPS-style glow markers on landing map) ── */
+  activityDotHitArea:{width:44,height:44,alignItems:'center',justifyContent:'center'},
+  activityDotOuter:{width:22,height:22,borderRadius:11,backgroundColor:Colors.primary+'40',alignItems:'center',justifyContent:'center'},
+  activityDotInner:{width:11,height:11,borderRadius:5.5,backgroundColor:Colors.primary,borderWidth:1.5,borderColor:'#fff'},
+
+  /* ── Selected activity ride info card ── */
+  activityRideCard:{position:'absolute',bottom:24,left:Spacing.md,right:Spacing.md,zIndex:150,backgroundColor:Colors.surface,borderRadius:Radius.lg,...Shadows.lg,borderWidth:1,borderColor:Colors.border},
+  activityCarouselHeader:{flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:Spacing.md,paddingTop:Spacing.sm,paddingBottom:6},
+  activityCarouselCount:{flex:1,fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  activityCarouselIndex:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary},
+  activityRideClose:{width:26,height:26,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:Colors.background,borderWidth:1,borderColor:Colors.border,marginLeft:4},
+  activityCarouselPager:{overflow:'hidden',borderRadius:0},
+  activityCarouselItem:{width:width - Spacing.md * 2,backgroundColor:Colors.surface,paddingHorizontal:Spacing.md,paddingBottom:Spacing.sm},
+  activityPagination:{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:5,paddingVertical:8},
+  activityPaginationDot:{width:6,height:6,borderRadius:3,backgroundColor:Colors.border},
+  activityPaginationDotActive:{width:18,height:6,borderRadius:3,backgroundColor:Colors.primary},
+  activitySwipeHint:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textDisabled},
+
+  /* ── Google Maps-style search overlay ── */
+  searchOverlay:{position:'absolute',top:0,left:0,right:0,zIndex:200,backgroundColor:Colors.surface,paddingTop:Platform.OS==='ios'?8:12,paddingBottom:4,...Shadows.lg},
+  searchOverlayHeader:{flexDirection:'row',alignItems:'center',paddingHorizontal:Spacing.sm,paddingBottom:Spacing.xs},
+  searchOverlayBack:{width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center'},
+  searchOverlayTitle:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.textPrimary,marginLeft:2},
+  searchOverlayCard:{flexDirection:'row',alignItems:'center',paddingHorizontal:Spacing.md,paddingBottom:Spacing.xs,gap:12},
+  searchOverlayConnector:{alignItems:'center',paddingVertical:6,gap:2},
+  connectorDotOrigin:{width:10,height:10,borderRadius:5,backgroundColor:Colors.primary},
+  connectorLine:{width:2,height:22,backgroundColor:Colors.border},
+  connectorDotDest:{width:10,height:10,borderRadius:5,backgroundColor:'#E65100'},
+  searchOverlayInputRow:{flexDirection:'row',alignItems:'center',paddingVertical:8,gap:8},
+  searchOverlayInput:{flex:1,fontSize:Typography.base,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary,padding:0},
+  searchOverlayDivider:{height:StyleSheet.hairlineWidth,backgroundColor:Colors.border,marginVertical:2},
+  myLocationChip:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:10,paddingVertical:4,borderRadius:Radius.full,backgroundColor:Colors.primaryBg},
+  myLocationChipText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_600SemiBold',color:Colors.primary},
+  mapTapHint:{flexDirection:'row',alignItems:'center',gap:4},
+  mapTapHintText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textDisabled},
+  searchDateChip:{flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:12,paddingVertical:7,borderRadius:Radius.full,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.surface},
+  searchDateChipActive:{borderColor:Colors.primary,backgroundColor:Colors.primaryBg},
+  searchDateChipText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textSecondary},
+  searchSubmitChip:{flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:16,paddingVertical:7,borderRadius:Radius.full,backgroundColor:Colors.primary},
+  searchSubmitChipText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},
+  searchOverlaySuggestions:{maxHeight:200,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:Colors.border},
+  mapTapIndicator:{position:'absolute',zIndex:199,bottom:24,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:6,backgroundColor:Colors.surface,paddingHorizontal:14,paddingVertical:7,borderRadius:Radius.full,...Shadows.sm,borderWidth:1,borderColor:Colors.primary+'66'},
+  mapTapIndicatorText:{fontSize:Typography.xs,fontFamily:'PlusJakartaSans_500Medium',color:Colors.textPrimary},
+
+  /* ── Kept for compatibility (landing search — used in results view header) ── */
   landingContainer:{flex:1,backgroundColor:Colors.background},
   // Single centered column — everything flows naturally inside this flex container
   landingContent:{
@@ -1395,7 +1931,7 @@ const st = StyleSheet.create({
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:Spacing.sm},
   sheetTitle:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary},
   sheetCount:{fontSize:Typography.sm,fontFamily:'PlusJakartaSans_400Regular',color:Colors.textSecondary},
-  rideCard:{backgroundColor:Colors.background,borderRadius:Radius.md,padding:Spacing.md,marginBottom:Spacing.sm,borderWidth:1,borderColor:Colors.border},
+  rideCard:{backgroundColor:Colors.surface,borderRadius:Radius.md,padding:Spacing.md,borderWidth:1,borderColor:Colors.border},
   rideCardRow:{flexDirection:'row',alignItems:'center',marginBottom:6},
   destDot:{width:8,height:8,borderRadius:4,marginRight:6},
   rideDestText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:Colors.textPrimary,flex:1},

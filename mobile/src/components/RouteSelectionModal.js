@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator,
-  Dimensions, FlatList, Alert,
+  Dimensions, FlatList, Alert, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Polyline, Marker, Callout, PROVIDER_GOOGLE } from '../utils/MapView';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
@@ -29,26 +29,40 @@ function decodePolyline(encoded) {
 }
 
 export default function RouteSelectionModal({ visible, origin, destination, stops, onSelect, onClose }) {
+  const insets = useSafeAreaInsets();
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const mapRef = useRef(null);
 
   useEffect(() => {
     if (visible && origin && destination) {
+      // Set loading synchronously so the spinner appears on the very first
+      // render after the modal opens — before the async fetchRoutes fires.
+      setLoading(true);
+      setError(null);
+      setRoutes([]);
+      setSelectedIdx(0);
       fetchRoutes();
     }
-    return () => { setRoutes([]); setSelectedIdx(0); };
+    return () => { setRoutes([]); setSelectedIdx(0); setError(null); setLoading(false); };
   }, [visible, origin, destination]);
 
   const fetchRoutes = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await getRouteAlternatives(origin, destination, stops || []);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out. Please check your connection and try again.')), 15000)
+      );
+      const res = await Promise.race([
+        getRouteAlternatives(origin, destination, stops || []),
+        timeoutPromise,
+      ]);
       const fetched = res.data?.routes || res.routes || [];
       if (fetched.length === 0) {
-        Alert.alert('No routes', 'Google Maps could not find any routes between these locations.');
-        onClose();
+        setError('No routes found between these locations. Please check the addresses and try again.');
         return;
       }
       setRoutes(fetched);
@@ -56,8 +70,7 @@ export default function RouteSelectionModal({ visible, origin, destination, stop
       // Fit map to first route after a short delay
       setTimeout(() => fitMapToRoute(fetched[0]), 300);
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.message || 'Failed to fetch routes.');
-      onClose();
+      setError(e.response?.data?.message || e.message || 'Failed to fetch routes. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -112,23 +125,43 @@ export default function RouteSelectionModal({ visible, origin, destination, stop
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={onClose}
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-            style={{ marginRight: 14 }}
+            style={styles.headerBtn}
           >
-            <Ionicons name="arrow-back" size={26} color={Colors.textWhite} />
+            <Ionicons name="arrow-back" size={24} color={Colors.textWhite} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Choose Route</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            style={styles.headerBtn}
+          >
+            <Ionicons name="close" size={24} color={Colors.textWhite} />
+          </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Fetching routes from Google Maps…</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="map-outline" size={52} color={Colors.border} />
+            <Text style={styles.errorTitle}>Could not load routes</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchRoutes}>
+              <Ionicons name="refresh" size={16} color={Colors.textWhite} />
+              <Text style={styles.retryBtnText}>Try again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.skipBtn} onPress={onClose}>
+              <Text style={styles.skipBtnText}>Continue without selecting a route</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.content}>
@@ -140,6 +173,12 @@ export default function RouteSelectionModal({ visible, origin, destination, stop
               showsUserLocation={false}
               showsMyLocationButton={false}
               toolbarEnabled={false}
+              initialRegion={{
+                latitude: 33.52,
+                longitude: -5.11,
+                latitudeDelta: 0.5,
+                longitudeDelta: 0.5,
+              }}
             >
               {routes.map((route, idx) => {
                 const coords = decodePolyline(route.polyline);
@@ -236,7 +275,7 @@ export default function RouteSelectionModal({ visible, origin, destination, stop
             </View>
           </View>
         )}
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -249,14 +288,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 18,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
     backgroundColor: Colors.primary,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+  },
+  headerBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
@@ -274,6 +319,52 @@ const styles = StyleSheet.create({
     fontSize: Typography.md,
     color: Colors.textSecondary,
     marginTop: Spacing.sm,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    padding: Spacing.xl,
+  },
+  errorTitle: {
+    fontSize: Typography.xl,
+    fontFamily: 'PlusJakartaSans_700Bold',
+    color: Colors.textPrimary,
+    marginTop: 8,
+  },
+  errorText: {
+    fontSize: Typography.sm,
+    fontFamily: 'PlusJakartaSans_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+  },
+  retryBtnText: {
+    fontSize: Typography.md,
+    fontFamily: 'PlusJakartaSans_700Bold',
+    color: Colors.textWhite,
+  },
+  skipBtn: {
+    marginTop: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  skipBtnText: {
+    fontSize: Typography.sm,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: Colors.primary,
+    textDecorationLine: 'underline',
   },
   content: {
     flex: 1,

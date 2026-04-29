@@ -1,62 +1,78 @@
 ﻿import React from 'react';
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 
 const carSizeImg     = require('../../assets/CarSizeRef.png');
 const luggageSizeImg = require('../../assets/CarryOnSizeRef.jpeg');
 
-export default function VehicleSizeGuideModal({ visible, onClose }) {
+export default function VehicleSizeGuideModal({ visible, onClose, passengerMode = false }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <SafeAreaView style={s.safe} edges={['top']}>
+      <View style={[s.safe, { paddingTop: insets.top }]}>
 
         {/* Header */}
         <View style={s.header}>
-          <TouchableOpacity onPress={onClose} style={s.closeBtn}>
+          <View style={{ width: 40 }} />
+          <Text style={s.title}>
+            {passengerMode ? 'Luggage Guide' : 'Vehicle Size Guide'}
+          </Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={s.closeBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Ionicons name="close" size={26} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <Text style={s.title}>Vehicle Size Guide</Text>
-          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Car size section */}
-          <Text style={s.sectionTitle}>Car Size</Text>
-          <Text style={s.sectionDesc}>
-            Select the category that best matches your car's footprint. This helps passengers know how much space to expect.
-          </Text>
-          <View style={s.imageCard}>
-            <Image source={carSizeImg} style={s.image} resizeMode="contain" />
-          </View>
-          <View style={s.table}>
-            {[
-              { label: 'Small',  detail: 'Compact hatchback (e.g. Yaris, Clio)' },
-              { label: 'Medium', detail: 'Mid-size sedan or hatchback (e.g. Corolla, Logan)', highlight: true },
-              { label: 'Large',  detail: 'SUV or full-size (e.g. RAV4, Duster)' },
-            ].map(row => (
-              <View key={row.label} style={[s.tableRow, row.highlight && s.tableRowHL]}>
-                <Text style={[s.tableLabel, row.highlight && s.tableLabelHL]}>{row.label}</Text>
-                <Text style={s.tableDetail}>{row.detail}</Text>
+          {/* Car size section — drivers only */}
+          {!passengerMode && (
+            <>
+              <Text style={s.sectionTitle}>Car Size</Text>
+              <Text style={s.sectionDesc}>
+                Select the category that best matches your car's footprint. This helps passengers know how much space to expect.
+              </Text>
+              <View style={s.imageCard}>
+                <Image source={carSizeImg} style={s.image} resizeMode="contain" />
               </View>
-            ))}
-          </View>
+              <View style={s.table}>
+                {[
+                  { label: 'Small',  detail: 'Compact hatchback (e.g. Yaris, Clio)' },
+                  { label: 'Medium', detail: 'Mid-size sedan or hatchback (e.g. Corolla, Logan)', highlight: true },
+                  { label: 'Large',  detail: 'SUV or full-size (e.g. RAV4, Duster)' },
+                ].map(row => (
+                  <View key={row.label} style={[s.tableRow, row.highlight && s.tableRowHL]}>
+                    <Text style={[s.tableLabel, row.highlight && s.tableLabelHL]}>{row.label}</Text>
+                    <Text style={s.tableDetail}>{row.detail}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* Luggage section */}
-          <Text style={[s.sectionTitle, { marginTop: Spacing.xl }]}>Luggage Capacity</Text>
+          <Text style={[s.sectionTitle, !passengerMode && { marginTop: Spacing.xl }]}>
+            {passengerMode ? 'How luggage is counted' : 'Luggage Capacity'}
+          </Text>
           <Text style={s.sectionDesc}>
-            Enter how many <Text style={s.bold}>medium check-in bags</Text> fit in your trunk. Use the reference below to estimate.
+            {passengerMode
+              ? <>Each bag you declare is converted to <Text style={s.bold}>medium check-in bag equivalents</Text>. Use the reference below to know how your bag is counted.</>
+              : <>Enter how many <Text style={s.bold}>medium check-in bags</Text> fit in your trunk. Use the reference below to estimate.</>
+            }
           </Text>
           <View style={s.imageCard}>
             <Image source={luggageSizeImg} style={s.image} resizeMode="contain" />
           </View>
           <View style={s.table}>
             {[
-              { label: 'Small',  detail: '23-24 in carry-on  ->  counts as 1/2' },
-              { label: 'Medium', detail: '25-27 in check-in  ->  counts as 1', highlight: true },
-              { label: 'Large',  detail: '28-32 in check-in  ->  counts as 2' },
+              { label: 'Small',  detail: passengerMode ? '23–24 in carry-on  →  counts as ½ bag' : '23-24 in carry-on  ->  counts as 1/2' },
+              { label: 'Medium', detail: passengerMode ? '25–27 in check-in  →  counts as 1 bag' : '25-27 in check-in  ->  counts as 1', highlight: true },
+              { label: 'Large',  detail: passengerMode ? '28–32 in check-in  →  counts as 2 bags' : '28-32 in check-in  ->  counts as 2' },
             ].map(row => (
               <View key={row.label} style={[s.tableRow, row.highlight && s.tableRowHL]}>
                 <Text style={[s.tableLabel, row.highlight && s.tableLabelHL]}>{row.label}</Text>
@@ -67,7 +83,7 @@ export default function VehicleSizeGuideModal({ visible, onClose }) {
 
           <View style={{ height: 32 }} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
