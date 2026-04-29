@@ -1,6 +1,0 @@
-.vercel
-
-# Vercel automatically excludes any path containing "node_modules".
-# The Expo web export puts font and icon assets under assets/node_modules/,
-# so we must explicitly allow that directory.
-!assets/node_modules/
