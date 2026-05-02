@@ -245,8 +245,13 @@ const postRideRequest = async (req, res, next) => {
     const {
       departureLocation, destination, travelDateTime,
       passengerCount, maxPrice, notes, groupPassengerIds, stops, selectedRoute,
-      luggageDeclaration,
+      luggageDeclaration, genderPreference,
     } = req.body;
+
+    // Gender restriction enforcement for Women-Only requests
+    if (genderPreference === 'Women-Only' && req.user.gender !== 'Female') {
+      return error(res, 403, 'Only female users can post a Women-Only ride request.');
+    }
 
     // Validate travel time is in the future (at least 30 minutes from now)
     const now = new Date();

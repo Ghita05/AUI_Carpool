@@ -26,6 +26,11 @@ const bookRide = async (req, res, next) => {
       return error(res, 400, 'You cannot book your own ride.');
     }
 
+    // Gender restriction enforcement
+    if (ride.genderPreference === 'Women-Only' && req.user.gender !== 'Female') {
+      return error(res, 403, 'This is a Women-Only ride. Only female passengers can book this ride.');
+    }
+
     if (ride.availableSeats < 1) {
       return error(res, 400, `Only ${ride.availableSeats} seat(s) available.`);
     }

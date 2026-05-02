@@ -112,6 +112,13 @@ const modifyRide = async (req, res, next) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
 
+    // Gender preference rules
+    if (updates.genderPreference) {
+      if (updates.genderPreference === 'Women-Only' && req.user.gender !== 'Female') {
+        return error(res, 403, 'Only female drivers can set a ride to Women-Only.');
+      }
+    }
+
     if (req.body.pricePerSeat !== undefined) return error(res, 400, 'Ride price cannot be edited after creation.');
 
     if (updates.totalSeats) {
@@ -150,6 +157,28 @@ const modifyRide = async (req, res, next) => {
 
     const updatedRide = await Ride.findByIdAndUpdate(req.params.rideId, { $set: updates }, { new: true, runValidators: true })
       .populate('route');
+
+    // Notify all passengers if ride changed from Women-Only to All Genders
+    if (updates.genderPreference === 'All' && ride.genderPreference === 'Women-Only') {
+      const confirmedBookings = ride.bookings.filter(b => b.status === 'Confirmed');
+      const driver = await User.findById(ride.driverId).select('firstName lastName');
+      const driverName = driver ? `${driver.firstName} ${driver.lastName}` : 'The driver';
+      for (const booking of confirmedBookings) {
+        await Notification.create({
+          userId: booking.passengerId,
+          title: 'Ride Opened to All Genders',
+          content: `${driverName} has changed your ride to ${ride.destination} on ${new Date(ride.departureDateTime).toLocaleDateString()} from Women-Only to All Genders.`,
+          type: 'Alert',
+        });
+        await Message.create({
+          senderId: ride.driverId,
+          receiverId: booking.passengerId,
+          rideId: ride._id,
+          content: `Hi! I've updated our ride to ${ride.destination} on ${new Date(ride.departureDateTime).toLocaleDateString()} — it is now open to all genders (previously Women-Only). Let me know if you have any questions.`,
+        });
+      }
+    }
+
     return success(res, 200, 'Ride updated.', { ride: updatedRide });
   } catch (err) { next(err); }
 };
