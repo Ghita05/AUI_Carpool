@@ -157,7 +157,7 @@ function ManagePassengersModal({visible,rideId,totalSeats,onClose}){
   );
 }
 
-function ManageRideModal({visible,ride,onClose,onUpdated,onOpenAddStop,externalStops,setExternalStops}){
+function ManageRideModal({visible,ride,onClose,onUpdated,onOpenAddStop,externalStops,setExternalStops,driverGender}){
   const [price, setPrice] = useState('');
   const [seats, setSeats] = useState('');
   const [gender, setGender] = useState('All');
@@ -278,20 +278,24 @@ function ManageRideModal({visible,ride,onClose,onUpdated,onOpenAddStop,externalS
               />
             </View>
 
-            <Text style={st.mngLabel}>Gender Preference</Text>
-            <View style={{flexDirection:'row', gap: 8, marginBottom: Spacing.lg}}>
-              {['All', 'Women-Only'].map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[st.genderPill, gender === opt && st.genderPillActive]}
-                  onPress={() => setGender(opt)}
-                >
-                  <Text style={[st.genderPillText, gender === opt && st.genderPillTextActive]}>
-                    {opt === 'All' ? 'All Genders' : 'Women Only'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {driverGender === 'Female' && (
+              <>
+                <Text style={st.mngLabel}>Gender Preference</Text>
+                <View style={{flexDirection:'row', gap: 8, marginBottom: Spacing.lg}}>
+                  {['All', 'Women-Only'].map(opt => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[st.genderPill, gender === opt && st.genderPillActive]}
+                      onPress={() => setGender(opt)}
+                    >
+                      <Text style={[st.genderPillText, gender === opt && st.genderPillTextActive]}>
+                        {opt === 'All' ? 'All Genders' : 'Women Only'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             <Text style={st.mngLabel}>Stops</Text>
             <TouchableOpacity
@@ -1226,6 +1230,7 @@ export default function RideDetailsScreen({ navigation, route }) {
         onOpenAddStop={() => setShowAddStop(true)}
         externalStops={manageRideStops}
         setExternalStops={setManageRideStops}
+        driverGender={user?.gender}
       />
       <AddStopMapModal
         visible={showAddStop}

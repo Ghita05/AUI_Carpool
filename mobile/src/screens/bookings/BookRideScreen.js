@@ -108,13 +108,11 @@ export default function BookRideScreen({ navigation, route }) {
   const availableLuggageOptions = LUGGAGE.filter(l => LUGGAGE_UNITS[l] <= remainingLuggageCap);
   const luggageFull = remainingLuggageCap === 0;
 
-  // ── Compatibility warnings ──
-  const warnings = [];
+  // ── Gender block (hard restriction) ──
+  const isGenderBlocked = ride.genderPreference === 'Women-Only' && user?.gender !== 'Female';
 
-  // Gender check
-  if (ride.genderPreference === 'Women-Only' && user?.gender && user.gender !== 'Female') {
-    warnings.push({ icon: 'female-outline', color: '#E91E63', text: 'This ride is Women-Only. Your gender may not match this preference.' });
-  }
+  // ── Compatibility warnings (informational only) ──
+  const warnings = [];
 
   // Smoking preference check
   if (user?.smokingPreference && vehicle?.smokingPolicy) {
@@ -190,7 +188,21 @@ export default function BookRideScreen({ navigation, route }) {
             </View>
           </Card>
 
-          {/* Compatibility Warnings */}
+          {/* Gender Block — hard restriction */}
+          {isGenderBlocked && (
+            <View style={st.genderBlockCard}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:6,marginBottom:8}}>
+                <Ionicons name="ban" size={16} color="#C62828"/>
+                <Text style={st.genderBlockTitle}>Booking Not Allowed</Text>
+              </View>
+              <View style={st.warningRow}>
+                <Ionicons name="female-outline" size={14} color="#C62828"/>
+                <Text style={[st.warningText,{color:'#C62828'}]}>You can't book this ride because it's a Women-Only ride.</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Compatibility Warnings — informational only */}
           {warnings.length > 0 && (
             <View style={st.warningsCard}>
               <View style={{flexDirection:'row',alignItems:'center',gap:6,marginBottom:8}}>
@@ -326,10 +338,16 @@ export default function BookRideScreen({ navigation, route }) {
       </KeyboardAvoidingView>
 
       <View style={st.bottomBar}>
-        <TouchableOpacity style={st.confirmBtn} onPress={handleConfirm} disabled={booking}>
+        <TouchableOpacity
+          style={[st.confirmBtn, (booking || isGenderBlocked) && st.confirmBtnBlocked]}
+          onPress={isGenderBlocked ? undefined : handleConfirm}
+          disabled={booking || isGenderBlocked}
+        >
           <Text style={st.confirmBtnText}>{booking?'Booking...':'Confirm Booking'}</Text>
         </TouchableOpacity>
-        <Text style={st.disclaimer}>You won't be charged until the driver confirms</Text>
+        <Text style={st.disclaimer}>
+          {isGenderBlocked ? 'This ride is restricted to Women-Only' : 'You won\'t be charged until the driver confirms'}
+        </Text>
       </View>
       <VehicleSizeGuideModal visible={showLuggageGuide} onClose={() => setShowLuggageGuide(false)} passengerMode />
     </SafeAreaView>
@@ -372,5 +390,7 @@ const st = StyleSheet.create({
   warningRow:{flexDirection:'row',alignItems:'flex-start',gap:8,marginBottom:6},
   warningText:{flex:1,fontSize:12,fontFamily:'PlusJakartaSans_500Medium',color:'#795548',lineHeight:17},
   warningsNote:{fontSize:10,fontFamily:'PlusJakartaSans_400Regular',color:'#9E9E9E',marginTop:6,fontStyle:'italic'},
-  bottomBar:{padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border,alignItems:'center'},confirmBtn:{width:'100%',height:52,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},confirmBtnText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},disclaimer:{fontSize:11,color:Colors.textSecondary,marginTop:8},
+  genderBlockCard:{backgroundColor:'#FFEBEE',borderRadius:Radius.md,padding:Spacing.lg,marginBottom:Spacing.md,borderWidth:1,borderColor:'#FFCDD2'},
+  genderBlockTitle:{fontSize:13,fontFamily:'PlusJakartaSans_700Bold',color:'#C62828'},
+  bottomBar:{padding:Spacing.lg,paddingBottom:Spacing.xl,backgroundColor:Colors.surface,borderTopWidth:1,borderTopColor:Colors.border,alignItems:'center'},confirmBtn:{width:'100%',height:52,backgroundColor:Colors.primary,borderRadius:Radius.md,alignItems:'center',justifyContent:'center'},confirmBtnBlocked:{backgroundColor:'#BDBDBD'},confirmBtnText:{fontSize:Typography.md,fontFamily:'PlusJakartaSans_700Bold',color:'#fff'},disclaimer:{fontSize:11,color:Colors.textSecondary,marginTop:8},
 });
