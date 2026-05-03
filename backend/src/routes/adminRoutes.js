@@ -21,6 +21,7 @@ router.post('/users/:userId/warn', ...guard, auth.issueWarning);
 
 // Ride management
 router.get('/rides', ...guard, admin.getAllRides);
+router.get('/rides/:rideId/passengers', ...guard, admin.getRidePassengers);
 router.delete('/rides/:rideId', ...guard, admin.adminCancelRide);
 
 // Review management

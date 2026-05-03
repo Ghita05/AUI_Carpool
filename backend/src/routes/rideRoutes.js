@@ -104,7 +104,7 @@ router.put(
   rideRequest.dismissRideRequest
 );
 
-// BOOKINGS (Building Block 2.4)
+// BOOKINGS (Building Block 2.3)
 router.get('/bookings/current', authenticate, booking.getCurrentBookings);
 router.get('/bookings/history', authenticate, booking.getBookingHistory);
 router.get('/:rideId/passengers', authenticate, booking.getPassengerList);

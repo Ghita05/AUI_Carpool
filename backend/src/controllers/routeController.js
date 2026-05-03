@@ -68,7 +68,7 @@ const validateStop = async (req, res, next) => {
 };
 
 // shareDriverLocation
-// Emits the driver's live GPS via Socket.IO — no DB write.
+// Emits the driver's live GPS via Socket.IO, no DB write.
 const shareDriverLocation = async (req, res, next) => {
   try {
     const { lat, lng } = req.body;

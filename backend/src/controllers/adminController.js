@@ -178,6 +178,19 @@ const adminCancelRide = async (req, res, next) => {
   }
 };
 
+// GET /api/admin/rides/:rideId/passengers
+const getRidePassengers = async (req, res, next) => {
+  try {
+    const ride = await Ride.findById(req.params.rideId)
+      .populate('driverId', 'firstName lastName email')
+      .populate('bookings.passengerId', 'firstName lastName email');
+    if (!ride) return error(res, 404, 'Ride not found.');
+    return success(res, 200, 'Ride passengers fetched.', { ride });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /api/admin/reviews
 const getAllReviews = async (req, res, next) => {
   try {
@@ -228,6 +241,7 @@ module.exports = {
   getAllUsers,
   getUserDetail,
   getAllRides,
+  getRidePassengers,
   adminCancelRide,
   getAllReviews,
   unsuspendAccount,
