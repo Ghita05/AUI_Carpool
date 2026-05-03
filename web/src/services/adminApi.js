@@ -60,6 +60,9 @@ export const cancelRideAdmin = (token, rideId, reason) =>
     body: JSON.stringify({ reason }),
   });
 
+export const fetchRidePassengers = (token, rideId) =>
+  request(`/api/admin/rides/${rideId}/passengers`, token);
+
 // Reviews
 export const fetchReviews = (token, params = {}) => {
   const qs = new URLSearchParams(params).toString();

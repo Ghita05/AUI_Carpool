@@ -5,6 +5,7 @@ import {
   fetchStats,
   fetchUsers,
   fetchRides,
+  fetchRidePassengers,
   fetchReviews,
   fetchReports,
   fetchReportDetail,
@@ -219,6 +220,81 @@ function UserDetailModal({ user, token, onClose, onAction }) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Ride Passengers Modal ─────────────────────────────────────────────────────
+function RidePassengersModal({ ride, token, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRidePassengers(token, ride._id)
+      .then(d => setDetail(d.ride))
+      .catch(e => { alert(e.message); onClose(); })
+      .finally(() => setLoading(false));
+  }, [ride._id, token, onClose]);
+
+  const driver = detail?.driverId || ride.driverId;
+  const driverName = driver ? `${driver.firstName} ${driver.lastName}` : '—';
+
+  const bookingStatusBadge = (s) => {
+    if (s === 'Confirmed') return 'active';
+    if (s === 'Completed') return 'completed';
+    return 'cancelled';
+  };
+
+  return (
+    <div className="ad-modal-overlay" onClick={onClose}>
+      <div className="ad-user-modal ad-passengers-modal" onClick={e => e.stopPropagation()}>
+        <div className="ad-modal-header">
+          <span className="ad-modal-title">Passengers</span>
+          <button className="ad-modal-close" onClick={onClose}><XIcon size={18} /></button>
+        </div>
+
+        {/* Ride summary */}
+        <div className="ad-passengers-ride-info">
+          <div className="ad-passengers-route">{ride.departureLocation} → {ride.destination}</div>
+          <div className="ad-passengers-meta">
+            <span>{fmtDate(ride.departureDateTime)} &middot; {fmtTime(ride.departureDateTime)}</span>
+            <span>Driver: <strong>{driverName}</strong></span>
+            <span className={`ad-badge ad-badge-${rideStatusBadge(ride.state)}`}>{ride.state}</span>
+          </div>
+        </div>
+
+        {loading ? (
+          <p style={{ padding: '20px 24px', color: 'var(--color-text-secondary)' }}>Loading passengers…</p>
+        ) : !detail?.bookings?.length ? (
+          <p style={{ padding: '20px 24px', color: 'var(--color-text-secondary)' }}>No bookings for this ride.</p>
+        ) : (
+          <div className="ad-passengers-list">
+            {detail.bookings.map((b, i) => {
+              const p = b.passengerId;
+              const name = p ? `${p.firstName} ${p.lastName}` : 'Unknown';
+              const email = p?.email || '—';
+              const initials = p ? `${p.firstName?.[0] || ''}${p.lastName?.[0] || ''}`.toUpperCase() : '?';
+              return (
+                <div key={b._id || i} className="ad-passenger-row">
+                  <div className="ad-user-avatar" style={{ flexShrink: 0 }}>{initials}</div>
+                  <div className="ad-passenger-info">
+                    <span className="ad-passenger-name">{name}</span>
+                    <span className="ad-passenger-email">{email}</span>
+                    {b.pickupLocation && (
+                      <span className="ad-passenger-pickup">Pickup: {b.pickupLocation}</span>
+                    )}
+                  </div>
+                  <div className="ad-passenger-right">
+                    <span className={`ad-badge ad-badge-${bookingStatusBadge(b.status)}`}>{b.status}</span>
+                    <span className="ad-passenger-time">Booked {fmtDate(b.bookedAt)} {fmtTime(b.bookedAt)}</span>
+                    <span className="ad-passenger-price">{b.price} MAD</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -516,6 +592,7 @@ export default function AdminDashboard() {
   const [ridesLoading, setRidesLoading] = useState(false);
   const [rideSearch, setRideSearch]     = useState('');
   const [rideStatusFilter, setRideStatusFilter] = useState('all');
+  const [selectedRide, setSelectedRide] = useState(null);
 
   // ── Reviews state ──
   const [reviews, setReviews]               = useState([]);
@@ -803,7 +880,7 @@ export default function AdminDashboard() {
                     const badgeSt = rideStatusBadge(r.state);
                     const bookedSeats = Math.max(0, (r.totalSeats || 0) - (r.availableSeats || 0));
                     return (
-                      <tr key={r._id}>
+                      <tr key={r._id} className="ad-clickable-row" onClick={() => setSelectedRide(r)}>
                         <td>{driverName}</td>
                         <td>{r.departureLocation} → {r.destination}</td>
                         <td>{fmtDate(r.departureDateTime)}</td>
@@ -811,7 +888,7 @@ export default function AdminDashboard() {
                         <td>{r.pricePerSeat} MAD</td>
                         <td>{bookedSeats}/{r.totalSeats ?? 0}</td>
                         <td><span className={`ad-badge ad-badge-${badgeSt}`}>{r.state}</span></td>
-                        <td>
+                        <td onClick={e => e.stopPropagation()}>
                           {(['Active', 'OnGoing', 'Full', 'Accepted', 'Open'].includes(r.state)) && (
                             <button className="ad-action-btn ad-action-ban" title="Cancel Ride" onClick={() => handleCancelRide(r._id)}><XIcon /></button>
                           )}
@@ -952,6 +1029,15 @@ export default function AdminDashboard() {
           token={token}
           onClose={() => setSelectedUser(null)}
           onAction={handleUserAction}
+        />
+      )}
+
+      {/* Ride passengers modal */}
+      {selectedRide && (
+        <RidePassengersModal
+          ride={selectedRide}
+          token={token}
+          onClose={() => setSelectedRide(null)}
         />
       )}
 
