@@ -11,7 +11,7 @@ The platform follows a **3.5-tier architecture** distributed across three indepe
 
 The Node.js and Express REST API serving both clients. Encapsulates the entire server-side stack:
 
-- **0.5 Tier (API Gateway):** Express.js middleware chain — Helmet, CORS, Morgan, body parser, rate limiter, JWT authentication, role authorization, Multer file handling, and centralized error handling. Every request traverses this chain before reaching any controller.
+- **0.5 Tier (API Gateway):** Express.js middleware chain: Helmet, CORS, Morgan, body parser, rate limiter, JWT authentication, role authorization, Multer file handling, and centralized error handling. Every request traverses this chain before reaching any controller.
 - **Business Logic Tier:** Seven domain controllers (auth, ride, vehicle, review, notification, message, route), three pure utility functions (Haversine, namesMatch, scoreRides), four scheduled cron jobs, the OCR pipeline, and the Socket.IO server implementing the GPS-driven ride state machine.
 - **Data Tier:** MongoDB Atlas accessed via Mongoose ODM, with eight collections including the unified Ride collection that embeds bookings as subdocuments for atomic seat management.
 - **External APIs:** Gemini Flash 2.0 for OCR and review summaries, Google Maps for routing, Cloudinary for image storage, and Nodemailer for email delivery.
