@@ -93,5 +93,5 @@ Full system documentation, including the requirements engineering output, the sy
 
 
 [▶ Presentation with demo videos](https://canva.link/yd7mba31njxkr5v)  
-[Full report](docs/report.pdf)  
+[Full report](docs/Report.pdf)  
 *(The live app is restricted to AUI accounts)*
