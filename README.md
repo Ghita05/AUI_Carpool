@@ -90,3 +90,8 @@ eas build --platform android --profile production
 ## Documentation
 
 Full system documentation, including the requirements engineering output, the system design artifacts (CPMs, DFDs, data dictionaries), the architecture diagrams, and the testing reports, is available in the capstone's final report.
+
+
+[▶ Presentation with demo videos](https://canva.link/yd7mba31njxkr5v)  
+[Full report](docs/report.pdf)  
+*(The live app is restricted to AUI accounts)*
